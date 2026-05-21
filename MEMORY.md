@@ -1,12 +1,12 @@
 # MEMORY
 
-Last updated: 2026-05-21 15:08 Asia/Shanghai
+Last updated: 2026-05-21 15:27 Asia/Shanghai
 
 ## 当前阶段
 
-- 项目处于 V0.9 Event payload + replay 完成阶段。
+- 项目处于 V0.10 Auto replay worker 完成阶段。
 - 当前仓库已有 Go MVP 骨架、配置样例、迁移样例、RabbitMQ 核心接口、表列映射、MySQL Apply Worker 和无感安装计划模型。
-- 当前尚未实现真实 Canal client、后台自动重放 worker 和完整 Wails 前端。
+- 当前尚未实现真实 Canal client、Docker E2E smoke、Windows Service 和完整 Wails 前端。
 
 ## 已完成事项
 
@@ -49,6 +49,9 @@ Last updated: 2026-05-21 15:08 Asia/Shanghai
 - 已新增 `ReplayRuntime` 和 `replay-pending-once`，支持单步重放 `PENDING` 下发事件。
 - 已更新 Server migration：`sync_event_log.event_payload` 和 Server 侧 `sync_error_log`。
 - 已新增 `docs/v0.9-replay.md`，记录事件重放入口和限制。
+- 已实现 V0.10 auto replay：Server `sync-agent run` 同时启动 `server-ingress` 和 `server-replay`。
+- 已让 `server-replay` 使用独立 RabbitMQ 连接和 publisher，避免与 ingress 共用 channel。
+- 已新增 `docs/v0.10-auto-replay.md` 和 `docs/delivery-assessment.md`，固化交付判断。
 
 ## AI 工程化状态清单
 
@@ -79,12 +82,13 @@ Last updated: 2026-05-21 15:08 Asia/Shanghai
 - [x] V0.7 CDC recovery：MySQL offset store、recovery policy、fatal recovery marker
 - [x] V0.8 Persistence：`internal/syncstore`、`failed-events`、`retry-event`
 - [x] V0.9 Replay：`event_payload`、`ReplayRuntime`、`replay-pending-once`
+- [x] V0.10 Auto replay worker：Server run 挂接 `server-replay`
 - [x] RabbitMQ 无感安装计划：`internal/installer/rabbitmq`
 
 ## 后续建议
 
 - 使用正确 `NODEBRIDGE_RABBITMQ_URL` 和 `NODEBRIDGE_SERVER_MYSQL_DSN` 跑 `docs/v0.3-smoke.md`。
-- 下一步进入 V0.10：后台自动重放 worker 或 Wails 管理端 MVP。
+- 下一步进入 V0.11：真实 Canal client 路径确认和生产 CDC adapter 接入。
 - 对接真实 MySQL 容器：设置 `NODEBRIDGE_APPLY_MYSQL_DSN` 后运行集成测试。
 - 进入 CDC 阶段：Canal Go client 选型、offset 保存、异常恢复。
 
@@ -93,6 +97,7 @@ Last updated: 2026-05-21 15:08 Asia/Shanghai
 - 项目最终名称是 `NodeBridge` 还是面向用户的 `DataSync`。
 - Canal Go client 具体库选型尚未确认。
 - Windows Service 实现库、日志库、配置加密实现方式尚未确认。
+- 交付节奏：V0.12 后可做技术试点，V0.15 后可做客户试用，V1.0 才是产品交付。
 
 ## 改动记录
 
@@ -113,3 +118,4 @@ Last updated: 2026-05-21 15:08 Asia/Shanghai
 - 2026-05-21 14:05 | gpt-5 | 评估缺口并完成 V0.7 MySQL offset store 与恢复策略。
 - 2026-05-21 14:38 | gpt-5 | 测试后完成 V0.8 持久化仓储和失败事件入口。
 - 2026-05-21 15:08 | gpt-5 | 完成 V0.9 事件载荷持久化和单步重放入口。
+- 2026-05-21 15:27 | gpt-5 | 完成 V0.10 后台重放 worker 并固化交付评估。

@@ -266,6 +266,31 @@ log_web:
 	}
 }
 
+func TestRunAgentServerRequiresRabbitMQURL(t *testing.T) {
+	configPath := writeTempConfig(t, `
+mode: server
+node:
+  id: server-test
+  name: Server Test
+mysql:
+  database: scada_center
+rabbitmq: {}
+sync:
+  retry_interval_seconds: 1
+log_web:
+  enable: false
+`)
+	var stdout, stderr bytes.Buffer
+
+	err := run([]string{"run", "-config", configPath, "-rules", filepath.Join("..", "..", "configs", "sync-rules.example.yaml"), "-max-steps", "1"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected missing server_url error")
+	}
+	if !strings.Contains(err.Error(), "rabbitmq.server_url is required") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
 func TestWorkerConfigDefaultsRetryInterval(t *testing.T) {
 	cfg := workerConfig("edge-upload", 0, 3)
 	if cfg.Name != "edge-upload" || cfg.MaxSteps != 3 {

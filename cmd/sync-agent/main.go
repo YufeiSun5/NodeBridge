@@ -213,32 +213,60 @@ func runServerWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules
 		return err
 	}
 	defer conn.Close()
+	replayConn, err := rabbitmq.Dial(cfg.RabbitMQ.ServerURL)
+	if err != nil {
+		fmt.Fprintf(stderr, "rabbitmq replay connect failed: %v\n", err)
+		return err
+	}
+	defer replayConn.Close()
 
 	publisher, err := rabbitmq.NewPublisher(conn.Channel)
 	if err != nil {
 		fmt.Fprintf(stderr, "publisher init failed: %v\n", err)
 		return err
 	}
-	worker := syncruntime.Worker{
-		Config: workerConfig("server-ingress", cfg.Sync.RetryIntervalSeconds, maxSteps),
-		Stepper: syncruntime.ServerIngressRuntime{
-			Source: syncruntime.AMQPGetSource{
-				Channel: conn.Channel,
-				Queue:   "server.cdc.ingress.q",
-			},
-			Consumer:   rabbitmq.Consumer{RequeueOnError: true},
-			Rules:      ruleSet,
-			Worker:     apply.NewSQLWorker(db),
-			EventStore: syncstore.New(db),
-			Dispatcher: syncruntime.RoutingDownlinkDispatcher{
-				Publisher: publisher,
-				Exchange:  "server.dispatch.x",
-			},
-			EdgeNodes: edgeNodeIDs,
-		},
-		Status: store,
+	replayPublisher, err := rabbitmq.NewPublisher(replayConn.Channel)
+	if err != nil {
+		fmt.Fprintf(stderr, "replay publisher init failed: %v\n", err)
+		return err
 	}
-	if err := worker.Run(ctx); err != nil && err != context.Canceled {
+	syncStore := syncstore.New(db)
+	group := syncruntime.WorkerGroup{
+		Workers: []syncruntime.Worker{
+			{
+				Config: workerConfig("server-ingress", cfg.Sync.RetryIntervalSeconds, maxSteps),
+				Stepper: syncruntime.ServerIngressRuntime{
+					Source: syncruntime.AMQPGetSource{
+						Channel: conn.Channel,
+						Queue:   "server.cdc.ingress.q",
+					},
+					Consumer:   rabbitmq.Consumer{RequeueOnError: true},
+					Rules:      ruleSet,
+					Worker:     apply.NewSQLWorker(db),
+					EventStore: syncStore,
+					Dispatcher: syncruntime.RoutingDownlinkDispatcher{
+						Publisher: publisher,
+						Exchange:  "server.dispatch.x",
+					},
+					EdgeNodes: edgeNodeIDs,
+				},
+				Status: store,
+			},
+			{
+				Config: workerConfig("server-replay", cfg.Sync.RetryIntervalSeconds, maxSteps),
+				Stepper: syncruntime.ReplayRuntime{
+					Store: syncStore,
+					Dispatcher: syncruntime.RoutingDownlinkDispatcher{
+						Publisher: replayPublisher,
+						Exchange:  "server.dispatch.x",
+					},
+					Limit: 1,
+				},
+				Status: store,
+			},
+		},
+	}
+	if err := group.Run(ctx); err != nil && err != context.Canceled {
 		return err
 	}
 	fmt.Fprintln(stdout, "server workers stopped")
