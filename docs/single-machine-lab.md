@@ -50,12 +50,20 @@ The script starts dev containers when Docker CLI is available, validates lab con
 
 The lab uses `rabbitmq.mode: external` and `install: false` because Docker RabbitMQ is not a delivery dependency.
 
-## Next E2E Step
+## E2E Smoke
 
-After V0.11, V0.12 should add an end-to-end lab script:
+V0.12 adds:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/lab-e2e.ps1
+```
+
+The script:
 
 1. Publish Edge A sample change to `edge-a-sync`.
 2. Forward Edge A upload to `server-sync`.
 3. Consume Server ingress and dispatch to Edge B.
 4. Consume Edge B downlink.
 5. Query Server and Edge B MySQL to verify rows.
+
+Details: `docs/v0.12-e2e-smoke.md`.

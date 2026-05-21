@@ -44,6 +44,8 @@ Limits:
 
 See `docs/single-machine-lab.md`.
 
+V0.12 adds the executable smoke entry: `scripts/lab-e2e.ps1`.
+
 ## Earliest Customer Trial
 
 Earliest customer trial target: after V0.16.

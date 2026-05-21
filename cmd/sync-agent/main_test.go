@@ -151,6 +151,18 @@ func TestRunConsumeOnceRequiresAMQPURL(t *testing.T) {
 	}
 }
 
+func TestRunConsumeOnceAcceptsEdgesFlagBeforeAMQPValidation(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	err := run([]string{"consume-once", "-config", filepath.Join("..", "..", "configs", "server.example.yaml"), "-edges", "edge-001,edge-002"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected missing amqp-url error")
+	}
+	if !strings.Contains(err.Error(), "amqp-url is required") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
 func TestRunConsumeDownlinkOnceRequiresAMQPURL(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 

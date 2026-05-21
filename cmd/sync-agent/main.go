@@ -451,6 +451,7 @@ func runConsumeOnce(args []string, stdout, stderr io.Writer) error {
 	rulesPath := flags.String("rules", "configs/sync-rules.example.yaml", "path to sync rules file")
 	amqpURL := flags.String("amqp-url", "", "RabbitMQ AMQP URL")
 	queueName := flags.String("queue", "server.cdc.ingress.q", "RabbitMQ queue")
+	edges := flags.String("edges", "", "comma-separated edge node ids for server dispatch")
 	requeue := flags.Bool("requeue-on-error", false, "requeue message when apply fails")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -482,6 +483,19 @@ func runConsumeOnce(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	defer conn.Close()
+	var dispatcher syncruntime.DownlinkDispatcher
+	edgeNodeIDs := splitCSV(*edges)
+	if len(edgeNodeIDs) > 0 {
+		publisher, err := rabbitmq.NewPublisher(conn.Channel)
+		if err != nil {
+			fmt.Fprintf(stderr, "publisher init failed: %v\n", err)
+			return err
+		}
+		dispatcher = syncruntime.RoutingDownlinkDispatcher{
+			Publisher: publisher,
+			Exchange:  "server.dispatch.x",
+		}
+	}
 
 	runtime := syncruntime.ServerIngressRuntime{
 		Source: syncruntime.AMQPGetSource{
@@ -492,6 +506,8 @@ func runConsumeOnce(args []string, stdout, stderr io.Writer) error {
 		Rules:      ruleSet,
 		Worker:     apply.NewSQLWorker(db),
 		EventStore: syncstore.New(db),
+		Dispatcher: dispatcher,
+		EdgeNodes:  edgeNodeIDs,
 	}
 	result, err := runtime.RunOnce(context.Background())
 	if err != nil {
