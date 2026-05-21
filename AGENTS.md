@@ -67,6 +67,7 @@ Evidence / 依据 / 根拠: user-provided V1.0 design document plus the current 
 | Resource | Trigger / 触发条件 / 利用条件 |
 | --- | --- |
 | `.ai/docs/product-design.md` | Product and architecture brief / 产品与架构摘要 / 製品・構成概要 |
+| `.ai/docs/roadmap.md` | Version roadmap and next milestone / 版本路线与下一里程碑 / バージョン計画と次の節目 |
 | `.ai/skills/README.md` | Skill creation and usage rules / 技能创建与使用规则 / スキル作成・利用ルール |
 | `.ai/agents/architecture-review.agent.md` | Read-only architecture review / 只读架构审查 / 読み取り専用構成レビュー |
 | `.ai/prompts/implement-sync-module.prompt.md` | Implement a sync module / 实现同步模块 / 同期モジュール実装 |
@@ -87,6 +88,12 @@ Evidence / 依据 / 根拠: user-provided V1.0 design document plus the current 
 - CLI and config changes need smoke or validation tests. / CLI 和配置变更需要 smoke 或 validation 测试。 / CLI と設定変更には smoke または validation テストが必要です。
 - Run `go test ./...` and `go vet ./...` before handoff. / 交付前运行 `go test ./...` 和 `go vet ./...`。 / 引き渡し前に `go test ./...` と `go vet ./...` を実行します。
 - Run `golangci-lint run ./...` when installed. / 已安装时运行 `golangci-lint run ./...`。 / インストール済みなら `golangci-lint run ./...` を実行します。
+
+## Wails And Logs / Wails 与日志 / Wails とログ
+
+- Wails UI should not occupy a port by default. / Wails UI 默认不占端口。 / Wails UI は既定でポートを占有しません。
+- Frontend calls Go through Wails bindings. / 前端通过 Wails binding 调 Go。 / フロントエンドは Wails binding で Go を呼びます。
+- Log Web is separate and opt-in. / 日志 Web 独立且默认关闭。 / ログ Web は独立で任意有効です。
 
 ## Language / 语言 / 言語
 

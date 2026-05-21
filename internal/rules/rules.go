@@ -1,5 +1,12 @@
 package rules
 
+import (
+	"fmt"
+	"os"
+
+	"gopkg.in/yaml.v3"
+)
+
 const (
 	DirectionEdgeToServer  = "EDGE_TO_SERVER"
 	DirectionBidirectional = "BIDIRECTIONAL"
@@ -34,6 +41,19 @@ type ColumnMapping struct {
 
 type RuleSet struct {
 	Rules []SyncRule `json:"rules" yaml:"rules"`
+}
+
+func LoadFile(path string) (*RuleSet, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read rules %q: %w", path, err)
+	}
+
+	var set RuleSet
+	if err := yaml.Unmarshal(data, &set); err != nil {
+		return nil, fmt.Errorf("parse rules %q: %w", path, err)
+	}
+	return &set, nil
 }
 
 func (s RuleSet) Find(databaseName, tableName string) *SyncRule {

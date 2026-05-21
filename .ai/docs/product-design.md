@@ -54,6 +54,12 @@ MySQL -> CDC -> Event -> RabbitMQ -> Apply -> MySQL
 - Go SyncAgent 是同步大脑。
 - Server 负责中心仲裁和不分发回源节点。
 - Edge 本地必须识别同步回放并阻止再次上传。
+- Wails 管理端默认不占用端口，通过 Wails binding 调用 Go 后端。
+- 日志模块可单独启用轻量 HTTP 服务，用于远程诊断。
+
+## 路线图
+
+详细版本计划见 `.ai/docs/roadmap.md`。
 
 ## 待确认
 

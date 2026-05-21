@@ -22,6 +22,7 @@ type Config struct {
 	RabbitMQ RabbitMQConfig `json:"rabbitmq" yaml:"rabbitmq"`
 	CDC      CDCConfig      `json:"cdc" yaml:"cdc"`
 	Sync     SyncConfig     `json:"sync" yaml:"sync"`
+	LogWeb   LogWebConfig   `json:"log_web" yaml:"log_web"`
 }
 
 type NodeConfig struct {
@@ -39,8 +40,14 @@ type MySQLConfig struct {
 }
 
 type RabbitMQConfig struct {
-	LocalURL  string `json:"local_url,omitempty" yaml:"local_url,omitempty"`
-	ServerURL string `json:"server_url" yaml:"server_url"`
+	Mode          string `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Install       bool   `json:"install,omitempty" yaml:"install,omitempty"`
+	LocalURL      string `json:"local_url,omitempty" yaml:"local_url,omitempty"`
+	ServerURL     string `json:"server_url" yaml:"server_url"`
+	ManagementURL string `json:"management_url,omitempty" yaml:"management_url,omitempty"`
+	Username      string `json:"username,omitempty" yaml:"username,omitempty"`
+	Password      string `json:"password,omitempty" yaml:"password,omitempty"`
+	VHost         string `json:"vhost,omitempty" yaml:"vhost,omitempty"`
 }
 
 type CDCConfig struct {
@@ -56,6 +63,13 @@ type SyncConfig struct {
 	RetryIntervalSeconds    int `json:"retry_interval_seconds" yaml:"retry_interval_seconds"`
 	HeartbeatIntervalSecond int `json:"heartbeat_interval_seconds,omitempty" yaml:"heartbeat_interval_seconds,omitempty"`
 	NodeTimeoutSeconds      int `json:"node_timeout_seconds,omitempty" yaml:"node_timeout_seconds,omitempty"`
+}
+
+type LogWebConfig struct {
+	Enable bool   `json:"enable" yaml:"enable"`
+	Bind   string `json:"bind" yaml:"bind"`
+	Port   int    `json:"port" yaml:"port"`
+	Token  string `json:"token" yaml:"token"`
 }
 
 func LoadFile(path string) (*Config, error) {

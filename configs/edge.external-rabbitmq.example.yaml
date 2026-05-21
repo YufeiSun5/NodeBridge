@@ -13,14 +13,14 @@ mysql:
   database: scada_edge
 
 rabbitmq:
-  mode: managed
-  install: true
-  local_url: amqp://sync:password@127.0.0.1:5672/edge-sync
-  server_url: amqp://edge-001:password@192.168.1.10:5672/server-sync
-  management_url: http://127.0.0.1:15672
+  mode: external
+  install: false
+  local_url: amqp://edge-001:encrypted_password@rabbitmq.example.com:5672/edge-sync
+  server_url: amqp://edge-001:encrypted_password@rabbitmq.example.com:5672/server-sync
+  management_url: https://rabbitmq.example.com:15672
   username: edge-001
   password: encrypted_password
-  vhost: /edge-sync
+  vhost: /server-sync
 
 cdc:
   type: canal

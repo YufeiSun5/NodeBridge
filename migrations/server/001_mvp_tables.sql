@@ -25,6 +25,21 @@ CREATE TABLE IF NOT EXISTS device_config (
   KEY idx_updated_at (updated_at)
 );
 
+CREATE TABLE IF NOT EXISTS device_settings (
+  setting_id BIGINT PRIMARY KEY,
+  display_name VARCHAR(128) NOT NULL,
+  setting_value VARCHAR(512) NULL,
+  sync_version BIGINT NOT NULL DEFAULT 0,
+  updated_by_node VARCHAR(64) NULL,
+  last_event_id VARCHAR(128) NULL,
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  is_deleted TINYINT NOT NULL DEFAULT 0,
+  deleted_at DATETIME(3) NULL,
+  deleted_by_node VARCHAR(64) NULL,
+  KEY idx_last_event_id (last_event_id),
+  KEY idx_updated_at (updated_at)
+);
+
 CREATE TABLE IF NOT EXISTS sync_node_registry (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   node_id VARCHAR(64) NOT NULL,

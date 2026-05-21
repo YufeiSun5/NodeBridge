@@ -12,9 +12,21 @@ mysql:
   database: scada_center
 
 rabbitmq:
+  mode: managed
+  install: true
   server_url: amqp://sync:password@127.0.0.1:5672/server-sync
+  management_url: http://127.0.0.1:15672
+  username: server-sync
+  password: encrypted_password
+  vhost: /server-sync
 
 sync:
   dispatch_batch_size: 500
   retry_interval_seconds: 10
   node_timeout_seconds: 60
+
+log_web:
+  enable: false
+  bind: 127.0.0.1
+  port: 18080
+  token: encrypted_token
