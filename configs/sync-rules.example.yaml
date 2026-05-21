@@ -2,6 +2,7 @@ rules:
   - id: alarm-history-upload
     database_name: scada_edge
     table_name: alarm_history
+    target_database_name: scada_center
     direction: EDGE_TO_SERVER
     conflict_policy: NONE
     enable: true

@@ -963,18 +963,24 @@ func runServeNodeAPI(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	defer db.Close()
-	conn, err := rabbitmq.Dial(cfg.RabbitMQ.ServerURL)
+	topologyConn, err := rabbitmq.Dial(cfg.RabbitMQ.ServerURL)
 	if err != nil {
 		fmt.Fprintf(stderr, "rabbitmq connect failed: %v\n", err)
 		return err
 	}
-	defer conn.Close()
-	publisher, err := rabbitmq.NewPublisher(conn.Channel)
+	defer topologyConn.Close()
+	publisherConn, err := rabbitmq.Dial(cfg.RabbitMQ.ServerURL)
+	if err != nil {
+		fmt.Fprintf(stderr, "rabbitmq publisher connect failed: %v\n", err)
+		return err
+	}
+	defer publisherConn.Close()
+	publisher, err := rabbitmq.NewPublisher(publisherConn.Channel)
 	if err != nil {
 		fmt.Fprintf(stderr, "publisher init failed: %v\n", err)
 		return err
 	}
-	api := nodeapi.NewServer(syncstore.New(db), nodeapi.AMQPNodeTopology{Channel: conn.Channel}, nodeapi.AMQPConfigPublisher{
+	api := nodeapi.NewServer(syncstore.New(db), nodeapi.AMQPNodeTopology{Channel: topologyConn.Channel}, nodeapi.AMQPConfigPublisher{
 		Publisher:    publisher,
 		SourceNodeID: cfg.Node.ID,
 	})

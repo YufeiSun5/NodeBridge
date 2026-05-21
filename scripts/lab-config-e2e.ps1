@@ -15,10 +15,20 @@ function Assert-LastExit {
     }
 }
 
+function Stop-NodeApiPort {
+    $connections = Get-NetTCPConnection -LocalPort 18090 -ErrorAction SilentlyContinue
+    foreach ($connection in $connections) {
+        if ($connection.OwningProcess -and $connection.OwningProcess -gt 0) {
+            Stop-Process -Id $connection.OwningProcess -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 if (-not $SkipPrepare) {
     powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root "scripts/lab-smoke.ps1")
 }
 
+Stop-NodeApiPort
 docker exec nodebridge-rabbitmq-server rabbitmqctl purge_queue -p server-sync edge-002.downlink.q | Out-Null
 docker exec nodebridge-mysql-edge-b mysql -usync_user -psync_password scada_edge -e "DELETE FROM sync_node_config WHERE node_id='edge-002';" | Out-Null
 
@@ -78,6 +88,7 @@ try {
     if ($process -and -not $process.HasExited) {
         Stop-Process -Id $process.Id -Force
     }
+    Stop-NodeApiPort
 }
 
 Write-Host "config e2e passed"

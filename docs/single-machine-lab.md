@@ -79,3 +79,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/lab-config-e2e.ps1 -
 ```
 
 Details: `docs/v0.17-node-management.md`.
+
+## CRUD Semantic E2E
+
+V0.18 adds full CRUD and one-way-table verification:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/lab-crud-e2e.ps1 -SkipPrepare
+```
+
+The script verifies `device_config -> device_settings` INSERT, duplicate idempotency, UPDATE, soft DELETE, table/column remapping, and `alarm_history` as `EDGE_TO_SERVER` without Edge B dispatch.
+
+Details: `docs/v0.18-crud-e2e.md`.

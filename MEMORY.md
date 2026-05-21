@@ -1,12 +1,12 @@
 # MEMORY
 
-Last updated: 2026-05-21 17:10 Asia/Shanghai
+Last updated: 2026-05-21 17:29 Asia/Shanghai
 
 ## 当前阶段
 
-- 项目处于 V0.17 node management backend 阶段。
+- 项目处于 V0.18 CRUD E2E verified 阶段。
 - 当前仓库已有 Go MVP 骨架、配置样例、迁移样例、RabbitMQ 核心接口、表列映射、MySQL Apply Worker 和无感安装计划模型。
-- 当前已跑通节点注册、动态分发、HTTP 配置下发和三套独立 RabbitMQ 单机 Docker 联调；尚未实现 Canal lab compose、Windows Service 和完整 Wails 前端。
+- 当前已跑通节点注册、动态分发、HTTP 配置下发、CRUD/软删/幂等/单向表语义和三套独立 RabbitMQ 单机 Docker 联调；尚未实现批量发送/批量 Apply、Canal lab compose、Windows Service 和完整 Wails 前端。
 
 ## 已完成事项
 
@@ -83,6 +83,13 @@ Last updated: 2026-05-21 17:10 Asia/Shanghai
 - 已让 Server ingress 支持从 `sync_node_registry` 动态加载 ACTIVE Edge 节点，不再依赖 `-edges`。
 - 已新增 `register-node`、`set-node-config`、`list-nodes`、`list-node-config` 和 `serve-node-api` CLI。
 - 已新增 `scripts/lab-config-e2e.ps1`，验证 HTTP 注册、RabbitMQ 配置下发和 Edge 侧 ACK/落库。
+- 已实现 V0.18 CRUD 语义验收：`scripts/lab-crud-e2e.ps1` 覆盖 INSERT、UPDATE、DELETE 软删和重复 `event_id` 幂等。
+- 已新增固定 `SyncEvent` 样例：`device_config.insert/update/delete.sync.json`，用于稳定复现 CRUD 链路。
+- 已新增 `ChangeEvent` UPDATE/DELETE 样例，为后续 CDC stub 和 Canal 验证保留输入。
+- 已修正 `alarm_history` 规则目标库为 `scada_center`，验证 `EDGE_TO_SERVER` 只写中心不分发。
+- 已修复 Node API 测试脚本进程清理，避免 `go run` 子进程残留占用 18090。
+- 已让 Node API 使用独立 RabbitMQ topology channel 和 publisher channel，避免配置下发时通道状态互相影响。
+- 已新增 `docs/v0.18-crud-e2e.md`，记录 CRUD E2E 范围、命令和 V0.19 批量方向。
 
 ## AI 工程化状态清单
 
@@ -121,12 +128,13 @@ Last updated: 2026-05-21 17:10 Asia/Shanghai
 - [x] V0.15 Single-pc E2E verified：Docker MySQL x3 + RabbitMQ，Edge A -> Server -> Edge B 验证通过
 - [x] V0.16 Separated RabbitMQ lab：Edge/Server 独立 broker，断开 Server broker 时 Edge 本地队列保留
 - [x] V0.17 Node management：HTTP 注册、非敏感配置管理、CONFIG_UPDATE 下发、动态 ACTIVE 节点分发
+- [x] V0.18 CRUD E2E：增删改、软删、幂等、单向表不分发、表列映射验收
 - [x] RabbitMQ 无感安装计划：`internal/installer/rabbitmq`
 
 ## 后续建议
 
 - 使用正确 `NODEBRIDGE_RABBITMQ_URL` 和 `NODEBRIDGE_SERVER_MYSQL_DSN` 跑 `docs/v0.3-smoke.md`。
-- 下一步进入 V0.18：补 CRUD/单向表 E2E 或 Windows Service 安装、启动、停止、卸载入口。
+- 下一步进入 V0.19：实现批量发送与批量 Apply，默认 `50 条或 500ms` 任一条件 flush，并保持单队列单 consumer 顺序。
 - 对接真实 MySQL 容器：设置 `NODEBRIDGE_APPLY_MYSQL_DSN` 后运行集成测试。
 - 进入 CDC 阶段：Canal Go client 选型、offset 保存、异常恢复。
 
@@ -135,7 +143,7 @@ Last updated: 2026-05-21 17:10 Asia/Shanghai
 - 项目最终名称是 `NodeBridge` 还是面向用户的 `DataSync`。
 - Canal Go client 当前使用 `github.com/withlin/canal-go`，后续可替换，依赖已隔离。
 - Windows Service 实现库、日志库、配置加密实现方式尚未确认。
-- 交付节奏：当前已具备后端技术试点基础；补齐 CRUD E2E 和 Windows Service 后可做客户试用，V1.0 才是产品交付。
+- 交付节奏：当前已具备后端技术试点基础；补齐 V0.19 批量性能、Windows Service 和最小 Wails 管理端后可做客户试用，V1.0 才是产品交付。
 
 ## 改动记录
 
@@ -164,3 +172,4 @@ Last updated: 2026-05-21 17:10 Asia/Shanghai
 - 2026-05-21 16:25 | gpt-5 | 完成 V0.15 单机三节点 E2E 修复、脚本验收和测试。
 - 2026-05-21 16:41 | gpt-5 | 改为三套 RabbitMQ lab 并验证 Server 断开时 Edge 本地缓存。
 - 2026-05-21 17:10 | gpt-5 | 完成 V0.17 节点注册、动态分发和配置下发后端验收。
+- 2026-05-21 17:29 | gpt-5 | 完成 V0.18 CRUD/单向表 E2E、配置脚本修复和验收文档。

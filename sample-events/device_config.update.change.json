@@ -1,0 +1,25 @@
+{
+  "database_name": "scada_edge",
+  "table_name": "device_config",
+  "operation": "UPDATE",
+  "primary_key": {
+    "id": 1
+  },
+  "before": {
+    "id": 1,
+    "name": "Pump A",
+    "value": "ON",
+    "sync_version": 1,
+    "updated_by_node": "edge-001"
+  },
+  "after": {
+    "id": 1,
+    "name": "Pump A",
+    "value": "AUTO",
+    "sync_version": 2,
+    "updated_by_node": "edge-001"
+  },
+  "binlog_file": "mysql-bin.000001",
+  "binlog_pos": 256,
+  "event_time": "2026-05-21T12:31:00Z"
+}

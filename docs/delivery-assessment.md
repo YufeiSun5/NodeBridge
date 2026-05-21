@@ -6,7 +6,7 @@ Last updated: 2026-05-21
 
 NodeBridge is not yet production-deliverable, but it is close to a technical pilot.
 
-The current codebase has the main Go runtime shape: config, mapping, MySQL apply, RabbitMQ publish/consume, runtime workers, log web, CDC preparation, offset persistence, failure tracking, and replay entry points.
+The current codebase has the main Go runtime shape: config, mapping, MySQL apply, RabbitMQ publish/consume, runtime workers, log web, CDC preparation, offset persistence, failure tracking, replay entry points, node registration, config downlink, and CRUD semantic E2E scripts.
 
 ## Earliest Pilot
 
@@ -27,6 +27,7 @@ Required before pilot:
 - V0.13: real Canal client integration path or a confirmed production CDC adapter.
 - V0.14: Canal runtime path can publish to Edge local RabbitMQ after successful fetch.
 - V0.17: Server-managed node registration, dynamic dispatch, and config downlink.
+- V0.18: CRUD, soft delete, idempotency, one-way table, and remapping E2E against separated brokers.
 - Basic runbook for config, migration, topology init, run, retry, and log web.
 
 ## Single Machine Testing
@@ -50,9 +51,11 @@ See `docs/single-machine-lab.md`.
 
 V0.12 adds the executable smoke entry: `scripts/lab-e2e.ps1`.
 
+V0.18 adds the full semantic entry: `scripts/lab-crud-e2e.ps1`.
+
 ## Earliest Customer Trial
 
-Earliest customer trial target: after V0.17.
+Earliest customer trial target: after V0.19.
 
 Customer trial means:
 
@@ -62,12 +65,14 @@ Customer trial means:
 - Wails has minimal config/status/rule/failure/log pages.
 - Diagnostic package export exists.
 - CRUD and one-way table E2E pass against the separated broker lab.
+- Batch publish and batch apply have a measured baseline on mechanical-disk-friendly settings.
 
 Required before customer trial:
 
-- V0.15: Windows Service install/start/stop/uninstall.
-- V0.16: Wails management MVP without occupying a frontend port.
-- V0.17: diagnostic export and installer runbook.
+- V0.19: batching with `50 events or 500ms`, ordered consume/apply, and benchmark notes.
+- Windows Service install/start/stop/uninstall.
+- Wails management MVP without occupying a frontend port.
+- Diagnostic export and installer runbook.
 
 ## Product Delivery
 
@@ -86,6 +91,7 @@ V1.0 must include:
 
 - Real Canal client selection is still not confirmed.
 - Windows Service implementation library is still not selected.
+- Batch publish/apply is not implemented yet.
 - Wails frontend is still only a Go shell.
 - RabbitMQ installer is currently a plan model, not an executable installer.
 - Integration tests depend on user-provided Docker services or DSNs.

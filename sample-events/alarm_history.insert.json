@@ -10,6 +10,7 @@
   },
   "after": {
     "id": 1001,
+    "origin_node_id": "edge-001",
     "alarm_code": "ALM-001",
     "alarm_message": "Pump pressure high",
     "alarm_level": "HIGH",

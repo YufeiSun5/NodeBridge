@@ -130,6 +130,31 @@ func TestServerIngressRuntimeUsesActiveNodeStore(t *testing.T) {
 	}
 }
 
+func TestServerIngressRuntimeEdgeToServerDoesNotDispatch(t *testing.T) {
+	msg := &fakeMessage{body: mustJSON(t, sampleEvent())}
+	dispatcher := &fakeDispatcher{}
+	set := sampleRules()
+	set.Rules[0].Direction = rules.DirectionEdgeToServer
+	runtime := ServerIngressRuntime{
+		Source:     &fakeSource{msg: msg, ok: true},
+		Rules:      set,
+		Worker:     &fakeWorker{},
+		Dispatcher: dispatcher,
+		EdgeNodes:  []string{"edge-a", "edge-b"},
+	}
+
+	result, err := runtime.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.DispatchCount != 0 {
+		t.Fatalf("EDGE_TO_SERVER must not dispatch, got %+v", result)
+	}
+	if len(dispatcher.targets) != 0 {
+		t.Fatalf("unexpected dispatch targets %+v", dispatcher.targets)
+	}
+}
+
 func TestServerIngressRuntimeNacksOnEventStoreFailure(t *testing.T) {
 	msg := &fakeMessage{body: mustJSON(t, sampleEvent())}
 	runtime := ServerIngressRuntime{
