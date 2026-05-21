@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
 )
 
 func TestRunEdgeConfig(t *testing.T) {
@@ -122,6 +124,21 @@ log_web:
 	}
 }
 
+func TestRunCanalCheck(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	err := run([]string{"canal-check", "-config", filepath.Join("..", "..", "configs", "edge.example.yaml")}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("run returned error: %v stderr=%s", err, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{"reader=edge-001", "addr=127.0.0.1:11111", "destination=edge-001"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected stdout to contain %q, got %q", want, out)
+		}
+	}
+}
+
 func TestRunConsumeOnceRequiresAMQPURL(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
@@ -211,6 +228,21 @@ func TestWorkerConfigDefaultsRetryInterval(t *testing.T) {
 	}
 	if cfg.IdleInterval == 0 || cfg.ErrorInterval == 0 {
 		t.Fatalf("expected default intervals, got %+v", cfg)
+	}
+}
+
+func TestCanalConfigFromAppDefaultsReaderName(t *testing.T) {
+	cfg := &appconfig.Config{
+		Node: appconfig.NodeConfig{ID: "edge-001"},
+		CDC: appconfig.CDCConfig{
+			CanalAddr:   "127.0.0.1:11111",
+			Destination: "edge-001",
+			BatchSize:   500,
+		},
+	}
+	canalConfig := canalConfigFromApp(cfg)
+	if canalConfig.ReaderName != "edge-001" || canalConfig.Address != "127.0.0.1:11111" || canalConfig.BatchSize != 500 {
+		t.Fatalf("unexpected canal config %+v", canalConfig)
 	}
 }
 

@@ -24,9 +24,11 @@ rabbitmq:
 
 cdc:
   type: canal
+  reader_name: edge-001
   canal_addr: 127.0.0.1:11111
   destination: edge-001
   batch_size: 1000
+  use_gtid: false
 
 sync:
   upload_batch_size: 500

@@ -1,12 +1,12 @@
 # MEMORY
 
-Last updated: 2026-05-21 13:12 Asia/Shanghai
+Last updated: 2026-05-21 13:19 Asia/Shanghai
 
 ## 当前阶段
 
-- 项目处于 V0.5 CDC stub / Canal 前置完成阶段。
+- 项目处于 V0.6 Canal prep 实施阶段。
 - 当前仓库已有 Go MVP 骨架、配置样例、迁移样例、RabbitMQ 核心接口、表列映射、MySQL Apply Worker 和无感安装计划模型。
-- 当前尚未实现真实 Canal client、CDC offset 持久化、ACK 持久化、失败事件重放和完整 Wails 前端。
+- 当前尚未实现真实 Canal client、MySQL 持久化 offset store、ACK 持久化、失败事件重放和完整 Wails 前端。
 
 ## 已完成事项
 
@@ -35,6 +35,9 @@ Last updated: 2026-05-21 13:12 Asia/Shanghai
 - 已实现 V0.5 CDC stub：`ChangeEvent` JSON、`normalizer`、`cdc.StubSource`、`CDCUploadRuntime`。
 - 已新增 `publish-change-once`，模拟 CDC 事件可经回环抑制和标准化后发布到 Edge 本地上传队列。
 - 已新增 `sample-events/device_config.change.json` 和 `docs/v0.5-cdc-stub.md`。
+- 已实现 V0.6 Canal prep：`cdc.Offset`、`OffsetStore`、内存 offset store、Canal adapter 前置接口。
+- 已实现 Canal row change 到 `cdc.ChangeEvent` 的转换，以及 `FetchOnce` 的 fetch、convert、save offset、ack 流程。
+- 已新增 `sync-agent canal-check` 用于 Canal 配置 smoke 校验。
 
 ## AI 工程化状态清单
 
@@ -61,12 +64,13 @@ Last updated: 2026-05-21 13:12 Asia/Shanghai
 - [x] V0.4 日志与调度状态：`/logs`、ring buffer、dispatch count
 - [x] V0.5 CDC stub：`internal/normalizer`、`cdc.StubSource`、`CDCUploadRuntime`
 - [x] V0.5 CLI smoke：`publish-change-once`
+- [x] V0.6 Canal prep：`cdc.Offset`、`internal/cdc/canal`、`canal-check`
 - [x] RabbitMQ 无感安装计划：`internal/installer/rabbitmq`
 
 ## 后续建议
 
 - 使用正确 `NODEBRIDGE_RABBITMQ_URL` 和 `NODEBRIDGE_SERVER_MYSQL_DSN` 跑 `docs/v0.3-smoke.md`。
-- 下一步进入真实 Canal 前置：CDC offset 模型、Canal adapter 接口、异常恢复策略。
+- 继续 V0.6：补 MySQL offset store 和 Canal 异常恢复策略文档。
 - 对接真实 MySQL 容器：设置 `NODEBRIDGE_APPLY_MYSQL_DSN` 后运行集成测试。
 - 进入 CDC 阶段：Canal Go client 选型、offset 保存、异常恢复。
 
@@ -91,3 +95,4 @@ Last updated: 2026-05-21 13:12 Asia/Shanghai
 - 2026-05-21 11:58 | gpt-5 | 增加 Edge 下发 Apply、双 worker 编排和三语短注释。
 - 2026-05-21 12:10 | gpt-5 | 完成 V0.4 日志 ring buffer、dispatch 计数和测试验收。
 - 2026-05-21 13:12 | gpt-5 | 推送 V0.4 并完成 V0.5 CDC stub、normalizer 和测试。
+- 2026-05-21 13:19 | gpt-5 | 实施 V0.6 Canal prep、offset 模型和 canal-check。

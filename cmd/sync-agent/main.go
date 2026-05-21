@@ -18,6 +18,7 @@ import (
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
 	"github.com/YufeiSun5/NodeBridge/internal/apply"
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
+	canalcdc "github.com/YufeiSun5/NodeBridge/internal/cdc/canal"
 	"github.com/YufeiSun5/NodeBridge/internal/event"
 	"github.com/YufeiSun5/NodeBridge/internal/logweb"
 	"github.com/YufeiSun5/NodeBridge/internal/loop"
@@ -49,6 +50,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return runPublishEvent(args[1:], stdout, stderr)
 		case "publish-change-once":
 			return runPublishChangeOnce(args[1:], stdout, stderr)
+		case "canal-check":
+			return runCanalCheck(args[1:], stdout, stderr)
 		case "consume-once":
 			return runConsumeOnce(args[1:], stdout, stderr)
 		case "forward-upload-once":
@@ -375,6 +378,33 @@ func runPublishChangeOnce(args []string, stdout, stderr io.Writer) error {
 		return nil
 	}
 	fmt.Fprintf(stdout, "change published event_id=%s action=%s file=%s\n", result.EventID, result.Action, *changePath)
+	return nil
+}
+
+func runCanalCheck(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("canal-check", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "configs/edge.example.yaml", "path to sync-agent config file")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+
+	cfg, err := appconfig.LoadFile(*configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load config failed: %v\n", err)
+		return err
+	}
+	canalConfig := canalConfigFromApp(cfg)
+	if err := canalConfig.Validate(); err != nil {
+		fmt.Fprintf(stderr, "canal config invalid: %v\n", err)
+		return err
+	}
+	fmt.Fprintf(stdout, "canal config ready reader=%s addr=%s destination=%s batch_size=%d\n",
+		canalConfig.ReaderName,
+		canalConfig.Address,
+		canalConfig.Destination,
+		canalConfig.BatchSize,
+	)
 	return nil
 }
 
@@ -768,6 +798,19 @@ func workerConfig(name string, retrySeconds, maxSteps int) syncruntime.WorkerCon
 		IdleInterval:  time.Duration(retrySeconds) * time.Second,
 		ErrorInterval: time.Duration(retrySeconds) * time.Second,
 		MaxSteps:      maxSteps,
+	}
+}
+
+func canalConfigFromApp(cfg *appconfig.Config) canalcdc.Config {
+	readerName := cfg.CDC.ReaderName
+	if readerName == "" {
+		readerName = cfg.Node.ID
+	}
+	return canalcdc.Config{
+		ReaderName:  readerName,
+		Address:     cfg.CDC.CanalAddr,
+		Destination: cfg.CDC.Destination,
+		BatchSize:   cfg.CDC.BatchSize,
 	}
 }
 

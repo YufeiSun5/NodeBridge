@@ -52,9 +52,11 @@ type RabbitMQConfig struct {
 
 type CDCConfig struct {
 	Type        string `json:"type" yaml:"type"`
+	ReaderName  string `json:"reader_name,omitempty" yaml:"reader_name,omitempty"`
 	CanalAddr   string `json:"canal_addr,omitempty" yaml:"canal_addr,omitempty"`
 	Destination string `json:"destination,omitempty" yaml:"destination,omitempty"`
 	BatchSize   int    `json:"batch_size,omitempty" yaml:"batch_size,omitempty"`
+	UseGTID     bool   `json:"use_gtid,omitempty" yaml:"use_gtid,omitempty"`
 }
 
 type SyncConfig struct {
