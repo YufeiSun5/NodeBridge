@@ -29,6 +29,7 @@ import (
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
 	"github.com/YufeiSun5/NodeBridge/internal/status"
 	"github.com/YufeiSun5/NodeBridge/internal/syncruntime"
+	"github.com/YufeiSun5/NodeBridge/internal/syncstore"
 )
 
 func main() {
@@ -58,6 +59,10 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return runForwardUploadOnce(args[1:], stdout, stderr)
 		case "consume-downlink-once":
 			return runConsumeDownlinkOnce(args[1:], stdout, stderr)
+		case "failed-events":
+			return runFailedEvents(args[1:], stdout, stderr)
+		case "retry-event":
+			return runRetryEvent(args[1:], stdout, stderr)
 		case "serve-log-web":
 			return runServeLogWeb(args[1:], stdout, stderr)
 		case "run":
@@ -591,6 +596,83 @@ func runConsumeDownlinkOnce(args []string, stdout, stderr io.Writer) error {
 		return nil
 	}
 	fmt.Fprintf(stdout, "downlink consumed queue=%s event_id=%s action=%s\n", *queueName, result.EventID, result.Action)
+	return nil
+}
+
+func runFailedEvents(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("failed-events", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "configs/server.example.yaml", "path to sync-agent config file")
+	limit := flags.Int("limit", 100, "maximum failed events to list")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+
+	cfg, err := appconfig.LoadFile(*configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load config failed: %v\n", err)
+		return err
+	}
+	db, err := openMySQL(cfg)
+	if err != nil {
+		fmt.Fprintf(stderr, "open mysql failed: %v\n", err)
+		return err
+	}
+	defer db.Close()
+
+	events, err := syncstore.New(db).ListFailedEvents(context.Background(), *limit)
+	if err != nil {
+		fmt.Fprintf(stderr, "list failed events failed: %v\n", err)
+		return err
+	}
+	for _, item := range events {
+		fmt.Fprintf(stdout, "event_id=%s target_node_id=%s status=%s error=%s created_at=%s\n",
+			item.EventID,
+			item.TargetNodeID,
+			item.Status,
+			item.ErrorMessage,
+			item.CreatedAt.Format(time.RFC3339),
+		)
+	}
+	if len(events) == 0 {
+		fmt.Fprintln(stdout, "no failed events")
+	}
+	return nil
+}
+
+func runRetryEvent(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("retry-event", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "configs/server.example.yaml", "path to sync-agent config file")
+	eventID := flags.String("event-id", "", "event id to mark for retry")
+	targetNodeID := flags.String("target-node-id", "", "target node id")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *eventID == "" {
+		return fmt.Errorf("event-id is required")
+	}
+	if *targetNodeID == "" {
+		return fmt.Errorf("target-node-id is required")
+	}
+
+	cfg, err := appconfig.LoadFile(*configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load config failed: %v\n", err)
+		return err
+	}
+	db, err := openMySQL(cfg)
+	if err != nil {
+		fmt.Fprintf(stderr, "open mysql failed: %v\n", err)
+		return err
+	}
+	defer db.Close()
+
+	if err := syncstore.New(db).MarkRetryPending(context.Background(), *eventID, *targetNodeID); err != nil {
+		fmt.Fprintf(stderr, "mark retry failed: %v\n", err)
+		return err
+	}
+	fmt.Fprintf(stdout, "event marked pending event_id=%s target_node_id=%s\n", *eventID, *targetNodeID)
 	return nil
 }
 

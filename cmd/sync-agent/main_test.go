@@ -163,6 +163,26 @@ func TestRunConsumeDownlinkOnceRequiresAMQPURL(t *testing.T) {
 	}
 }
 
+func TestRunRetryEventRequiresIDs(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	err := run([]string{"retry-event"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected missing event id error")
+	}
+	if !strings.Contains(err.Error(), "event-id is required") {
+		t.Fatalf("unexpected error %v", err)
+	}
+
+	err = run([]string{"retry-event", "-event-id", "evt-001"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected missing target node id error")
+	}
+	if !strings.Contains(err.Error(), "target-node-id is required") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
 func TestRunForwardUploadOnceRequiresURLs(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
