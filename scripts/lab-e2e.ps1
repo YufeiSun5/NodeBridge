@@ -42,10 +42,13 @@ function Invoke-Docker {
 
 function Reset-LabState {
     foreach ($queue in @("edge.upload.cdc.q", "edge.upload.retry.q", "edge.dead.q")) {
-        Invoke-Docker "docker exec rabbitmq rabbitmqctl purge_queue -p edge-a-sync $queue | Out-Null"
+        Invoke-Docker "docker exec nodebridge-rabbitmq-edge-a rabbitmqctl purge_queue -p edge-a-sync $queue | Out-Null"
+    }
+    foreach ($queue in @("edge.upload.cdc.q", "edge.upload.retry.q", "edge.dead.q")) {
+        Invoke-Docker "docker exec nodebridge-rabbitmq-edge-b rabbitmqctl purge_queue -p edge-b-sync $queue | Out-Null"
     }
     foreach ($queue in @("server.cdc.ingress.q", "server.dead.q", "edge-001.downlink.q", "edge-002.downlink.q")) {
-        Invoke-Docker "docker exec rabbitmq rabbitmqctl purge_queue -p server-sync $queue | Out-Null"
+        Invoke-Docker "docker exec nodebridge-rabbitmq-server rabbitmqctl purge_queue -p server-sync $queue | Out-Null"
     }
     Invoke-Docker "docker exec nodebridge-mysql-server mysql -usync_user -psync_password scada_center -e `"DELETE FROM sync_ack_log; DELETE FROM sync_dispatch_log; DELETE FROM sync_event_log; DELETE FROM sync_apply_log; DELETE FROM device_settings;`""
     Invoke-Docker "docker exec nodebridge-mysql-edge-b mysql -usync_user -psync_password scada_edge -e `"DELETE FROM sync_apply_log; DELETE FROM device_settings;`""
@@ -70,17 +73,17 @@ try {
 
     # Edge A -> Server. / 上传到中心。 / Server へ送信。
     Write-Host "nodebridge> go run ./cmd/sync-agent forward-upload-once"
-    & go run ./cmd/sync-agent forward-upload-once -local-amqp-url amqp://sync:sync_password@127.0.0.1:5672/edge-a-sync -server-amqp-url amqp://sync:sync_password@127.0.0.1:5672/server-sync
+    & go run ./cmd/sync-agent forward-upload-once -local-amqp-url amqp://sync:sync_password@127.0.0.1:5673/edge-a-sync -server-amqp-url amqp://sync:sync_password@127.0.0.1:5675/server-sync
     Assert-LastExit "forward-upload-once"
 
     # Server -> Edge B. / 中心下发。 / Edge B へ配信。
     Write-Host "nodebridge> go run ./cmd/sync-agent consume-once"
-    & go run ./cmd/sync-agent consume-once -config configs/lab/server.local.yaml -rules configs/sync-rules.example.yaml -amqp-url amqp://sync:sync_password@127.0.0.1:5672/server-sync -edges edge-001,edge-002
+    & go run ./cmd/sync-agent consume-once -config configs/lab/server.local.yaml -rules configs/sync-rules.example.yaml -amqp-url amqp://sync:sync_password@127.0.0.1:5675/server-sync -edges edge-001,edge-002
     Assert-LastExit "consume-once"
 
     # Edge B apply. / 边缘写入。 / Edge B に適用。
     Write-Host "nodebridge> go run ./cmd/sync-agent consume-downlink-once"
-    & go run ./cmd/sync-agent consume-downlink-once -config configs/lab/edge-b.local.yaml -rules configs/sync-rules.example.yaml -amqp-url amqp://sync:sync_password@127.0.0.1:5672/server-sync
+    & go run ./cmd/sync-agent consume-downlink-once -config configs/lab/edge-b.local.yaml -rules configs/sync-rules.example.yaml -amqp-url amqp://sync:sync_password@127.0.0.1:5675/server-sync
     Assert-LastExit "consume-downlink-once"
 } finally {
     Pop-Location

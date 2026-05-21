@@ -23,6 +23,7 @@ Required before pilot:
 
 - V0.11: single-machine lab topology and repeatable preparation script.
 - V0.12: full Docker MySQL/RabbitMQ smoke script for Edge A -> Server -> Edge B.
+- V0.15: separate RabbitMQ brokers for Edge A, Edge B, and Server in single-PC lab.
 - V0.13: real Canal client integration path or a confirmed production CDC adapter.
 - V0.14: Canal runtime path can publish to Edge local RabbitMQ after successful fetch.
 - Basic runbook for config, migration, topology init, run, retry, and log web.
@@ -33,13 +34,14 @@ One PC is enough for development and lab verification.
 
 Recommended layout:
 
-- One RabbitMQ container with three vhosts: `edge-a-sync`, `edge-b-sync`, `server-sync`.
+- Three RabbitMQ containers: Edge A `5673`, Edge B `5674`, Server `5675`.
 - Three MySQL containers on ports `3307`, `3308`, and `3309`.
 - Three SyncAgent processes using `configs/lab/*.local.yaml`.
 
 Limits:
 
-- It validates software flow, not real network partitions between physical nodes.
+- It validates local broker buffering and Server broker disconnect/reconnect on one PC.
+- It does not fully replace physical network partition testing between machines.
 - It does not prove Windows Service installation.
 - It does not replace final offline RabbitMQ installer testing.
 

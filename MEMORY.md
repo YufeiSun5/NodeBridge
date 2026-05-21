@@ -1,12 +1,12 @@
 # MEMORY
 
-Last updated: 2026-05-21 16:25 Asia/Shanghai
+Last updated: 2026-05-21 16:41 Asia/Shanghai
 
 ## 当前阶段
 
-- 项目处于 V0.15 single-pc E2E verified 阶段。
+- 项目处于 V0.16 separated RabbitMQ lab 阶段。
 - 当前仓库已有 Go MVP 骨架、配置样例、迁移样例、RabbitMQ 核心接口、表列映射、MySQL Apply Worker 和无感安装计划模型。
-- 当前已跑通 Edge A、Server、Edge B 单机 Docker 联调；尚未实现 Canal lab compose、Windows Service 和完整 Wails 前端。
+- 当前已跑通 Edge A、Edge B、Server 三套独立 RabbitMQ 的单机 Docker 联调；尚未实现 Canal lab compose、Windows Service 和完整 Wails 前端。
 
 ## 已完成事项
 
@@ -73,6 +73,10 @@ Last updated: 2026-05-21 16:25 Asia/Shanghai
 - 已修复 Edge 下发目标库选择：Server 仍按规则写中心库，Edge Downlink 按本节点 MySQL 配置写本地库。
 - 已增强 `scripts/lab-e2e.ps1`：显式加载 Docker CLI 路径、重置队列和表、逐步执行三节点链路、失败即停。
 - 已在本机 Docker 环境跑通 Edge A -> Server -> Edge B E2E，中心库和 Edge B 均验证 `device_settings.setting_value=ON`。
+- 已修正 lab 拓扑：从单 RabbitMQ 多 vhost 改为 Edge A、Edge B、Server 三个 RabbitMQ 容器。
+- 已调整 lab 端口：Edge A RabbitMQ `5673/15673`，Edge B `5674/15674`，Server `5675/15675`。
+- 已验证 Server RabbitMQ 停止时 Edge A 本地 `edge.upload.cdc.q` 保留消息，恢复后可继续转发到 Server。
+- 已更新单机测试文档，明确 Docker 仅作开发测试，最终交付仍允许客户自有 RabbitMQ 或默认安装 RabbitMQ。
 
 ## AI 工程化状态清单
 
@@ -109,12 +113,13 @@ Last updated: 2026-05-21 16:25 Asia/Shanghai
 - [x] V0.13 Canal client adapter：`withlin/canal-go` wrapper、protobuf conversion、ACK path
 - [x] V0.14 Canal runtime：`edge-cdc-canal` worker、`canal-publish-once`、publish-before-ack
 - [x] V0.15 Single-pc E2E verified：Docker MySQL x3 + RabbitMQ，Edge A -> Server -> Edge B 验证通过
+- [x] V0.16 Separated RabbitMQ lab：Edge/Server 独立 broker，断开 Server broker 时 Edge 本地队列保留
 - [x] RabbitMQ 无感安装计划：`internal/installer/rabbitmq`
 
 ## 后续建议
 
 - 使用正确 `NODEBRIDGE_RABBITMQ_URL` 和 `NODEBRIDGE_SERVER_MYSQL_DSN` 跑 `docs/v0.3-smoke.md`。
-- 下一步进入 V0.16：Windows Service 安装、启动、停止、卸载入口。
+- 下一步进入 V0.17：Windows Service 安装、启动、停止、卸载入口。
 - 对接真实 MySQL 容器：设置 `NODEBRIDGE_APPLY_MYSQL_DSN` 后运行集成测试。
 - 进入 CDC 阶段：Canal Go client 选型、offset 保存、异常恢复。
 
@@ -123,7 +128,7 @@ Last updated: 2026-05-21 16:25 Asia/Shanghai
 - 项目最终名称是 `NodeBridge` 还是面向用户的 `DataSync`。
 - Canal Go client 当前使用 `github.com/withlin/canal-go`，后续可替换，依赖已隔离。
 - Windows Service 实现库、日志库、配置加密实现方式尚未确认。
-- 交付节奏：当前已具备技术试点脚本基础；V0.17 后可做客户试用，V1.0 才是产品交付。
+- 交付节奏：当前已具备技术试点脚本基础；V0.18 后可做客户试用，V1.0 才是产品交付。
 
 ## 改动记录
 
@@ -150,3 +155,4 @@ Last updated: 2026-05-21 16:25 Asia/Shanghai
 - 2026-05-21 16:43 | gpt-5 | 完成 V0.13 Canal client 适配层和 protobuf 转换。
 - 2026-05-21 17:11 | gpt-5 | 完成 V0.14 Canal runtime 接入和单步发布入口。
 - 2026-05-21 16:25 | gpt-5 | 完成 V0.15 单机三节点 E2E 修复、脚本验收和测试。
+- 2026-05-21 16:41 | gpt-5 | 改为三套 RabbitMQ lab 并验证 Server 断开时 Edge 本地缓存。

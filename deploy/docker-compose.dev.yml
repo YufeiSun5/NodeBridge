@@ -1,10 +1,30 @@
 services:
-  rabbitmq:
+  rabbitmq-edge-a:
     image: rabbitmq:3-management
-    container_name: nodebridge-rabbitmq
+    container_name: nodebridge-rabbitmq-edge-a
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5673:5672"
+      - "15673:15672"
+    volumes:
+      - ./rabbitmq/rabbitmq.dev.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.dev.json:/etc/rabbitmq/definitions.json:ro
+
+  rabbitmq-edge-b:
+    image: rabbitmq:3-management
+    container_name: nodebridge-rabbitmq-edge-b
+    ports:
+      - "5674:5672"
+      - "15674:15672"
+    volumes:
+      - ./rabbitmq/rabbitmq.dev.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.dev.json:/etc/rabbitmq/definitions.json:ro
+
+  rabbitmq-server:
+    image: rabbitmq:3-management
+    container_name: nodebridge-rabbitmq-server
+    ports:
+      - "5675:5672"
+      - "15675:15672"
     volumes:
       - ./rabbitmq/rabbitmq.dev.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./rabbitmq/definitions.dev.json:/etc/rabbitmq/definitions.json:ro

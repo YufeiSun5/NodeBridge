@@ -23,9 +23,11 @@
 
 ```text
 One Windows PC
-├─ RabbitMQ container
-│  ├─ vhost edge-a-sync
-│  ├─ vhost edge-b-sync
+├─ RabbitMQ edge-a container 127.0.0.1:5673 / 15673
+│  └─ vhost edge-a-sync
+├─ RabbitMQ edge-b container 127.0.0.1:5674 / 15674
+│  └─ vhost edge-b-sync
+├─ RabbitMQ server container 127.0.0.1:5675 / 15675
 │  └─ vhost server-sync
 ├─ MySQL edge-a container 127.0.0.1:3307 scada_edge
 ├─ MySQL edge-b container 127.0.0.1:3308 scada_edge
@@ -61,7 +63,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/lab-e2e.ps1
 The script:
 
 1. Publish Edge A sample change to `edge-a-sync`.
-2. Forward Edge A upload to `server-sync`.
+2. Forward Edge A upload from Edge A RabbitMQ to Server RabbitMQ.
 3. Consume Server ingress and dispatch to Edge B.
 4. Consume Edge B downlink.
 5. Query Server and Edge B MySQL to verify rows.

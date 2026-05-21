@@ -15,8 +15,8 @@ mysql:
 rabbitmq:
   mode: external
   install: false
-  server_url: amqp://sync:sync_password@127.0.0.1:5672/server-sync
-  management_url: http://127.0.0.1:15672
+  server_url: amqp://sync:sync_password@127.0.0.1:5675/server-sync
+  management_url: http://127.0.0.1:15675
   username: sync
   password: sync_password
   vhost: server-sync
