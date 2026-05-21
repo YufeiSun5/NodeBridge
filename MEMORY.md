@@ -1,12 +1,12 @@
 # MEMORY
 
-Last updated: 2026-05-21 17:11 Asia/Shanghai
+Last updated: 2026-05-21 16:25 Asia/Shanghai
 
 ## 当前阶段
 
-- 项目处于 V0.14 Canal runtime test build 完成阶段。
+- 项目处于 V0.15 single-pc E2E verified 阶段。
 - 当前仓库已有 Go MVP 骨架、配置样例、迁移样例、RabbitMQ 核心接口、表列映射、MySQL Apply Worker 和无感安装计划模型。
-- 当前已将真实 Canal client 接入 Edge runtime，尚未实现 Canal lab compose、Windows Service 和完整 Wails 前端。
+- 当前已跑通 Edge A、Server、Edge B 单机 Docker 联调；尚未实现 Canal lab compose、Windows Service 和完整 Wails 前端。
 
 ## 已完成事项
 
@@ -68,6 +68,11 @@ Last updated: 2026-05-21 17:11 Asia/Shanghai
 - 已调整 Canal batch 可靠性顺序：发布成功或安全抑制后才保存 offset 并 ACK Canal。
 - 已让 worker 停止时调用支持 `Stop` 的 stepper，确保 Canal source 可关闭。
 - 已新增 `docs/v0.14-canal-runtime.md`，记录运行命令和可靠性边界。
+- 已修复单机 E2E 验收缺口：Server migration 增加 `sync_apply_log`，避免中心 Apply 因系统表缺失失败。
+- 已新增 `sample-events/device_config.insert.change.json`，用 INSERT 样例覆盖空目标表首次同步路径。
+- 已修复 Edge 下发目标库选择：Server 仍按规则写中心库，Edge Downlink 按本节点 MySQL 配置写本地库。
+- 已增强 `scripts/lab-e2e.ps1`：显式加载 Docker CLI 路径、重置队列和表、逐步执行三节点链路、失败即停。
+- 已在本机 Docker 环境跑通 Edge A -> Server -> Edge B E2E，中心库和 Edge B 均验证 `device_settings.setting_value=ON`。
 
 ## AI 工程化状态清单
 
@@ -103,12 +108,13 @@ Last updated: 2026-05-21 17:11 Asia/Shanghai
 - [x] V0.12 E2E smoke：`scripts/lab-e2e.ps1`、Server dispatch CLI、Edge B verify path
 - [x] V0.13 Canal client adapter：`withlin/canal-go` wrapper、protobuf conversion、ACK path
 - [x] V0.14 Canal runtime：`edge-cdc-canal` worker、`canal-publish-once`、publish-before-ack
+- [x] V0.15 Single-pc E2E verified：Docker MySQL x3 + RabbitMQ，Edge A -> Server -> Edge B 验证通过
 - [x] RabbitMQ 无感安装计划：`internal/installer/rabbitmq`
 
 ## 后续建议
 
 - 使用正确 `NODEBRIDGE_RABBITMQ_URL` 和 `NODEBRIDGE_SERVER_MYSQL_DSN` 跑 `docs/v0.3-smoke.md`。
-- 下一步进入 V0.15：Windows Service 安装、启动、停止、卸载入口。
+- 下一步进入 V0.16：Windows Service 安装、启动、停止、卸载入口。
 - 对接真实 MySQL 容器：设置 `NODEBRIDGE_APPLY_MYSQL_DSN` 后运行集成测试。
 - 进入 CDC 阶段：Canal Go client 选型、offset 保存、异常恢复。
 
@@ -143,3 +149,4 @@ Last updated: 2026-05-21 17:11 Asia/Shanghai
 - 2026-05-21 16:14 | gpt-5 | 完成 V0.12 单机 E2E smoke 脚本和 Server 下发入口。
 - 2026-05-21 16:43 | gpt-5 | 完成 V0.13 Canal client 适配层和 protobuf 转换。
 - 2026-05-21 17:11 | gpt-5 | 完成 V0.14 Canal runtime 接入和单步发布入口。
+- 2026-05-21 16:25 | gpt-5 | 完成 V0.15 单机三节点 E2E 修复、脚本验收和测试。

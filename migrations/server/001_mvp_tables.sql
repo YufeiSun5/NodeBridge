@@ -80,6 +80,24 @@ CREATE TABLE IF NOT EXISTS sync_event_log (
   KEY idx_received_at (received_at)
 );
 
+CREATE TABLE IF NOT EXISTS sync_apply_log (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  event_id VARCHAR(128) NOT NULL,
+  origin_node_id VARCHAR(64) NOT NULL,
+  source_node_id VARCHAR(64) NOT NULL,
+  target_node_id VARCHAR(64) NOT NULL,
+  database_name VARCHAR(128) NOT NULL,
+  table_name VARCHAR(128) NOT NULL,
+  target_database_name VARCHAR(128) NULL,
+  target_table_name VARCHAR(128) NULL,
+  pk_value VARCHAR(512) NOT NULL,
+  op_type VARCHAR(16) NOT NULL,
+  applied_at DATETIME(3) NOT NULL,
+  UNIQUE KEY uk_event_id (event_id),
+  KEY idx_table_pk (table_name, pk_value),
+  KEY idx_applied_at (applied_at)
+);
+
 CREATE TABLE IF NOT EXISTS sync_ack_log (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
   event_id VARCHAR(128) NOT NULL,

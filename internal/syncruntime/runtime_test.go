@@ -198,6 +198,31 @@ func TestEdgeDownlinkRuntimeAppliesAndAcks(t *testing.T) {
 	}
 }
 
+func TestEdgeDownlinkRuntimeOverridesTargetDatabase(t *testing.T) {
+	msg := &fakeMessage{body: mustJSON(t, sampleEvent())}
+	worker := &fakeWorker{}
+	runtime := EdgeDownlinkRuntime{
+		Source:                 &fakeSource{msg: msg, ok: true},
+		Rules:                  sampleRules(),
+		Worker:                 worker,
+		TargetDatabaseOverride: "scada_edge",
+	}
+
+	result, err := runtime.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.Action != "applied" {
+		t.Fatalf("unexpected result %+v", result)
+	}
+	if len(worker.events) != 1 {
+		t.Fatalf("expected one apply, got %d", len(worker.events))
+	}
+	if worker.events[0].TargetDatabase != "scada_edge" {
+		t.Fatalf("expected local target database, got %s", worker.events[0].TargetDatabase)
+	}
+}
+
 func TestEdgeDownlinkRuntimeNacksOnApplyFailure(t *testing.T) {
 	msg := &fakeMessage{body: mustJSON(t, sampleEvent())}
 	runtime := EdgeDownlinkRuntime{

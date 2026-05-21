@@ -103,10 +103,11 @@ type ServerIngressRuntime struct {
 }
 
 type EdgeDownlinkRuntime struct {
-	Source   MessageSource
-	Consumer rabbitmq.Consumer
-	Rules    *rules.RuleSet
-	Worker   apply.Worker
+	Source                 MessageSource
+	Consumer               rabbitmq.Consumer
+	Rules                  *rules.RuleSet
+	Worker                 apply.Worker
+	TargetDatabaseOverride string
 }
 
 func (r EdgeDownlinkRuntime) RunOnce(ctx context.Context) (StepResult, error) {
@@ -139,6 +140,11 @@ func (r EdgeDownlinkRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 		rule := r.Rules.Find(evt.DatabaseName, evt.TableName)
 		if !rule.Enable || rule.Direction == rules.DirectionIgnore {
 			return nil
+		}
+		if r.TargetDatabaseOverride != "" {
+			// Local DB wins. / 本地库优先。 / ローカルDB優先。
+			mapped.TargetDatabase = r.TargetDatabaseOverride
+			mapped.Event.DatabaseName = r.TargetDatabaseOverride
 		}
 		if _, err := r.Worker.Apply(ctx, mapped); err != nil {
 			return fmt.Errorf("apply downlink event: %w", err)

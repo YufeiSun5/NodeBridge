@@ -10,6 +10,7 @@ $compose = Join-Path $root "deploy/docker-compose.dev.yml"
 $syncAgent = "go run ./cmd/sync-agent"
 
 $env:PATH = "$root\.vfox\sdks\golang\bin;$root\.vfox\sdks\golang\packages\bin;$root\.vfox\sdks\nodejs;$env:PATH"
+$env:PATH = "C:\Program Files\Docker\Docker\resources\bin;$env:PATH"
 
 function Invoke-NodeBridge {
     param([string]$Command)

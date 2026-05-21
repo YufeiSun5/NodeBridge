@@ -181,9 +181,10 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules.R
 					Channel: serverDownlinkConn.Channel,
 					Queue:   cfg.Node.ID + ".downlink.q",
 				},
-				Consumer: rabbitmq.Consumer{RequeueOnError: true},
-				Rules:    ruleSet,
-				Worker:   apply.NewSQLWorker(db),
+				Consumer:               rabbitmq.Consumer{RequeueOnError: true},
+				Rules:                  ruleSet,
+				Worker:                 apply.NewSQLWorker(db),
+				TargetDatabaseOverride: cfg.MySQL.Database,
 			},
 			Status: store,
 		},
@@ -716,9 +717,10 @@ func runConsumeDownlinkOnce(args []string, stdout, stderr io.Writer) error {
 			Channel: conn.Channel,
 			Queue:   *queueName,
 		},
-		Consumer: rabbitmq.Consumer{RequeueOnError: *requeue},
-		Rules:    ruleSet,
-		Worker:   apply.NewSQLWorker(db),
+		Consumer:               rabbitmq.Consumer{RequeueOnError: *requeue},
+		Rules:                  ruleSet,
+		Worker:                 apply.NewSQLWorker(db),
+		TargetDatabaseOverride: cfg.MySQL.Database,
 	}
 	result, err := runtime.RunOnce(context.Background())
 	if err != nil {
