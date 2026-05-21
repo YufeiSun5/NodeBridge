@@ -14,15 +14,15 @@ const (
 )
 
 type ChangeEvent struct {
-	DatabaseName string
-	TableName    string
-	Operation    Operation
-	PrimaryKey   map[string]any
-	Before       map[string]any
-	After        map[string]any
-	BinlogFile   string
-	BinlogPos    uint32
-	EventTime    time.Time
+	DatabaseName string         `json:"database_name"`
+	TableName    string         `json:"table_name"`
+	Operation    Operation      `json:"operation"`
+	PrimaryKey   map[string]any `json:"primary_key"`
+	Before       map[string]any `json:"before,omitempty"`
+	After        map[string]any `json:"after,omitempty"`
+	BinlogFile   string         `json:"binlog_file,omitempty"`
+	BinlogPos    uint32         `json:"binlog_pos,omitempty"`
+	EventTime    time.Time      `json:"event_time"`
 }
 
 type Reader interface {

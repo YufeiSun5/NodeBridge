@@ -79,6 +79,49 @@ func TestRunPublishEventRequiresAMQPURL(t *testing.T) {
 	}
 }
 
+func TestRunPublishChangeOnceRequiresFile(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+
+	err := run([]string{"publish-change-once", "-config", filepath.Join("..", "..", "configs", "edge.example.yaml")}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected missing file error")
+	}
+	if !strings.Contains(err.Error(), "file is required") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
+func TestRunPublishChangeOnceRequiresAMQPURL(t *testing.T) {
+	configPath := writeTempConfig(t, `
+mode: edge
+node:
+  id: edge-test
+  name: Edge Test
+mysql:
+  database: scada_edge
+rabbitmq:
+  server_url: amqp://127.0.0.1:5672/server-sync
+sync:
+  retry_interval_seconds: 1
+log_web:
+  enable: false
+`)
+	var stdout, stderr bytes.Buffer
+
+	err := run([]string{
+		"publish-change-once",
+		"-config", configPath,
+		"-rules", filepath.Join("..", "..", "configs", "sync-rules.example.yaml"),
+		"-file", filepath.Join("..", "..", "sample-events", "device_config.change.json"),
+	}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected missing amqp url error")
+	}
+	if !strings.Contains(err.Error(), "amqp-url or rabbitmq.local_url is required") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
 func TestRunConsumeOnceRequiresAMQPURL(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 

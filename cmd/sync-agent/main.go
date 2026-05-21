@@ -17,10 +17,13 @@ import (
 
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
 	"github.com/YufeiSun5/NodeBridge/internal/apply"
+	"github.com/YufeiSun5/NodeBridge/internal/cdc"
 	"github.com/YufeiSun5/NodeBridge/internal/event"
 	"github.com/YufeiSun5/NodeBridge/internal/logweb"
+	"github.com/YufeiSun5/NodeBridge/internal/loop"
 	"github.com/YufeiSun5/NodeBridge/internal/mapper"
 	"github.com/YufeiSun5/NodeBridge/internal/mysqlconn"
+	"github.com/YufeiSun5/NodeBridge/internal/normalizer"
 	"github.com/YufeiSun5/NodeBridge/internal/rabbitmq"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
 	"github.com/YufeiSun5/NodeBridge/internal/status"
@@ -44,6 +47,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return runInitRabbitMQ(args[1:], stdout, stderr)
 		case "publish-event":
 			return runPublishEvent(args[1:], stdout, stderr)
+		case "publish-change-once":
+			return runPublishChangeOnce(args[1:], stdout, stderr)
 		case "consume-once":
 			return runConsumeOnce(args[1:], stdout, stderr)
 		case "forward-upload-once":
@@ -301,6 +306,75 @@ func runPublishEvent(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	fmt.Fprintf(stdout, "event published exchange=%s routing_key=%s file=%s\n", *exchange, *routingKey, *eventPath)
+	return nil
+}
+
+func runPublishChangeOnce(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("publish-change-once", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "configs/edge.example.yaml", "path to sync-agent config file")
+	rulesPath := flags.String("rules", "configs/sync-rules.example.yaml", "path to sync rules file")
+	amqpURL := flags.String("amqp-url", "", "Edge local RabbitMQ AMQP URL")
+	changePath := flags.String("file", "", "path to ChangeEvent JSON file")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *changePath == "" {
+		return fmt.Errorf("file is required")
+	}
+
+	cfg, err := appconfig.LoadFile(*configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load config failed: %v\n", err)
+		return err
+	}
+	if *amqpURL == "" {
+		*amqpURL = cfg.RabbitMQ.LocalURL
+	}
+	if *amqpURL == "" {
+		return fmt.Errorf("amqp-url or rabbitmq.local_url is required")
+	}
+	ruleSet, err := rules.LoadFile(*rulesPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load rules failed: %v\n", err)
+		return err
+	}
+	change, err := loadChange(*changePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load change failed: %v\n", err)
+		return err
+	}
+
+	conn, err := rabbitmq.Dial(*amqpURL)
+	if err != nil {
+		fmt.Fprintf(stderr, "rabbitmq connect failed: %v\n", err)
+		return err
+	}
+	defer conn.Close()
+	publisher, err := rabbitmq.NewPublisher(conn.Channel)
+	if err != nil {
+		fmt.Fprintf(stderr, "publisher init failed: %v\n", err)
+		return err
+	}
+
+	runtime := syncruntime.CDCUploadRuntime{
+		Source:     cdc.NewStubSource([]cdc.ChangeEvent{change}),
+		Decider:    loop.NewSuppressor(cfg.Node.ID, *ruleSet, nil),
+		Normalizer: normalizer.New(normalizer.Options{NodeID: cfg.Node.ID, SchemaVersion: 1}),
+		Publisher:  publisher,
+		Exchange:   "edge.upload.x",
+		RoutingKey: "edge.upload.cdc",
+	}
+	result, err := runtime.RunOnce(context.Background())
+	if err != nil {
+		fmt.Fprintf(stderr, "publish change failed: %v\n", err)
+		return err
+	}
+	if !result.Processed {
+		fmt.Fprintln(stdout, "change source empty")
+		return nil
+	}
+	fmt.Fprintf(stdout, "change published event_id=%s action=%s file=%s\n", result.EventID, result.Action, *changePath)
 	return nil
 }
 
@@ -633,6 +707,18 @@ func loadEvent(path string) (event.SyncEvent, error) {
 		return event.SyncEvent{}, fmt.Errorf("parse event %q: %w", path, err)
 	}
 	return evt, nil
+}
+
+func loadChange(path string) (cdc.ChangeEvent, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return cdc.ChangeEvent{}, fmt.Errorf("read change %q: %w", path, err)
+	}
+	var change cdc.ChangeEvent
+	if err := json.Unmarshal(data, &change); err != nil {
+		return cdc.ChangeEvent{}, fmt.Errorf("parse change %q: %w", path, err)
+	}
+	return change, nil
 }
 
 func openMySQL(cfg *appconfig.Config) (*sql.DB, error) {
