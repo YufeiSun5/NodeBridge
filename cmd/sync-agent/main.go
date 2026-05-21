@@ -53,6 +53,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return runPublishChangeOnce(args[1:], stdout, stderr)
 		case "canal-check":
 			return runCanalCheck(args[1:], stdout, stderr)
+		case "canal-publish-once":
+			return runCanalPublishOnce(args[1:], stdout, stderr)
 		case "consume-once":
 			return runConsumeOnce(args[1:], stdout, stderr)
 		case "forward-upload-once":
@@ -157,37 +159,58 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules.R
 		fmt.Fprintf(stderr, "publisher init failed: %v\n", err)
 		return err
 	}
-	group := syncruntime.WorkerGroup{
-		Workers: []syncruntime.Worker{
-			{
-				Config: workerConfig("edge-upload", cfg.Sync.RetryIntervalSeconds, maxSteps),
-				Stepper: syncruntime.EdgeUploadRuntime{
-					Source: syncruntime.AMQPGetSource{
-						Channel: localConn.Channel,
-						Queue:   "edge.upload.cdc.q",
-					},
-					Publisher:  publisher,
-					Consumer:   rabbitmq.Consumer{RequeueOnError: true},
-					Exchange:   "server.ingress.x",
-					RoutingKey: "server.ingress",
+	workers := []syncruntime.Worker{
+		{
+			Config: workerConfig("edge-upload", cfg.Sync.RetryIntervalSeconds, maxSteps),
+			Stepper: syncruntime.EdgeUploadRuntime{
+				Source: syncruntime.AMQPGetSource{
+					Channel: localConn.Channel,
+					Queue:   "edge.upload.cdc.q",
 				},
-				Status: store,
+				Publisher:  publisher,
+				Consumer:   rabbitmq.Consumer{RequeueOnError: true},
+				Exchange:   "server.ingress.x",
+				RoutingKey: "server.ingress",
 			},
-			{
-				Config: workerConfig("edge-downlink", cfg.Sync.RetryIntervalSeconds, maxSteps),
-				Stepper: syncruntime.EdgeDownlinkRuntime{
-					Source: syncruntime.AMQPGetSource{
-						Channel: serverDownlinkConn.Channel,
-						Queue:   cfg.Node.ID + ".downlink.q",
-					},
-					Consumer: rabbitmq.Consumer{RequeueOnError: true},
-					Rules:    ruleSet,
-					Worker:   apply.NewSQLWorker(db),
+			Status: store,
+		},
+		{
+			Config: workerConfig("edge-downlink", cfg.Sync.RetryIntervalSeconds, maxSteps),
+			Stepper: syncruntime.EdgeDownlinkRuntime{
+				Source: syncruntime.AMQPGetSource{
+					Channel: serverDownlinkConn.Channel,
+					Queue:   cfg.Node.ID + ".downlink.q",
 				},
-				Status: store,
+				Consumer: rabbitmq.Consumer{RequeueOnError: true},
+				Rules:    ruleSet,
+				Worker:   apply.NewSQLWorker(db),
 			},
+			Status: store,
 		},
 	}
+	if strings.EqualFold(cfg.CDC.Type, "canal") {
+		cdcConn, err := rabbitmq.Dial(cfg.RabbitMQ.LocalURL)
+		if err != nil {
+			fmt.Fprintf(stderr, "local cdc rabbitmq connect failed: %v\n", err)
+			return err
+		}
+		defer cdcConn.Close()
+		cdcPublisher, err := rabbitmq.NewPublisher(cdcConn.Channel)
+		if err != nil {
+			fmt.Fprintf(stderr, "cdc publisher init failed: %v\n", err)
+			return err
+		}
+		canalRuntime, err := newCanalUploadRuntime(cfg, ruleSet, cdc.NewMySQLOffsetStore(db), cdcPublisher)
+		if err != nil {
+			return err
+		}
+		workers = append(workers, syncruntime.Worker{
+			Config:  workerConfig("edge-cdc-canal", cfg.Sync.RetryIntervalSeconds, maxSteps),
+			Stepper: canalRuntime,
+			Status:  store,
+		})
+	}
+	group := syncruntime.WorkerGroup{Workers: workers}
 	if err := group.Run(ctx); err != nil && err != context.Canceled {
 		return err
 	}
@@ -441,6 +464,69 @@ func runCanalCheck(args []string, stdout, stderr io.Writer) error {
 		canalConfig.Destination,
 		canalConfig.BatchSize,
 	)
+	return nil
+}
+
+func runCanalPublishOnce(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("canal-publish-once", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "configs/edge.example.yaml", "path to sync-agent config file")
+	rulesPath := flags.String("rules", "configs/sync-rules.example.yaml", "path to sync rules file")
+	amqpURL := flags.String("amqp-url", "", "Edge local RabbitMQ AMQP URL")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+
+	cfg, err := appconfig.LoadFile(*configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load config failed: %v\n", err)
+		return err
+	}
+	if *amqpURL == "" {
+		*amqpURL = cfg.RabbitMQ.LocalURL
+	}
+	if *amqpURL == "" {
+		return fmt.Errorf("amqp-url or rabbitmq.local_url is required")
+	}
+	ruleSet, err := rules.LoadFile(*rulesPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load rules failed: %v\n", err)
+		return err
+	}
+	db, err := openMySQL(cfg)
+	if err != nil {
+		fmt.Fprintf(stderr, "open mysql failed: %v\n", err)
+		return err
+	}
+	defer db.Close()
+
+	conn, err := rabbitmq.Dial(*amqpURL)
+	if err != nil {
+		fmt.Fprintf(stderr, "rabbitmq connect failed: %v\n", err)
+		return err
+	}
+	defer conn.Close()
+	publisher, err := rabbitmq.NewPublisher(conn.Channel)
+	if err != nil {
+		fmt.Fprintf(stderr, "publisher init failed: %v\n", err)
+		return err
+	}
+	runtime, err := newCanalUploadRuntime(cfg, ruleSet, cdc.NewMySQLOffsetStore(db), publisher)
+	if err != nil {
+		return err
+	}
+	defer runtime.Stop(context.Background())
+
+	result, err := runtime.RunOnce(context.Background())
+	if err != nil {
+		fmt.Fprintf(stderr, "canal publish failed: %v\n", err)
+		return err
+	}
+	if !result.Processed {
+		fmt.Fprintln(stdout, "canal batch empty")
+		return nil
+	}
+	fmt.Fprintf(stdout, "canal batch published action=%s event_id=%s count=%d\n", result.Action, result.EventID, result.DispatchCount)
 	return nil
 }
 
@@ -1004,6 +1090,26 @@ func canalConfigFromApp(cfg *appconfig.Config) canalcdc.Config {
 		Filter:      cfg.CDC.Filter,
 		BatchSize:   cfg.CDC.BatchSize,
 	}
+}
+
+func newCanalUploadRuntime(cfg *appconfig.Config, ruleSet *rules.RuleSet, offsetStore cdc.OffsetStore, publisher syncruntime.EventPublisher) (*syncruntime.CanalUploadRuntime, error) {
+	canalConfig := canalConfigFromApp(cfg)
+	client, err := canalcdc.NewWithlinClient(canalConfig)
+	if err != nil {
+		return nil, err
+	}
+	adapter, err := canalcdc.NewAdapter(canalConfig, client, offsetStore)
+	if err != nil {
+		return nil, err
+	}
+	return &syncruntime.CanalUploadRuntime{
+		Source:     adapter,
+		Decider:    loop.NewSuppressor(cfg.Node.ID, *ruleSet, nil),
+		Normalizer: normalizer.New(normalizer.Options{NodeID: cfg.Node.ID, SchemaVersion: 1}),
+		Publisher:  publisher,
+		Exchange:   "edge.upload.x",
+		RoutingKey: "edge.upload.cdc",
+	}, nil
 }
 
 func startLogWeb(ctx context.Context, config appconfig.LogWebConfig, store *status.RuntimeStore, stdout, stderr io.Writer) (func(context.Context) error, error) {

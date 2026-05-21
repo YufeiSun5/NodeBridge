@@ -132,16 +132,12 @@ func (a *Adapter) LoadOffset(ctx context.Context) error {
 }
 
 func (a *Adapter) FetchOnce(ctx context.Context) (int, error) {
-	rows, offset, err := a.Client.Fetch(ctx, defaultBatchSize(a.Config.BatchSize))
+	changes, offset, err := a.FetchChangesOnce(ctx)
 	if err != nil {
 		return 0, err
 	}
 	count := 0
-	for _, row := range rows {
-		change, err := ConvertRowChange(row)
-		if err != nil {
-			return count, err
-		}
+	for _, change := range changes {
 		select {
 		case <-ctx.Done():
 			return count, ctx.Err()
@@ -150,15 +146,38 @@ func (a *Adapter) FetchOnce(ctx context.Context) (int, error) {
 		}
 	}
 	if count > 0 {
-		offset.ReaderName = a.Config.ReaderName
-		if err := a.Store.Save(ctx, offset); err != nil {
-			return count, err
-		}
-		if err := a.Client.Ack(ctx, offset); err != nil {
+		if err := a.Commit(ctx, offset); err != nil {
 			return count, err
 		}
 	}
 	return count, nil
+}
+
+func (a *Adapter) FetchChangesOnce(ctx context.Context) ([]cdc.ChangeEvent, cdc.Offset, error) {
+	rows, offset, err := a.Client.Fetch(ctx, defaultBatchSize(a.Config.BatchSize))
+	if err != nil {
+		return nil, cdc.Offset{}, err
+	}
+	changes := make([]cdc.ChangeEvent, 0, len(rows))
+	for _, row := range rows {
+		change, err := ConvertRowChange(row)
+		if err != nil {
+			return nil, cdc.Offset{}, err
+		}
+		changes = append(changes, change)
+	}
+	return changes, offset, nil
+}
+
+func (a *Adapter) Commit(ctx context.Context, offset cdc.Offset) error {
+	offset.ReaderName = a.Config.ReaderName
+	if err := a.Store.Save(ctx, offset); err != nil {
+		return err
+	}
+	if err := a.Client.Ack(ctx, offset); err != nil {
+		return err
+	}
+	return nil
 }
 
 func defaultBatchSize(value int) int {

@@ -100,10 +100,37 @@ func TestWorkerStopsOnContextCancel(t *testing.T) {
 	}
 }
 
+func TestWorkerStopsStoppableStepper(t *testing.T) {
+	stepper := &stoppableSequenceStepper{
+		sequenceStepper: sequenceStepper{results: []StepResult{{Processed: true, EventID: "evt-001", Action: "published"}}},
+	}
+	err := Worker{
+		Config:  WorkerConfig{Name: "edge-cdc", MaxSteps: 1},
+		Stepper: stepper,
+		Sleep:   noSleep,
+	}.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if !stepper.stopped {
+		t.Fatal("expected stoppable stepper to stop")
+	}
+}
+
 type sequenceStepper struct {
 	results []StepResult
 	errors  map[int]error
 	index   int
+}
+
+type stoppableSequenceStepper struct {
+	sequenceStepper
+	stopped bool
+}
+
+func (s *stoppableSequenceStepper) Stop(ctx context.Context) error {
+	s.stopped = true
+	return nil
 }
 
 func (s *sequenceStepper) RunOnce(ctx context.Context) (StepResult, error) {

@@ -139,6 +139,37 @@ func TestRunCanalCheck(t *testing.T) {
 	}
 }
 
+func TestRunCanalPublishOnceRequiresAMQPURL(t *testing.T) {
+	configPath := writeTempConfig(t, `
+mode: edge
+node:
+  id: edge-test
+  name: Edge Test
+mysql:
+  database: scada_edge
+rabbitmq:
+  server_url: amqp://127.0.0.1:5672/server-sync
+cdc:
+  type: canal
+  reader_name: edge-test
+  canal_addr: 127.0.0.1:11111
+  destination: edge-test
+sync:
+  retry_interval_seconds: 1
+log_web:
+  enable: false
+`)
+	var stdout, stderr bytes.Buffer
+
+	err := run([]string{"canal-publish-once", "-config", configPath, "-rules", filepath.Join("..", "..", "configs", "sync-rules.example.yaml")}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected missing amqp url error")
+	}
+	if !strings.Contains(err.Error(), "amqp-url or rabbitmq.local_url is required") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
 func TestRunConsumeOnceRequiresAMQPURL(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 

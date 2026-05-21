@@ -1,12 +1,12 @@
 # MEMORY
 
-Last updated: 2026-05-21 16:43 Asia/Shanghai
+Last updated: 2026-05-21 17:11 Asia/Shanghai
 
 ## 当前阶段
 
-- 项目处于 V0.13 Canal client adapter 完成阶段。
+- 项目处于 V0.14 Canal runtime test build 完成阶段。
 - 当前仓库已有 Go MVP 骨架、配置样例、迁移样例、RabbitMQ 核心接口、表列映射、MySQL Apply Worker 和无感安装计划模型。
-- 当前尚未将真实 Canal client 接入 `sync-agent run`，尚未实现 Windows Service 和完整 Wails 前端。
+- 当前已将真实 Canal client 接入 Edge runtime，尚未实现 Canal lab compose、Windows Service 和完整 Wails 前端。
 
 ## 已完成事项
 
@@ -63,6 +63,11 @@ Last updated: 2026-05-21 16:43 Asia/Shanghai
 - 已引入 `github.com/withlin/canal-go`，并将第三方依赖隔离在 Canal adapter 层。
 - 已支持 Canal protobuf message 到 `cdc.ChangeEvent` 的转换、batch ack 和 offset 保存路径。
 - 已新增 `docs/v0.13-canal-client.md`，记录真实 Canal client 适配策略和限制。
+- 已实现 V0.14 Canal runtime：Edge `sync-agent run` 在 `cdc.type=canal` 时启动 `edge-cdc-canal`。
+- 已新增 `canal-publish-once`，用于真实 Canal -> 本地 RabbitMQ 的单步测试。
+- 已调整 Canal batch 可靠性顺序：发布成功或安全抑制后才保存 offset 并 ACK Canal。
+- 已让 worker 停止时调用支持 `Stop` 的 stepper，确保 Canal source 可关闭。
+- 已新增 `docs/v0.14-canal-runtime.md`，记录运行命令和可靠性边界。
 
 ## AI 工程化状态清单
 
@@ -97,12 +102,13 @@ Last updated: 2026-05-21 16:43 Asia/Shanghai
 - [x] V0.11 Single machine lab：lab configs、dev compose、lab smoke script
 - [x] V0.12 E2E smoke：`scripts/lab-e2e.ps1`、Server dispatch CLI、Edge B verify path
 - [x] V0.13 Canal client adapter：`withlin/canal-go` wrapper、protobuf conversion、ACK path
+- [x] V0.14 Canal runtime：`edge-cdc-canal` worker、`canal-publish-once`、publish-before-ack
 - [x] RabbitMQ 无感安装计划：`internal/installer/rabbitmq`
 
 ## 后续建议
 
 - 使用正确 `NODEBRIDGE_RABBITMQ_URL` 和 `NODEBRIDGE_SERVER_MYSQL_DSN` 跑 `docs/v0.3-smoke.md`。
-- 下一步进入 V0.14：将 Canal adapter 接入 Edge runtime，并补 Canal lab 配置。
+- 下一步进入 V0.15：Windows Service 安装、启动、停止、卸载入口。
 - 对接真实 MySQL 容器：设置 `NODEBRIDGE_APPLY_MYSQL_DSN` 后运行集成测试。
 - 进入 CDC 阶段：Canal Go client 选型、offset 保存、异常恢复。
 
@@ -111,7 +117,7 @@ Last updated: 2026-05-21 16:43 Asia/Shanghai
 - 项目最终名称是 `NodeBridge` 还是面向用户的 `DataSync`。
 - Canal Go client 当前使用 `github.com/withlin/canal-go`，后续可替换，依赖已隔离。
 - Windows Service 实现库、日志库、配置加密实现方式尚未确认。
-- 交付节奏：当前已具备技术试点脚本基础；V0.16 后可做客户试用，V1.0 才是产品交付。
+- 交付节奏：当前已具备技术试点脚本基础；V0.17 后可做客户试用，V1.0 才是产品交付。
 
 ## 改动记录
 
@@ -136,3 +142,4 @@ Last updated: 2026-05-21 16:43 Asia/Shanghai
 - 2026-05-21 15:49 | gpt-5 | 完成 V0.11 单机 lab 配置、Compose 和准备脚本。
 - 2026-05-21 16:14 | gpt-5 | 完成 V0.12 单机 E2E smoke 脚本和 Server 下发入口。
 - 2026-05-21 16:43 | gpt-5 | 完成 V0.13 Canal client 适配层和 protobuf 转换。
+- 2026-05-21 17:11 | gpt-5 | 完成 V0.14 Canal runtime 接入和单步发布入口。

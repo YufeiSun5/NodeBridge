@@ -24,6 +24,7 @@ Required before pilot:
 - V0.11: single-machine lab topology and repeatable preparation script.
 - V0.12: full Docker MySQL/RabbitMQ smoke script for Edge A -> Server -> Edge B.
 - V0.13: real Canal client integration path or a confirmed production CDC adapter.
+- V0.14: Canal runtime path can publish to Edge local RabbitMQ after successful fetch.
 - Basic runbook for config, migration, topology init, run, retry, and log web.
 
 ## Single Machine Testing
@@ -48,7 +49,7 @@ V0.12 adds the executable smoke entry: `scripts/lab-e2e.ps1`.
 
 ## Earliest Customer Trial
 
-Earliest customer trial target: after V0.16.
+Earliest customer trial target: after V0.17.
 
 Customer trial means:
 
@@ -60,9 +61,9 @@ Customer trial means:
 
 Required before customer trial:
 
-- V0.14: Windows Service install/start/stop/uninstall.
-- V0.15: Wails management MVP without occupying a frontend port.
-- V0.16: diagnostic export and installer runbook.
+- V0.15: Windows Service install/start/stop/uninstall.
+- V0.16: Wails management MVP without occupying a frontend port.
+- V0.17: diagnostic export and installer runbook.
 
 ## Product Delivery
 

@@ -12,6 +12,10 @@ type Stepper interface {
 	RunOnce(ctx context.Context) (StepResult, error)
 }
 
+type StoppableStepper interface {
+	Stop(ctx context.Context) error
+}
+
 type WorkerConfig struct {
 	Name          string
 	IdleInterval  time.Duration
@@ -29,6 +33,11 @@ type Worker struct {
 func (w Worker) Run(ctx context.Context) error {
 	if w.Stepper == nil {
 		return fmt.Errorf("stepper is required")
+	}
+	if stoppable, ok := w.Stepper.(StoppableStepper); ok {
+		defer func() {
+			_ = stoppable.Stop(context.Background())
+		}()
 	}
 	name := w.Config.Name
 	if name == "" {
