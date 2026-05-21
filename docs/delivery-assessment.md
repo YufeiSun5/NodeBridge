@@ -21,13 +21,32 @@ Pilot means:
 
 Required before pilot:
 
-- V0.11: real Canal client integration path or a confirmed production CDC adapter.
+- V0.11: single-machine lab topology and repeatable preparation script.
 - V0.12: full Docker MySQL/RabbitMQ smoke script for Edge A -> Server -> Edge B.
+- V0.13: real Canal client integration path or a confirmed production CDC adapter.
 - Basic runbook for config, migration, topology init, run, retry, and log web.
+
+## Single Machine Testing
+
+One PC is enough for development and lab verification.
+
+Recommended layout:
+
+- One RabbitMQ container with three vhosts: `edge-a-sync`, `edge-b-sync`, `server-sync`.
+- Three MySQL containers on ports `3307`, `3308`, and `3309`.
+- Three SyncAgent processes using `configs/lab/*.local.yaml`.
+
+Limits:
+
+- It validates software flow, not real network partitions between physical nodes.
+- It does not prove Windows Service installation.
+- It does not replace final offline RabbitMQ installer testing.
+
+See `docs/single-machine-lab.md`.
 
 ## Earliest Customer Trial
 
-Earliest customer trial target: after V0.15.
+Earliest customer trial target: after V0.16.
 
 Customer trial means:
 
@@ -39,9 +58,9 @@ Customer trial means:
 
 Required before customer trial:
 
-- V0.13: Windows Service install/start/stop/uninstall.
-- V0.14: Wails management MVP without occupying a frontend port.
-- V0.15: diagnostic export and installer runbook.
+- V0.14: Windows Service install/start/stop/uninstall.
+- V0.15: Wails management MVP without occupying a frontend port.
+- V0.16: diagnostic export and installer runbook.
 
 ## Product Delivery
 

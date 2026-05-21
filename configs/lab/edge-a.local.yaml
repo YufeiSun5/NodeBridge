@@ -1,0 +1,42 @@
+mode: edge
+
+node:
+  id: edge-001
+  name: Lab Edge A
+  location: single-pc-lab
+
+mysql:
+  host: 127.0.0.1
+  port: 3307
+  username: sync_user
+  password: sync_password
+  database: scada_edge
+
+rabbitmq:
+  mode: external
+  install: false
+  local_url: amqp://sync:sync_password@127.0.0.1:5672/edge-a-sync
+  server_url: amqp://sync:sync_password@127.0.0.1:5672/server-sync
+  management_url: http://127.0.0.1:15672
+  username: sync
+  password: sync_password
+  vhost: edge-a-sync
+
+cdc:
+  type: stub
+  reader_name: edge-001
+  canal_addr: 127.0.0.1:11111
+  destination: edge-001
+  batch_size: 1000
+  use_gtid: false
+
+sync:
+  upload_batch_size: 500
+  retry_interval_seconds: 2
+  heartbeat_interval_seconds: 15
+
+log_web:
+  enable: false
+  bind: 127.0.0.1
+  port: 18081
+  token: lab_token

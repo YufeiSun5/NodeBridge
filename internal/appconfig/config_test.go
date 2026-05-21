@@ -35,6 +35,35 @@ func TestLoadServerExample(t *testing.T) {
 	}
 }
 
+func TestLoadLabConfigs(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+		mode string
+		node string
+		port int
+	}{
+		{name: "edge a", path: filepath.Join("..", "..", "configs", "lab", "edge-a.local.yaml"), mode: appconfig.ModeEdge, node: "edge-001", port: 3307},
+		{name: "edge b", path: filepath.Join("..", "..", "configs", "lab", "edge-b.local.yaml"), mode: appconfig.ModeEdge, node: "edge-002", port: 3308},
+		{name: "server", path: filepath.Join("..", "..", "configs", "lab", "server.local.yaml"), mode: appconfig.ModeServer, node: "server-001", port: 3309},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := appconfig.LoadFile(tc.path)
+			if err != nil {
+				t.Fatalf("LoadFile returned error: %v", err)
+			}
+			if cfg.Mode != tc.mode || cfg.Node.ID != tc.node || cfg.MySQL.Port != tc.port {
+				t.Fatalf("unexpected config mode=%s node=%s port=%d", cfg.Mode, cfg.Node.ID, cfg.MySQL.Port)
+			}
+			if cfg.RabbitMQ.Mode != "external" || cfg.RabbitMQ.Install {
+				t.Fatalf("lab configs must use external RabbitMQ, got %+v", cfg.RabbitMQ)
+			}
+		})
+	}
+}
+
 func TestValidateRequiredFields(t *testing.T) {
 	path := writeTempConfig(t, `
 node:

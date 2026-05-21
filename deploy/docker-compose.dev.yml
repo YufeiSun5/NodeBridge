@@ -1,0 +1,46 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: nodebridge-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - ./rabbitmq/rabbitmq.dev.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.dev.json:/etc/rabbitmq/definitions.json:ro
+
+  mysql-edge-a:
+    image: mysql:8.4
+    container_name: nodebridge-mysql-edge-a
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: scada_edge
+      MYSQL_USER: sync_user
+      MYSQL_PASSWORD: sync_password
+    ports:
+      - "3307:3306"
+    command: ["--server-id=101", "--log-bin=mysql-bin", "--binlog-format=ROW"]
+
+  mysql-edge-b:
+    image: mysql:8.4
+    container_name: nodebridge-mysql-edge-b
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: scada_edge
+      MYSQL_USER: sync_user
+      MYSQL_PASSWORD: sync_password
+    ports:
+      - "3308:3306"
+    command: ["--server-id=102", "--log-bin=mysql-bin", "--binlog-format=ROW"]
+
+  mysql-server:
+    image: mysql:8.4
+    container_name: nodebridge-mysql-server
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: scada_center
+      MYSQL_USER: sync_user
+      MYSQL_PASSWORD: sync_password
+    ports:
+      - "3309:3306"
+    command: ["--server-id=201", "--log-bin=mysql-bin", "--binlog-format=ROW"]

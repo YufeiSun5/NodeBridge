@@ -1,0 +1,37 @@
+{
+  "users": [
+    {
+      "name": "sync",
+      "password": "sync_password",
+      "tags": "management"
+    }
+  ],
+  "vhosts": [
+    { "name": "edge-a-sync" },
+    { "name": "edge-b-sync" },
+    { "name": "server-sync" }
+  ],
+  "permissions": [
+    {
+      "user": "sync",
+      "vhost": "edge-a-sync",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "sync",
+      "vhost": "edge-b-sync",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "sync",
+      "vhost": "server-sync",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ]
+}
