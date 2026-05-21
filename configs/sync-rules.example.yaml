@@ -1,0 +1,38 @@
+rules:
+  - id: alarm-history-upload
+    database_name: scada_edge
+    table_name: alarm_history
+    direction: EDGE_TO_SERVER
+    conflict_policy: NONE
+    enable: true
+    primary_keys:
+      - id
+
+  # Column types must match. MVP maps names only.
+  - id: device-config-remap
+    database_name: scada_edge
+    table_name: device_config
+    target_database_name: scada_center
+    target_table_name: device_settings
+    direction: BIDIRECTIONAL
+    conflict_policy: LAST_WRITE_WIN
+    enable: true
+    primary_keys:
+      - id
+    target_primary_keys:
+      - setting_id
+    include_columns:
+      - id
+      - name
+      - value
+      - sync_version
+      - updated_by_node
+      - last_event_id
+      - updated_at
+    column_mappings:
+      - source_column: id
+        target_column: setting_id
+      - source_column: name
+        target_column: display_name
+      - source_column: value
+        target_column: setting_value

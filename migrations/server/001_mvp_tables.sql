@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS sync_event_log (
   source_node_id VARCHAR(64) NOT NULL,
   database_name VARCHAR(128) NOT NULL,
   table_name VARCHAR(128) NOT NULL,
+  target_database_name VARCHAR(128) NULL,
+  target_table_name VARCHAR(128) NULL,
   pk_value VARCHAR(512) NOT NULL,
   op_type VARCHAR(16) NOT NULL,
   direction VARCHAR(64) NOT NULL,

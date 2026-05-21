@@ -1,11 +1,11 @@
 # MEMORY
 
-Last updated: 2026-05-21 10:44 Asia/Shanghai
+Last updated: 2026-05-21 10:55 Asia/Shanghai
 
 ## 当前阶段
 
 - 项目处于一期补强与二期 RabbitMQ 初始迭代阶段。
-- 当前仓库已有 Go MVP 骨架、配置样例、迁移样例、RabbitMQ 核心接口和无感安装计划模型。
+- 当前仓库已有 Go MVP 骨架、配置样例、迁移样例、RabbitMQ 核心接口、表列映射契约和无感安装计划模型。
 - 当前尚未实现真实 MySQL Apply、Canal CDC 和完整 Wails 前端。
 
 ## 已完成事项
@@ -17,6 +17,7 @@ Last updated: 2026-05-21 10:44 Asia/Shanghai
 - 已将 `AGENTS.md` 和技能使用说明调整为中英日三语。
 - 已初始化一期 MVP 骨架：Go module、vfox 工具链锁定、双命令入口、核心模型、配置样例、迁移样例和基础测试。
 - 已补强一期测试门禁，并新增 RabbitMQ 拓扑、publisher、consumer、队列状态和 Windows 无感安装计划模型。
+- 已新增表名和列名重映射能力：规则模型、mapper、映射样例和迁移追踪字段。
 
 ## AI 工程化状态清单
 
@@ -33,13 +34,14 @@ Last updated: 2026-05-21 10:44 Asia/Shanghai
 - [x] 一期 MVP 骨架：`cmd/`、`internal/`、`configs/`、`migrations/`
 - [x] 一期补强测试：CLI、配置、规则、状态、回环抑制
 - [x] 二期 RabbitMQ 基础：`internal/rabbitmq`
+- [x] 表列映射基础：`internal/mapper`
 - [x] RabbitMQ 无感安装计划：`internal/installer/rabbitmq`
 
 ## 后续建议
 
 - 对接真实 RabbitMQ 容器：设置 `NODEBRIDGE_RABBITMQ_URL` 后运行集成测试。
 - 继续 RabbitMQ 阶段：连接管理、重试/死信策略、管理 API 队列状态。
-- 进入 MySQL Apply 阶段：连接池、动态 SQL、事务、`sync_apply_log` 幂等处理。
+- 进入 MySQL Apply 阶段：消费 `mapper.MappedEvent`，实现连接池、动态 SQL、事务、`sync_apply_log` 幂等处理。
 - 进入 CDC 阶段：Canal Go client 选型、offset 保存、异常恢复。
 
 ## 待确认
@@ -54,3 +56,4 @@ Last updated: 2026-05-21 10:44 Asia/Shanghai
 - 2026-05-21 09:05 | gpt-5 | 将 AGENTS.md 和技能说明调整为中英日三语。
 - 2026-05-21 10:20 | gpt-5 | 初始化一期 MVP 骨架并通过 Go 测试和 CLI smoke test。
 - 2026-05-21 10:44 | gpt-5 | 补强一期测试并实现 RabbitMQ 基础和安装计划模型。
+- 2026-05-21 10:55 | gpt-5 | 增加表列重映射契约、mapper 测试和配置样例。

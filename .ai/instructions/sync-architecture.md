@@ -22,6 +22,18 @@ MySQL -> CDC -> ChangeEvent -> SyncEvent -> RabbitMQ -> Apply -> MySQL
 - `origin_node_id` 表示事件最初产生节点。
 - `source_node_id` 表示当前发送节点。
 - `target_node_id` 仅在定向下发时设置。
+- `SyncEvent` 保留源库、源表、源列语义；Apply 前必须通过规则映射为目标库、目标表、目标列。
+- 任何同步链路不得假设源表名等于目标表名，也不得假设源列名等于目标列名。
+- 表名、库名、列名用于 SQL 前必须做 identifier 校验，禁止拼接任意 SQL 片段。
+
+## 表列映射
+
+- 表映射由 `target_database_name` 和 `target_table_name` 描述，缺省时等于源库表。
+- 列映射由 `column_mappings` 描述，未配置的列默认同名。
+- `include_columns` 和 `exclude_columns` 使用源列名，过滤必须发生在列名映射之前。
+- `primary_keys` 使用源列名；`target_primary_keys` 为空时按列映射自动推导。
+- MVP 只做名称映射，不做类型转换、表达式计算、字段拆分或字段合并。
+- CDC 和 RabbitMQ 不处理映射语义；映射必须在 Apply Worker 前完成。
 
 ## 回环抑制
 

@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS sync_apply_log (
   target_node_id VARCHAR(64) NOT NULL,
   database_name VARCHAR(128) NOT NULL,
   table_name VARCHAR(128) NOT NULL,
+  target_database_name VARCHAR(128) NULL,
+  target_table_name VARCHAR(128) NULL,
   pk_value VARCHAR(512) NOT NULL,
   op_type VARCHAR(16) NOT NULL,
   applied_at DATETIME(3) NOT NULL,

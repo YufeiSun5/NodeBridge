@@ -49,6 +49,7 @@ Evidence / 依据 / 根拠: user-provided V1.0 design document plus the current 
 - Use `event_id`, `origin_node_id`, `updated_by_node`, `last_event_id`, and `sync_apply_log` for loop suppression. / 使用这些字段和表实现回环抑制。 / これらのフィールドとテーブルでループ抑制を行います。
 - ACK RabbitMQ messages only after business writes and system logs are committed. / 业务写入和系统日志提交后才 ACK。 / 業務書込とシステムログのコミット後に ACK します。
 - Prefer small, focused packages under `internal/`. / `internal/` 下保持小而专注的包。 / `internal/` 配下は小さく責務の明確なパッケージにします。
+- Never assume source and target table or column names match. / 不得假设源表列名等于目标表列名。 / ソースとターゲットの表名・列名が同じとは限りません。
 - Comments must be short and strong. / 注释必须简短有力。 / コメントは短く力強く。
 - Core behavior needs complete tests. / 核心行为必须有完整测试。 / コア動作には完全なテストが必要です。
 - Run tests and linter before phase handoff. / 阶段交付前运行测试和 linter。 / フェーズ引き渡し前にテストと linter を実行します。
