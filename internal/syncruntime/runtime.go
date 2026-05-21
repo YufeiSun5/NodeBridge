@@ -32,6 +32,14 @@ type EventLogStore interface {
 	UpsertEventLog(ctx context.Context, record syncstore.EventLogRecord) error
 }
 
+type NodeConfigStore interface {
+	UpsertNodeConfig(ctx context.Context, config syncstore.NodeConfig) error
+}
+
+type ActiveNodeStore interface {
+	ListActiveEdgeNodeIDs(ctx context.Context) ([]string, error)
+}
+
 type ReplayStore interface {
 	ListPendingReplays(ctx context.Context, limit int) ([]syncstore.ReplayEvent, error)
 	UpsertAck(ctx context.Context, record syncstore.AckRecord) error
@@ -100,6 +108,7 @@ type ServerIngressRuntime struct {
 	EventStore EventLogStore
 	Dispatcher DownlinkDispatcher
 	EdgeNodes  []string
+	NodeStore  ActiveNodeStore
 }
 
 type EdgeDownlinkRuntime struct {
@@ -108,6 +117,7 @@ type EdgeDownlinkRuntime struct {
 	Rules                  *rules.RuleSet
 	Worker                 apply.Worker
 	TargetDatabaseOverride string
+	ConfigStore            NodeConfigStore
 }
 
 func (r EdgeDownlinkRuntime) RunOnce(ctx context.Context) (StepResult, error) {
@@ -132,6 +142,17 @@ func (r EdgeDownlinkRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 	var eventID string
 	// ACK after apply. / Apply 后 ACK。 / Apply 後 ACK。
 	err = r.Consumer.Handle(ctx, msg, func(ctx context.Context, body []byte) error {
+		var raw event.SyncEvent
+		if err := json.Unmarshal(body, &raw); err != nil {
+			return fmt.Errorf("parse downlink event: %w", err)
+		}
+		eventID = raw.EventID
+		if raw.EventType == event.TypeConfigUpdate {
+			if r.ConfigStore == nil {
+				return fmt.Errorf("config store is required")
+			}
+			return r.ConfigStore.UpsertNodeConfig(ctx, nodeConfigFromEvent(raw))
+		}
 		evt, mapped, err := mapSyncEvent(body, r.Rules)
 		if err != nil {
 			return err
@@ -238,8 +259,16 @@ func (r ServerIngressRuntime) dispatch(ctx context.Context, evt event.SyncEvent)
 	if r.Dispatcher == nil {
 		return 0, nil
 	}
+	nodeIDs := r.EdgeNodes
+	if len(nodeIDs) == 0 && r.NodeStore != nil {
+		var err error
+		nodeIDs, err = r.NodeStore.ListActiveEdgeNodeIDs(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("list active edge nodes: %w", err)
+		}
+	}
 	count := 0
-	for _, nodeID := range r.EdgeNodes {
+	for _, nodeID := range nodeIDs {
 		if nodeID == "" || nodeID == evt.OriginNodeID {
 			continue
 		}
@@ -351,4 +380,63 @@ func pkValue(primaryKey map[string]any) string {
 		parts = append(parts, fmt.Sprintf("%s=%v", key, primaryKey[key]))
 	}
 	return strings.Join(parts, ",")
+}
+
+func nodeConfigFromEvent(evt event.SyncEvent) syncstore.NodeConfig {
+	cfg := syncstore.NodeConfig{NodeID: evt.TargetNodeID}
+	if cfg.NodeID == "" {
+		cfg.NodeID = stringMapValue(evt.PrimaryKey, "node_id")
+	}
+	cfg.MySQLHost = stringMapValue(evt.After, "mysql_host")
+	cfg.MySQLPort = intMapValue(evt.After, "mysql_port")
+	cfg.MySQLDatabase = stringMapValue(evt.After, "mysql_database")
+	cfg.MySQLUsername = stringMapValue(evt.After, "mysql_username")
+	cfg.CDCType = stringMapValue(evt.After, "cdc_type")
+	cfg.CDCFilter = stringMapValue(evt.After, "cdc_filter")
+	cfg.CDCBatchSize = intMapValue(evt.After, "cdc_batch_size")
+	cfg.CDCDestination = stringMapValue(evt.After, "cdc_destination")
+	cfg.RuleVersion = int64MapValue(evt.After, "rule_version")
+	return cfg
+}
+
+func stringMapValue(values map[string]any, key string) string {
+	if values == nil {
+		return ""
+	}
+	if value, ok := values[key].(string); ok {
+		return value
+	}
+	return ""
+}
+
+func intMapValue(values map[string]any, key string) int {
+	if values == nil {
+		return 0
+	}
+	switch value := values[key].(type) {
+	case int:
+		return value
+	case int64:
+		return int(value)
+	case float64:
+		return int(value)
+	default:
+		return 0
+	}
+}
+
+func int64MapValue(values map[string]any, key string) int64 {
+	if values == nil {
+		return 0
+	}
+	switch value := values[key].(type) {
+	case int:
+		return int64(value)
+	case int64:
+		return value
+	case float64:
+		return int64(value)
+	default:
+		return 0
+	}
 }

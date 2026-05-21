@@ -78,7 +78,7 @@ try {
 
     # Server -> Edge B. / 中心下发。 / Edge B へ配信。
     Write-Host "nodebridge> go run ./cmd/sync-agent consume-once"
-    & go run ./cmd/sync-agent consume-once -config configs/lab/server.local.yaml -rules configs/sync-rules.example.yaml -amqp-url amqp://sync:sync_password@127.0.0.1:5675/server-sync -edges edge-001,edge-002
+    & go run ./cmd/sync-agent consume-once -config configs/lab/server.local.yaml -rules configs/sync-rules.example.yaml -amqp-url amqp://sync:sync_password@127.0.0.1:5675/server-sync
     Assert-LastExit "consume-once"
 
     # Edge B apply. / 边缘写入。 / Edge B に適用。

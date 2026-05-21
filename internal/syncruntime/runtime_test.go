@@ -107,6 +107,29 @@ func TestServerIngressRuntimeAppliesDispatchesAndAcks(t *testing.T) {
 	}
 }
 
+func TestServerIngressRuntimeUsesActiveNodeStore(t *testing.T) {
+	msg := &fakeMessage{body: mustJSON(t, sampleEvent())}
+	dispatcher := &fakeDispatcher{}
+	runtime := ServerIngressRuntime{
+		Source:     &fakeSource{msg: msg, ok: true},
+		Rules:      sampleRules(),
+		Worker:     &fakeWorker{},
+		Dispatcher: dispatcher,
+		NodeStore:  &fakeActiveNodeStore{nodes: []string{"edge-a", "edge-b"}},
+	}
+
+	result, err := runtime.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.DispatchCount != 1 {
+		t.Fatalf("expected one non-origin dispatch, got %+v", result)
+	}
+	if len(dispatcher.targets) != 1 || dispatcher.targets[0] != "edge-b" {
+		t.Fatalf("unexpected dynamic dispatch targets %+v", dispatcher.targets)
+	}
+}
+
 func TestServerIngressRuntimeNacksOnEventStoreFailure(t *testing.T) {
 	msg := &fakeMessage{body: mustJSON(t, sampleEvent())}
 	runtime := ServerIngressRuntime{
@@ -220,6 +243,50 @@ func TestEdgeDownlinkRuntimeOverridesTargetDatabase(t *testing.T) {
 	}
 	if worker.events[0].TargetDatabase != "scada_edge" {
 		t.Fatalf("expected local target database, got %s", worker.events[0].TargetDatabase)
+	}
+}
+
+func TestEdgeDownlinkRuntimeAppliesConfigUpdateAndAcks(t *testing.T) {
+	msg := &fakeMessage{body: mustJSON(t, sampleConfigEvent())}
+	store := &fakeConfigStore{}
+	runtime := EdgeDownlinkRuntime{
+		Source:      &fakeSource{msg: msg, ok: true},
+		Rules:       sampleRules(),
+		Worker:      &fakeWorker{},
+		ConfigStore: store,
+	}
+
+	result, err := runtime.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.EventID != "cfg-001" || result.Action != "applied" {
+		t.Fatalf("unexpected result %+v", result)
+	}
+	if len(store.configs) != 1 || store.configs[0].NodeID != "edge-b" || store.configs[0].MySQLHost != "127.0.0.1" {
+		t.Fatalf("unexpected config store %+v", store.configs)
+	}
+	if !msg.acked || msg.nacked {
+		t.Fatalf("expected ack only, got ack=%t nack=%t", msg.acked, msg.nacked)
+	}
+}
+
+func TestEdgeDownlinkRuntimeNacksConfigUpdateFailure(t *testing.T) {
+	msg := &fakeMessage{body: mustJSON(t, sampleConfigEvent())}
+	runtime := EdgeDownlinkRuntime{
+		Source:      &fakeSource{msg: msg, ok: true},
+		Consumer:    rabbitmq.Consumer{RequeueOnError: true},
+		Rules:       sampleRules(),
+		Worker:      &fakeWorker{},
+		ConfigStore: &fakeConfigStore{err: errors.New("config db down")},
+	}
+
+	result, err := runtime.RunOnce(context.Background())
+	if err == nil {
+		t.Fatal("expected config apply failure")
+	}
+	if result.Action != "failed" || !msg.nacked || !msg.requeue || msg.acked {
+		t.Fatalf("unexpected failure result=%+v ack=%t nack=%t requeue=%t", result, msg.acked, msg.nacked, msg.requeue)
 	}
 }
 
@@ -393,6 +460,25 @@ type fakeReplayStore struct {
 	err        error
 }
 
+type fakeActiveNodeStore struct {
+	nodes []string
+	err   error
+}
+
+func (s *fakeActiveNodeStore) ListActiveEdgeNodeIDs(ctx context.Context) ([]string, error) {
+	return s.nodes, s.err
+}
+
+type fakeConfigStore struct {
+	configs []syncstore.NodeConfig
+	err     error
+}
+
+func (s *fakeConfigStore) UpsertNodeConfig(ctx context.Context, config syncstore.NodeConfig) error {
+	s.configs = append(s.configs, config)
+	return s.err
+}
+
 func (s *fakeReplayStore) ListPendingReplays(ctx context.Context, limit int) ([]syncstore.ReplayEvent, error) {
 	return s.items, s.err
 }
@@ -440,6 +526,33 @@ func sampleEvent() event.SyncEvent {
 		CreatedAt:     time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC),
 		EventTime:     time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC),
 		TraceID:       "trace-001",
+	}
+}
+
+func sampleConfigEvent() event.SyncEvent {
+	return event.SyncEvent{
+		EventID:      "cfg-001",
+		EventType:    event.TypeConfigUpdate,
+		OriginNodeID: "server-001",
+		SourceNodeID: "server-001",
+		TargetNodeID: "edge-b",
+		DatabaseName: "nodebridge",
+		TableName:    "sync_node_config",
+		PrimaryKey:   map[string]any{"node_id": "edge-b"},
+		After: map[string]any{
+			"mysql_host":      "127.0.0.1",
+			"mysql_port":      3308,
+			"mysql_database":  "scada_edge",
+			"mysql_username":  "sync_user",
+			"cdc_type":        "canal",
+			"cdc_filter":      "scada_edge\\..*",
+			"cdc_batch_size":  1000,
+			"cdc_destination": "edge-b",
+			"rule_version":    7,
+		},
+		CreatedAt: time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC),
+		EventTime: time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC),
+		TraceID:   "trace-config",
 	}
 }
 

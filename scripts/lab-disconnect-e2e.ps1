@@ -98,7 +98,7 @@ Wait-RabbitMQ "nodebridge-rabbitmq-server"
 Start-Sleep -Seconds 5
 
 Write-Host "nodebridge> init server topology after broker recovers"
-Invoke-NodeBridgeRetry @("init-rabbitmq", "-mode", "server", "-edges", "edge-001,edge-002", "-amqp-url", "amqp://sync:sync_password@127.0.0.1:5675/server-sync")
+Invoke-NodeBridgeRetry @("init-rabbitmq", "-mode", "server", "-config", "configs/lab/server.local.yaml", "-amqp-url", "amqp://sync:sync_password@127.0.0.1:5675/server-sync")
 
 Push-Location $root
 try {

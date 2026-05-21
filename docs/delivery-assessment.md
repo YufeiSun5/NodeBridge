@@ -26,6 +26,7 @@ Required before pilot:
 - V0.15: separate RabbitMQ brokers for Edge A, Edge B, and Server in single-PC lab.
 - V0.13: real Canal client integration path or a confirmed production CDC adapter.
 - V0.14: Canal runtime path can publish to Edge local RabbitMQ after successful fetch.
+- V0.17: Server-managed node registration, dynamic dispatch, and config downlink.
 - Basic runbook for config, migration, topology init, run, retry, and log web.
 
 ## Single Machine Testing
@@ -60,6 +61,7 @@ Customer trial means:
 - SyncAgent can run as a Windows Service.
 - Wails has minimal config/status/rule/failure/log pages.
 - Diagnostic package export exists.
+- CRUD and one-way table E2E pass against the separated broker lab.
 
 Required before customer trial:
 

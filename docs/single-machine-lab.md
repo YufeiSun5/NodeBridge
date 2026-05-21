@@ -64,8 +64,18 @@ The script:
 
 1. Publish Edge A sample change to `edge-a-sync`.
 2. Forward Edge A upload from Edge A RabbitMQ to Server RabbitMQ.
-3. Consume Server ingress and dispatch to Edge B.
+3. Consume Server ingress and dispatch to ACTIVE Edge nodes from `sync_node_registry`.
 4. Consume Edge B downlink.
 5. Query Server and Edge B MySQL to verify rows.
 
 Details: `docs/v0.12-e2e-smoke.md`.
+
+## Config Downlink Smoke
+
+V0.17 adds HTTP registration and RabbitMQ config delivery:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/lab-config-e2e.ps1 -SkipPrepare
+```
+
+Details: `docs/v0.17-node-management.md`.

@@ -209,6 +209,73 @@ func TestStoreMarkRetryPending(t *testing.T) {
 	assertExpectations(t, mock)
 }
 
+func TestStoreUpsertNodeDefaultsActive(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+	store := New(db)
+	store.Clock = fixedTime
+
+	mock.ExpectExec("INSERT INTO sync_node_registry").
+		WithArgs("edge-001", "Edge 1", "edge", "line-a", StatusActive, fixedTime(), "0.17.0", fixedTime(), fixedTime()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = store.UpsertNode(context.Background(), NodeRecord{
+		NodeID: "edge-001", NodeName: "Edge 1", NodeType: "edge", Location: "line-a", Version: "0.17.0",
+	})
+	if err != nil {
+		t.Fatalf("UpsertNode returned error: %v", err)
+	}
+	assertExpectations(t, mock)
+}
+
+func TestStoreListActiveEdgeNodeIDsFiltersNodes(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+	mock.ExpectQuery("SELECT node_id, node_name, node_type").
+		WillReturnRows(sqlmock.NewRows([]string{"node_id", "node_name", "node_type", "location", "status", "last_heartbeat_at", "version", "created_at", "updated_at"}).
+			AddRow("edge-001", "Edge 1", "edge", "", StatusActive, fixedTime(), "0.17.0", fixedTime(), fixedTime()).
+			AddRow("edge-002", "Edge 2", "edge", "", StatusDisabled, fixedTime(), "", fixedTime(), fixedTime()).
+			AddRow("server-001", "Server", "server", "", StatusActive, fixedTime(), "0.17.0", fixedTime(), fixedTime()))
+
+	nodes, err := New(db).ListActiveEdgeNodeIDs(context.Background())
+	if err != nil {
+		t.Fatalf("ListActiveEdgeNodeIDs returned error: %v", err)
+	}
+	if len(nodes) != 1 || nodes[0] != "edge-001" {
+		t.Fatalf("unexpected active nodes %+v", nodes)
+	}
+	assertExpectations(t, mock)
+}
+
+func TestStoreUpsertNodeConfigStoresNoSecrets(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+	store := New(db)
+	store.Clock = fixedTime
+
+	mock.ExpectExec("INSERT INTO sync_node_config").
+		WithArgs("edge-001", "127.0.0.1", 3307, "scada_edge", "sync_user", "canal", "scada_edge\\..*", 1000, "edge-001", int64(9), fixedTime()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = store.UpsertNodeConfig(context.Background(), NodeConfig{
+		NodeID: "edge-001", MySQLHost: "127.0.0.1", MySQLPort: 3307, MySQLDatabase: "scada_edge", MySQLUsername: "sync_user",
+		CDCType: "canal", CDCFilter: "scada_edge\\..*", CDCBatchSize: 1000, CDCDestination: "edge-001", RuleVersion: 9,
+	})
+	if err != nil {
+		t.Fatalf("UpsertNodeConfig returned error: %v", err)
+	}
+	assertExpectations(t, mock)
+}
+
 func TestStoreValidation(t *testing.T) {
 	store := New(nil)
 	if err := store.UpsertAck(context.Background(), AckRecord{}); err == nil {
@@ -232,6 +299,12 @@ func TestStoreValidation(t *testing.T) {
 	}
 	if err := store.InsertError(context.Background(), ErrorRecord{}); err == nil {
 		t.Fatal("expected error log validation error")
+	}
+	if err := store.UpsertNode(context.Background(), NodeRecord{}); err == nil {
+		t.Fatal("expected node validation error")
+	}
+	if err := store.UpsertNodeConfig(context.Background(), NodeConfig{}); err == nil {
+		t.Fatal("expected node config validation error")
 	}
 }
 

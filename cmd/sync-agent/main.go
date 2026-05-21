@@ -24,6 +24,7 @@ import (
 	"github.com/YufeiSun5/NodeBridge/internal/loop"
 	"github.com/YufeiSun5/NodeBridge/internal/mapper"
 	"github.com/YufeiSun5/NodeBridge/internal/mysqlconn"
+	"github.com/YufeiSun5/NodeBridge/internal/nodeapi"
 	"github.com/YufeiSun5/NodeBridge/internal/normalizer"
 	"github.com/YufeiSun5/NodeBridge/internal/rabbitmq"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
@@ -69,6 +70,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return runReplayPendingOnce(args[1:], stdout, stderr)
 		case "serve-log-web":
 			return runServeLogWeb(args[1:], stdout, stderr)
+		case "serve-node-api":
+			return runServeNodeAPI(args[1:], stdout, stderr)
+		case "register-node":
+			return runRegisterNode(args[1:], stdout, stderr)
+		case "set-node-config":
+			return runSetNodeConfig(args[1:], stdout, stderr)
+		case "list-nodes":
+			return runListNodes(args[1:], stdout, stderr)
+		case "list-node-config":
+			return runListNodeConfig(args[1:], stdout, stderr)
 		case "run":
 			return runAgent(args[1:], stdout, stderr)
 		}
@@ -185,6 +196,7 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules.R
 				Rules:                  ruleSet,
 				Worker:                 apply.NewSQLWorker(db),
 				TargetDatabaseOverride: cfg.MySQL.Database,
+				ConfigStore:            syncstore.New(db),
 			},
 			Status: store,
 		},
@@ -273,6 +285,7 @@ func runServerWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules
 						Exchange:  "server.dispatch.x",
 					},
 					EdgeNodes: edgeNodeIDs,
+					NodeStore: syncStore,
 				},
 				Status: store,
 			},
@@ -300,9 +313,10 @@ func runServerWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules
 func runInitRabbitMQ(args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("init-rabbitmq", flag.ContinueOnError)
 	flags.SetOutput(stderr)
+	configPath := flags.String("config", "", "optional server config for dynamic edge nodes")
 	amqpURL := flags.String("amqp-url", "", "RabbitMQ AMQP URL")
 	mode := flags.String("mode", "edge", "topology mode: edge or server")
-	edges := flags.String("edges", "edge-001", "comma-separated edge node ids for server topology")
+	edges := flags.String("edges", "", "comma-separated edge node ids for server topology")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -317,7 +331,26 @@ func runInitRabbitMQ(args []string, stdout, stderr io.Writer) error {
 	}
 	defer conn.Close()
 
-	topology := topologyForMode(*mode, *edges)
+	edgeIDs := splitCSV(*edges)
+	if *mode == appconfig.ModeServer && len(edgeIDs) == 0 && *configPath != "" {
+		cfg, err := appconfig.LoadFile(*configPath)
+		if err != nil {
+			fmt.Fprintf(stderr, "load config failed: %v\n", err)
+			return err
+		}
+		db, err := openMySQL(cfg)
+		if err != nil {
+			fmt.Fprintf(stderr, "open mysql failed: %v\n", err)
+			return err
+		}
+		defer db.Close()
+		edgeIDs, err = syncstore.New(db).ListActiveEdgeNodeIDs(context.Background())
+		if err != nil {
+			fmt.Fprintf(stderr, "list active nodes failed: %v\n", err)
+			return err
+		}
+	}
+	topology := topologyForMode(*mode, strings.Join(edgeIDs, ","))
 	if err := rabbitmq.InitializeTopology(conn.Channel, topology); err != nil {
 		fmt.Fprintf(stderr, "rabbitmq init failed: %v\n", err)
 		return err
@@ -572,6 +605,14 @@ func runConsumeOnce(args []string, stdout, stderr io.Writer) error {
 	defer conn.Close()
 	var dispatcher syncruntime.DownlinkDispatcher
 	edgeNodeIDs := splitCSV(*edges)
+	if len(edgeNodeIDs) == 0 {
+		var err error
+		edgeNodeIDs, err = syncstore.New(db).ListActiveEdgeNodeIDs(context.Background())
+		if err != nil {
+			fmt.Fprintf(stderr, "list active nodes failed: %v\n", err)
+			return err
+		}
+	}
 	if len(edgeNodeIDs) > 0 {
 		publisher, err := rabbitmq.NewPublisher(conn.Channel)
 		if err != nil {
@@ -595,6 +636,7 @@ func runConsumeOnce(args []string, stdout, stderr io.Writer) error {
 		EventStore: syncstore.New(db),
 		Dispatcher: dispatcher,
 		EdgeNodes:  edgeNodeIDs,
+		NodeStore:  syncstore.New(db),
 	}
 	result, err := runtime.RunOnce(context.Background())
 	if err != nil {
@@ -721,6 +763,7 @@ func runConsumeDownlinkOnce(args []string, stdout, stderr io.Writer) error {
 		Rules:                  ruleSet,
 		Worker:                 apply.NewSQLWorker(db),
 		TargetDatabaseOverride: cfg.MySQL.Database,
+		ConfigStore:            syncstore.New(db),
 	}
 	result, err := runtime.RunOnce(context.Background())
 	if err != nil {
@@ -897,6 +940,212 @@ func runServeLogWeb(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stderr, "log web failed: %v\n", err)
 		return err
 	}
+	return nil
+}
+
+func runServeNodeAPI(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("serve-node-api", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "configs/server.example.yaml", "path to server config")
+	bind := flags.String("bind", "127.0.0.1", "HTTP bind address")
+	port := flags.Int("port", 18090, "HTTP port")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	cfg, err := appconfig.LoadFile(*configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load config failed: %v\n", err)
+		return err
+	}
+	db, err := openMySQL(cfg)
+	if err != nil {
+		fmt.Fprintf(stderr, "open mysql failed: %v\n", err)
+		return err
+	}
+	defer db.Close()
+	conn, err := rabbitmq.Dial(cfg.RabbitMQ.ServerURL)
+	if err != nil {
+		fmt.Fprintf(stderr, "rabbitmq connect failed: %v\n", err)
+		return err
+	}
+	defer conn.Close()
+	publisher, err := rabbitmq.NewPublisher(conn.Channel)
+	if err != nil {
+		fmt.Fprintf(stderr, "publisher init failed: %v\n", err)
+		return err
+	}
+	api := nodeapi.NewServer(syncstore.New(db), nodeapi.AMQPNodeTopology{Channel: conn.Channel}, nodeapi.AMQPConfigPublisher{
+		Publisher:    publisher,
+		SourceNodeID: cfg.Node.ID,
+	})
+	addr := fmt.Sprintf("%s:%d", *bind, *port)
+	fmt.Fprintf(stdout, "node api listening addr=%s\n", addr)
+	return http.ListenAndServe(addr, api.Handler())
+}
+
+func runRegisterNode(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("register-node", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "configs/server.example.yaml", "path to server config")
+	nodeID := flags.String("node-id", "", "edge node id")
+	nodeName := flags.String("node-name", "", "edge node name")
+	location := flags.String("location", "", "edge location")
+	version := flags.String("version", "", "agent version")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *nodeID == "" || *nodeName == "" {
+		return fmt.Errorf("node-id and node-name are required")
+	}
+	cfg, err := appconfig.LoadFile(*configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load config failed: %v\n", err)
+		return err
+	}
+	db, err := openMySQL(cfg)
+	if err != nil {
+		fmt.Fprintf(stderr, "open mysql failed: %v\n", err)
+		return err
+	}
+	defer db.Close()
+	if err := syncstore.New(db).UpsertNode(context.Background(), syncstore.NodeRecord{
+		NodeID: *nodeID, NodeName: *nodeName, NodeType: "edge", Location: *location, Version: *version, Status: syncstore.StatusActive,
+	}); err != nil {
+		fmt.Fprintf(stderr, "register node failed: %v\n", err)
+		return err
+	}
+	fmt.Fprintf(stdout, "node registered node_id=%s status=%s\n", *nodeID, syncstore.StatusActive)
+	return nil
+}
+
+func runListNodes(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("list-nodes", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "configs/server.example.yaml", "path to server config")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	cfg, err := appconfig.LoadFile(*configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load config failed: %v\n", err)
+		return err
+	}
+	db, err := openMySQL(cfg)
+	if err != nil {
+		fmt.Fprintf(stderr, "open mysql failed: %v\n", err)
+		return err
+	}
+	defer db.Close()
+	nodes, err := syncstore.New(db).ListNodes(context.Background())
+	if err != nil {
+		fmt.Fprintf(stderr, "list nodes failed: %v\n", err)
+		return err
+	}
+	for _, node := range nodes {
+		fmt.Fprintf(stdout, "node_id=%s name=%s type=%s status=%s version=%s\n", node.NodeID, node.NodeName, node.NodeType, node.Status, node.Version)
+	}
+	if len(nodes) == 0 {
+		fmt.Fprintln(stdout, "no nodes")
+	}
+	return nil
+}
+
+func runSetNodeConfig(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("set-node-config", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "configs/server.example.yaml", "path to server config")
+	amqpURL := flags.String("amqp-url", "", "Server RabbitMQ AMQP URL")
+	nodeID := flags.String("node-id", "", "edge node id")
+	mysqlHost := flags.String("mysql-host", "", "edge mysql host")
+	mysqlPort := flags.Int("mysql-port", 0, "edge mysql port")
+	mysqlDatabase := flags.String("mysql-database", "", "edge mysql database")
+	mysqlUsername := flags.String("mysql-username", "", "edge mysql username")
+	cdcType := flags.String("cdc-type", "", "cdc type")
+	cdcFilter := flags.String("cdc-filter", "", "cdc filter")
+	cdcBatchSize := flags.Int("cdc-batch-size", 0, "cdc batch size")
+	cdcDestination := flags.String("cdc-destination", "", "cdc destination")
+	ruleVersion := flags.Int64("rule-version", 0, "rule version")
+	publish := flags.Bool("publish", true, "publish CONFIG_UPDATE to node downlink queue")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *nodeID == "" {
+		return fmt.Errorf("node-id is required")
+	}
+	cfg, err := appconfig.LoadFile(*configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load config failed: %v\n", err)
+		return err
+	}
+	db, err := openMySQL(cfg)
+	if err != nil {
+		fmt.Fprintf(stderr, "open mysql failed: %v\n", err)
+		return err
+	}
+	defer db.Close()
+	nodeConfig := syncstore.NodeConfig{
+		NodeID: *nodeID, MySQLHost: *mysqlHost, MySQLPort: *mysqlPort, MySQLDatabase: *mysqlDatabase,
+		MySQLUsername: *mysqlUsername, CDCType: *cdcType, CDCFilter: *cdcFilter, CDCBatchSize: *cdcBatchSize,
+		CDCDestination: *cdcDestination, RuleVersion: *ruleVersion,
+	}
+	if err := syncstore.New(db).UpsertNodeConfig(context.Background(), nodeConfig); err != nil {
+		fmt.Fprintf(stderr, "set node config failed: %v\n", err)
+		return err
+	}
+	if *publish {
+		targetURL := *amqpURL
+		if targetURL == "" {
+			targetURL = cfg.RabbitMQ.ServerURL
+		}
+		conn, err := rabbitmq.Dial(targetURL)
+		if err != nil {
+			fmt.Fprintf(stderr, "rabbitmq connect failed: %v\n", err)
+			return err
+		}
+		defer conn.Close()
+		publisher, err := rabbitmq.NewPublisher(conn.Channel)
+		if err != nil {
+			fmt.Fprintf(stderr, "publisher init failed: %v\n", err)
+			return err
+		}
+		if err := (nodeapi.AMQPConfigPublisher{Publisher: publisher, SourceNodeID: cfg.Node.ID}).PublishConfig(context.Background(), nodeConfig); err != nil {
+			fmt.Fprintf(stderr, "publish config failed: %v\n", err)
+			return err
+		}
+	}
+	fmt.Fprintf(stdout, "node config saved node_id=%s rule_version=%d\n", *nodeID, *ruleVersion)
+	return nil
+}
+
+func runListNodeConfig(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("list-node-config", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "configs/server.example.yaml", "path to server config")
+	nodeID := flags.String("node-id", "", "edge node id")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *nodeID == "" {
+		return fmt.Errorf("node-id is required")
+	}
+	cfg, err := appconfig.LoadFile(*configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load config failed: %v\n", err)
+		return err
+	}
+	db, err := openMySQL(cfg)
+	if err != nil {
+		fmt.Fprintf(stderr, "open mysql failed: %v\n", err)
+		return err
+	}
+	defer db.Close()
+	nodeConfig, err := syncstore.New(db).GetNodeConfig(context.Background(), *nodeID)
+	if err != nil {
+		fmt.Fprintf(stderr, "get node config failed: %v\n", err)
+		return err
+	}
+	encoded, _ := json.Marshal(nodeConfig)
+	fmt.Fprintln(stdout, string(encoded))
 	return nil
 }
 

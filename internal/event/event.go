@@ -3,10 +3,11 @@ package event
 import "time"
 
 const (
-	TypeInsert    = "INSERT"
-	TypeUpdate    = "UPDATE"
-	TypeDelete    = "DELETE"
-	TypeHeartbeat = "HEARTBEAT"
+	TypeInsert       = "INSERT"
+	TypeUpdate       = "UPDATE"
+	TypeDelete       = "DELETE"
+	TypeHeartbeat    = "HEARTBEAT"
+	TypeConfigUpdate = "CONFIG_UPDATE"
 )
 
 type SyncEvent struct {

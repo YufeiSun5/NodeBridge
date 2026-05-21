@@ -11,9 +11,12 @@ import (
 )
 
 const (
-	StatusPending = "PENDING"
-	StatusSuccess = "SUCCESS"
-	StatusFailed  = "FAILED"
+	StatusPending  = "PENDING"
+	StatusActive   = "ACTIVE"
+	StatusOffline  = "OFFLINE"
+	StatusDisabled = "DISABLED"
+	StatusSuccess  = "SUCCESS"
+	StatusFailed   = "FAILED"
 )
 
 type Store struct {
@@ -73,6 +76,170 @@ type ReplayEvent struct {
 	TargetNodeID string
 	Payload      []byte
 	CreatedAt    time.Time
+}
+
+type NodeRecord struct {
+	NodeID          string    `json:"node_id"`
+	NodeName        string    `json:"node_name"`
+	NodeType        string    `json:"node_type"`
+	Location        string    `json:"location,omitempty"`
+	Status          string    `json:"status"`
+	LastHeartbeatAt time.Time `json:"last_heartbeat_at,omitempty"`
+	Version         string    `json:"version,omitempty"`
+	CreatedAt       time.Time `json:"created_at,omitempty"`
+	UpdatedAt       time.Time `json:"updated_at,omitempty"`
+}
+
+type NodeConfig struct {
+	NodeID         string    `json:"node_id"`
+	MySQLHost      string    `json:"mysql_host,omitempty"`
+	MySQLPort      int       `json:"mysql_port,omitempty"`
+	MySQLDatabase  string    `json:"mysql_database,omitempty"`
+	MySQLUsername  string    `json:"mysql_username,omitempty"`
+	CDCType        string    `json:"cdc_type,omitempty"`
+	CDCFilter      string    `json:"cdc_filter,omitempty"`
+	CDCBatchSize   int       `json:"cdc_batch_size,omitempty"`
+	CDCDestination string    `json:"cdc_destination,omitempty"`
+	RuleVersion    int64     `json:"rule_version"`
+	UpdatedAt      time.Time `json:"updated_at,omitempty"`
+}
+
+func (s *Store) UpsertNode(ctx context.Context, record NodeRecord) error {
+	if s.DB == nil {
+		return fmt.Errorf("sync store db is required")
+	}
+	if record.NodeID == "" || record.NodeName == "" || record.NodeType == "" {
+		return fmt.Errorf("node_id, node_name and node_type are required")
+	}
+	now := s.now()
+	status := record.Status
+	if status == "" {
+		status = StatusActive
+	}
+
+	_, err := s.DB.ExecContext(ctx, `
+INSERT INTO sync_node_registry (
+  node_id, node_name, node_type, location, status, last_heartbeat_at, version, created_at, updated_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+  node_name = VALUES(node_name),
+  node_type = VALUES(node_type),
+  location = VALUES(location),
+  status = VALUES(status),
+  last_heartbeat_at = VALUES(last_heartbeat_at),
+  version = VALUES(version),
+  updated_at = VALUES(updated_at)
+`, record.NodeID, record.NodeName, record.NodeType, nullableString(record.Location), status, now, nullableString(record.Version), now, now)
+	if err != nil {
+		return fmt.Errorf("upsert node: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) ListNodes(ctx context.Context) ([]NodeRecord, error) {
+	if s.DB == nil {
+		return nil, fmt.Errorf("sync store db is required")
+	}
+	rows, err := s.DB.QueryContext(ctx, `
+SELECT node_id, node_name, node_type, COALESCE(location, ''), status,
+       last_heartbeat_at, COALESCE(version, ''),
+       created_at, updated_at
+FROM sync_node_registry
+ORDER BY node_id
+`)
+	if err != nil {
+		return nil, fmt.Errorf("list nodes: %w", err)
+	}
+	defer rows.Close()
+
+	var result []NodeRecord
+	for rows.Next() {
+		var item NodeRecord
+		var heartbeat sql.NullTime
+		if err := rows.Scan(&item.NodeID, &item.NodeName, &item.NodeType, &item.Location, &item.Status, &heartbeat, &item.Version, &item.CreatedAt, &item.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan node: %w", err)
+		}
+		if heartbeat.Valid {
+			item.LastHeartbeatAt = heartbeat.Time
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate nodes: %w", err)
+	}
+	return result, nil
+}
+
+func (s *Store) ListActiveEdgeNodeIDs(ctx context.Context) ([]string, error) {
+	nodes, err := s.ListNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		if node.NodeType == "edge" && node.Status == StatusActive {
+			result = append(result, node.NodeID)
+		}
+	}
+	return result, nil
+}
+
+func (s *Store) UpsertNodeConfig(ctx context.Context, config NodeConfig) error {
+	if s.DB == nil {
+		return fmt.Errorf("sync store db is required")
+	}
+	if config.NodeID == "" {
+		return fmt.Errorf("node_id is required")
+	}
+	now := s.now()
+	_, err := s.DB.ExecContext(ctx, `
+INSERT INTO sync_node_config (
+  node_id, mysql_host, mysql_port, mysql_database, mysql_username,
+  cdc_type, cdc_filter, cdc_batch_size, cdc_destination, rule_version, updated_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+  mysql_host = VALUES(mysql_host),
+  mysql_port = VALUES(mysql_port),
+  mysql_database = VALUES(mysql_database),
+  mysql_username = VALUES(mysql_username),
+  cdc_type = VALUES(cdc_type),
+  cdc_filter = VALUES(cdc_filter),
+  cdc_batch_size = VALUES(cdc_batch_size),
+  cdc_destination = VALUES(cdc_destination),
+  rule_version = VALUES(rule_version),
+  updated_at = VALUES(updated_at)
+`, config.NodeID, nullableString(config.MySQLHost), nullableInt(config.MySQLPort), nullableString(config.MySQLDatabase), nullableString(config.MySQLUsername),
+		nullableString(config.CDCType), nullableString(config.CDCFilter), nullableInt(config.CDCBatchSize), nullableString(config.CDCDestination), config.RuleVersion, now)
+	if err != nil {
+		return fmt.Errorf("upsert node config: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) GetNodeConfig(ctx context.Context, nodeID string) (NodeConfig, error) {
+	if s.DB == nil {
+		return NodeConfig{}, fmt.Errorf("sync store db is required")
+	}
+	if nodeID == "" {
+		return NodeConfig{}, fmt.Errorf("node_id is required")
+	}
+	var cfg NodeConfig
+	err := s.DB.QueryRowContext(ctx, `
+SELECT node_id, COALESCE(mysql_host, ''), COALESCE(mysql_port, 0), COALESCE(mysql_database, ''),
+       COALESCE(mysql_username, ''), COALESCE(cdc_type, ''), COALESCE(cdc_filter, ''),
+       COALESCE(cdc_batch_size, 0), COALESCE(cdc_destination, ''), rule_version, updated_at
+FROM sync_node_config
+WHERE node_id = ?
+`, nodeID).Scan(&cfg.NodeID, &cfg.MySQLHost, &cfg.MySQLPort, &cfg.MySQLDatabase, &cfg.MySQLUsername, &cfg.CDCType, &cfg.CDCFilter, &cfg.CDCBatchSize, &cfg.CDCDestination, &cfg.RuleVersion, &cfg.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return NodeConfig{}, fmt.Errorf("node config not found for %s", nodeID)
+		}
+		return NodeConfig{}, fmt.Errorf("get node config: %w", err)
+	}
+	return cfg, nil
 }
 
 func (s *Store) UpsertEventLog(ctx context.Context, record EventLogRecord) error {
@@ -309,6 +476,13 @@ func nullableString(value string) any {
 
 func nullableTime(value time.Time) any {
 	if value.IsZero() {
+		return nil
+	}
+	return value
+}
+
+func nullableInt(value int) any {
+	if value == 0 {
 		return nil
 	}
 	return value

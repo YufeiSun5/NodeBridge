@@ -74,12 +74,15 @@ Invoke-NodeBridge "$syncAgent -config configs/lab/server.local.yaml"
 if (-not $SkipMigrate) {
     Invoke-NodeBridge "$syncAgent migrate -config configs/lab/edge-a.local.yaml -scope edge"
     Invoke-NodeBridge "$syncAgent migrate -config configs/lab/edge-b.local.yaml -scope edge"
-    Invoke-NodeBridge "$syncAgent migrate -config configs/lab/server.local.yaml -scope server"
+Invoke-NodeBridge "$syncAgent migrate -config configs/lab/server.local.yaml -scope server"
 }
+
+Invoke-NodeBridge "$syncAgent register-node -config configs/lab/server.local.yaml -node-id edge-001 -node-name `"Lab Edge A`" -location single-pc-lab -version 0.17.0"
+Invoke-NodeBridge "$syncAgent register-node -config configs/lab/server.local.yaml -node-id edge-002 -node-name `"Lab Edge B`" -location single-pc-lab -version 0.17.0"
 
 Invoke-NodeBridgeRetry "$syncAgent init-rabbitmq -mode edge -amqp-url amqp://sync:sync_password@127.0.0.1:5673/edge-a-sync"
 Invoke-NodeBridgeRetry "$syncAgent init-rabbitmq -mode edge -amqp-url amqp://sync:sync_password@127.0.0.1:5674/edge-b-sync"
-Invoke-NodeBridgeRetry "$syncAgent init-rabbitmq -mode server -edges edge-001,edge-002 -amqp-url amqp://sync:sync_password@127.0.0.1:5675/server-sync"
+Invoke-NodeBridgeRetry "$syncAgent init-rabbitmq -mode server -config configs/lab/server.local.yaml -amqp-url amqp://sync:sync_password@127.0.0.1:5675/server-sync"
 
 Write-Host "single-pc lab is ready"
 Write-Host "Edge A RabbitMQ UI: http://127.0.0.1:15673  user=sync password=sync_password"

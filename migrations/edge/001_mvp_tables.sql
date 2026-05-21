@@ -105,3 +105,19 @@ CREATE TABLE IF NOT EXISTS sync_runtime_status (
   updated_at DATETIME(3) NOT NULL,
   UNIQUE KEY uk_status_key (status_key)
 );
+
+CREATE TABLE IF NOT EXISTS sync_node_config (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  node_id VARCHAR(64) NOT NULL,
+  mysql_host VARCHAR(255) NULL,
+  mysql_port INT NULL,
+  mysql_database VARCHAR(128) NULL,
+  mysql_username VARCHAR(128) NULL,
+  cdc_type VARCHAR(32) NULL,
+  cdc_filter VARCHAR(255) NULL,
+  cdc_batch_size INT NULL,
+  cdc_destination VARCHAR(128) NULL,
+  rule_version BIGINT NOT NULL DEFAULT 0,
+  updated_at DATETIME(3) NOT NULL,
+  UNIQUE KEY uk_node_id (node_id)
+);
