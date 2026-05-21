@@ -1,12 +1,12 @@
 # MEMORY
 
-Last updated: 2026-05-21 16:14 Asia/Shanghai
+Last updated: 2026-05-21 16:43 Asia/Shanghai
 
 ## 当前阶段
 
-- 项目处于 V0.12 Single machine E2E smoke 完成阶段。
+- 项目处于 V0.13 Canal client adapter 完成阶段。
 - 当前仓库已有 Go MVP 骨架、配置样例、迁移样例、RabbitMQ 核心接口、表列映射、MySQL Apply Worker 和无感安装计划模型。
-- 当前尚未实现真实 Canal client、Windows Service 和完整 Wails 前端。
+- 当前尚未将真实 Canal client 接入 `sync-agent run`，尚未实现 Windows Service 和完整 Wails 前端。
 
 ## 已完成事项
 
@@ -59,6 +59,10 @@ Last updated: 2026-05-21 16:14 Asia/Shanghai
 - 已让 `consume-once` 支持 `-edges` 参数，可在单步 Server ingress 后执行防回源下发。
 - 已补 Edge 侧 `device_settings` 迁移，支持当前映射规则在 Edge B 写入目标表。
 - 已新增 `docs/v0.12-e2e-smoke.md`，记录单机 E2E 执行和验证范围。
+- 已实现 V0.13 Canal client adapter：新增 `internal/cdc/canal/withlin_client.go`。
+- 已引入 `github.com/withlin/canal-go`，并将第三方依赖隔离在 Canal adapter 层。
+- 已支持 Canal protobuf message 到 `cdc.ChangeEvent` 的转换、batch ack 和 offset 保存路径。
+- 已新增 `docs/v0.13-canal-client.md`，记录真实 Canal client 适配策略和限制。
 
 ## AI 工程化状态清单
 
@@ -92,19 +96,20 @@ Last updated: 2026-05-21 16:14 Asia/Shanghai
 - [x] V0.10 Auto replay worker：Server run 挂接 `server-replay`
 - [x] V0.11 Single machine lab：lab configs、dev compose、lab smoke script
 - [x] V0.12 E2E smoke：`scripts/lab-e2e.ps1`、Server dispatch CLI、Edge B verify path
+- [x] V0.13 Canal client adapter：`withlin/canal-go` wrapper、protobuf conversion、ACK path
 - [x] RabbitMQ 无感安装计划：`internal/installer/rabbitmq`
 
 ## 后续建议
 
 - 使用正确 `NODEBRIDGE_RABBITMQ_URL` 和 `NODEBRIDGE_SERVER_MYSQL_DSN` 跑 `docs/v0.3-smoke.md`。
-- 下一步进入 V0.13：真实 Canal client 路径确认和生产 CDC adapter 接入。
+- 下一步进入 V0.14：将 Canal adapter 接入 Edge runtime，并补 Canal lab 配置。
 - 对接真实 MySQL 容器：设置 `NODEBRIDGE_APPLY_MYSQL_DSN` 后运行集成测试。
 - 进入 CDC 阶段：Canal Go client 选型、offset 保存、异常恢复。
 
 ## 待确认
 
 - 项目最终名称是 `NodeBridge` 还是面向用户的 `DataSync`。
-- Canal Go client 具体库选型尚未确认。
+- Canal Go client 当前使用 `github.com/withlin/canal-go`，后续可替换，依赖已隔离。
 - Windows Service 实现库、日志库、配置加密实现方式尚未确认。
 - 交付节奏：当前已具备技术试点脚本基础；V0.16 后可做客户试用，V1.0 才是产品交付。
 
@@ -130,3 +135,4 @@ Last updated: 2026-05-21 16:14 Asia/Shanghai
 - 2026-05-21 15:27 | gpt-5 | 完成 V0.10 后台重放 worker 并固化交付评估。
 - 2026-05-21 15:49 | gpt-5 | 完成 V0.11 单机 lab 配置、Compose 和准备脚本。
 - 2026-05-21 16:14 | gpt-5 | 完成 V0.12 单机 E2E smoke 脚本和 Server 下发入口。
+- 2026-05-21 16:43 | gpt-5 | 完成 V0.13 Canal client 适配层和 protobuf 转换。

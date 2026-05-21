@@ -55,6 +55,9 @@ type CDCConfig struct {
 	ReaderName  string `json:"reader_name,omitempty" yaml:"reader_name,omitempty"`
 	CanalAddr   string `json:"canal_addr,omitempty" yaml:"canal_addr,omitempty"`
 	Destination string `json:"destination,omitempty" yaml:"destination,omitempty"`
+	Username    string `json:"username,omitempty" yaml:"username,omitempty"`
+	Password    string `json:"password,omitempty" yaml:"password,omitempty"`
+	Filter      string `json:"filter,omitempty" yaml:"filter,omitempty"`
 	BatchSize   int    `json:"batch_size,omitempty" yaml:"batch_size,omitempty"`
 	UseGTID     bool   `json:"use_gtid,omitempty" yaml:"use_gtid,omitempty"`
 }

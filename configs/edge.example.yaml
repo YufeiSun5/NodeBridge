@@ -27,6 +27,9 @@ cdc:
   reader_name: edge-001
   canal_addr: 127.0.0.1:11111
   destination: edge-001
+  username: ""
+  password: encrypted_password
+  filter: scada_edge\..*
   batch_size: 1000
   use_gtid: false
 

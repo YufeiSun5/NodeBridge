@@ -12,6 +12,9 @@ type Config struct {
 	ReaderName  string
 	Address     string
 	Destination string
+	Username    string
+	Password    string
+	Filter      string
 	BatchSize   int
 }
 

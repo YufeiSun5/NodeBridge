@@ -999,6 +999,9 @@ func canalConfigFromApp(cfg *appconfig.Config) canalcdc.Config {
 		ReaderName:  readerName,
 		Address:     cfg.CDC.CanalAddr,
 		Destination: cfg.CDC.Destination,
+		Username:    cfg.CDC.Username,
+		Password:    cfg.CDC.Password,
+		Filter:      cfg.CDC.Filter,
 		BatchSize:   cfg.CDC.BatchSize,
 	}
 }
