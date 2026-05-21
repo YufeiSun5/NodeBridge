@@ -1,0 +1,28 @@
+mode: edge
+
+node:
+  id: edge-001
+  name: 一号产线
+  location: 大连工厂-一车间
+
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  username: sync_user
+  password: encrypted_password
+  database: scada_edge
+
+rabbitmq:
+  local_url: amqp://sync:password@127.0.0.1:5672/edge-sync
+  server_url: amqp://edge-001:password@192.168.1.10:5672/server-sync
+
+cdc:
+  type: canal
+  canal_addr: 127.0.0.1:11111
+  destination: edge-001
+  batch_size: 1000
+
+sync:
+  upload_batch_size: 500
+  retry_interval_seconds: 10
+  heartbeat_interval_seconds: 15

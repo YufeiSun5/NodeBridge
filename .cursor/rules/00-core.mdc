@@ -1,0 +1,15 @@
+---
+description: "Use when: Core project navigation and AI workflow"
+globs: ["**/*"]
+alwaysApply: true
+---
+
+Read `AGENTS.md` first. It is the project overview and navigation entry.
+
+Rules:
+
+- Prefer source, build scripts, CI, and tests over older documents.
+- Mark uncertain facts with `<!-- 待确认 -->`.
+- Read relevant `.ai/instructions/*.md` files before editing.
+- Update `MEMORY.md` after meaningful project changes.
+- Keep `.github/` and `.cursor/` as thin adapters; full rules live in `.ai/`.

@@ -1,0 +1,18 @@
+---
+description: "Use when: Synchronization architecture invariants"
+globs: ["internal/event/**", "internal/normalizer/**", "internal/loop/**", "internal/apply/**", "internal/router/**", "internal/rabbitmq/**", "migrations/**", "configs/**"]
+alwaysApply: false
+---
+
+Read:
+
+- `AGENTS.md`
+- `MEMORY.md`
+- `.ai/instructions/sync-architecture.md`
+
+Rules:
+
+- `SyncEvent` is the stable cross-module contract.
+- Loop suppression belongs in SyncAgent, not CDC or RabbitMQ.
+- Apply Worker must be idempotent and transactional.
+- Server must not dispatch events back to `origin_node_id`.

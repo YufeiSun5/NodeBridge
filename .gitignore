@@ -1,0 +1,17 @@
+.vfox/
+
+# Go
+bin/
+*.test
+coverage.out
+
+# Node/Wails
+node_modules/
+dist/
+build/
+frontend/dist/
+
+# Logs and local env
+*.log
+.env
+.env.*

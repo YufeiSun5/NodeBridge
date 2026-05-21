@@ -1,0 +1,18 @@
+---
+description: "Use when: Wails React TypeScript frontend rules"
+globs: ["frontend/**", "cmd/datasync-ui/**", "**/*.ts", "**/*.tsx", "**/*.css"]
+alwaysApply: false
+---
+
+Read:
+
+- `AGENTS.md`
+- `MEMORY.md`
+- `.ai/instructions/frontend-wails.md`
+
+Rules:
+
+- UI handles management concerns only.
+- Put API calls under `frontend/src/services/`.
+- Keep DTO fields aligned with Go JSON fields.
+- Update `MEMORY.md` after meaningful changes.

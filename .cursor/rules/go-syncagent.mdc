@@ -1,0 +1,18 @@
+---
+description: "Use when: Go SyncAgent backend rules"
+globs: ["**/*.go", "cmd/**", "internal/**", "configs/**", "migrations/**", "deploy/**"]
+alwaysApply: false
+---
+
+Read:
+
+- `AGENTS.md`
+- `MEMORY.md`
+- `.ai/instructions/go-syncagent.md`
+
+Rules:
+
+- Keep long-running synchronization logic in SyncAgent.
+- Keep `internal/` packages focused by responsibility.
+- ACK RabbitMQ messages only after successful business handling.
+- Mark uncertain design decisions as `<!-- 待确认 -->`.

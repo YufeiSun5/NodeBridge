@@ -1,0 +1,20 @@
+mode: server
+
+node:
+  id: server-001
+  name: 中心服务器
+
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  username: sync_user
+  password: encrypted_password
+  database: scada_center
+
+rabbitmq:
+  server_url: amqp://sync:password@127.0.0.1:5672/server-sync
+
+sync:
+  dispatch_batch_size: 500
+  retry_interval_seconds: 10
+  node_timeout_seconds: 60
