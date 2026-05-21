@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS sync_event_log (
   received_at DATETIME(3) NOT NULL,
   applied_at DATETIME(3) NULL,
   error_message TEXT NULL,
+  event_payload LONGTEXT NULL,
   UNIQUE KEY uk_event_id (event_id),
   KEY idx_table_pk (table_name, pk_value),
   KEY idx_origin_node (origin_node_id),
@@ -115,6 +116,16 @@ CREATE TABLE IF NOT EXISTS sync_dispatch_log (
   dispatched_at DATETIME(3) NULL,
   created_at DATETIME(3) NOT NULL,
   UNIQUE KEY uk_event_target (event_id, target_node_id)
+);
+
+CREATE TABLE IF NOT EXISTS sync_error_log (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  event_id VARCHAR(128) NULL,
+  module VARCHAR(64) NOT NULL,
+  error_message TEXT NOT NULL,
+  created_at DATETIME(3) NOT NULL,
+  KEY idx_event_id (event_id),
+  KEY idx_created_at (created_at)
 );
 
 CREATE TABLE IF NOT EXISTS sync_runtime_status (

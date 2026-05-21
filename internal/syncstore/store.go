@@ -3,8 +3,11 @@ package syncstore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/YufeiSun5/NodeBridge/internal/event"
 )
 
 const (
@@ -50,6 +53,90 @@ type FailedEvent struct {
 	Status       string
 	ErrorMessage string
 	CreatedAt    time.Time
+}
+
+type EventLogRecord struct {
+	Event              event.SyncEvent
+	TargetDatabaseName string
+	TargetTableName    string
+	PKValue            string
+	Direction          string
+	Status             string
+	ReceivedAt         time.Time
+	AppliedAt          time.Time
+	ErrorMessage       string
+	Payload            []byte
+}
+
+type ReplayEvent struct {
+	EventID      string
+	TargetNodeID string
+	Payload      []byte
+	CreatedAt    time.Time
+}
+
+func (s *Store) UpsertEventLog(ctx context.Context, record EventLogRecord) error {
+	if s.DB == nil {
+		return fmt.Errorf("sync store db is required")
+	}
+	if record.Event.EventID == "" || record.Event.DatabaseName == "" || record.Event.TableName == "" {
+		return fmt.Errorf("event_id, database_name and table_name are required")
+	}
+	if record.Status == "" {
+		return fmt.Errorf("event status is required")
+	}
+	payload := record.Payload
+	if len(payload) == 0 {
+		encoded, err := json.Marshal(record.Event)
+		if err != nil {
+			return fmt.Errorf("encode event payload: %w", err)
+		}
+		payload = encoded
+	}
+	receivedAt := record.ReceivedAt
+	if receivedAt.IsZero() {
+		receivedAt = s.now()
+	}
+	eventTime := record.Event.EventTime
+	if eventTime.IsZero() {
+		eventTime = receivedAt
+	}
+
+	_, err := s.DB.ExecContext(ctx, `
+INSERT INTO sync_event_log (
+  event_id, origin_node_id, source_node_id, database_name, table_name,
+  target_database_name, target_table_name, pk_value, op_type, direction,
+  status, event_time, received_at, applied_at, error_message, event_payload
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+  target_database_name = VALUES(target_database_name),
+  target_table_name = VALUES(target_table_name),
+  status = VALUES(status),
+  applied_at = VALUES(applied_at),
+  error_message = VALUES(error_message),
+  event_payload = VALUES(event_payload)
+`, record.Event.EventID,
+		record.Event.OriginNodeID,
+		record.Event.SourceNodeID,
+		record.Event.DatabaseName,
+		record.Event.TableName,
+		nullableString(record.TargetDatabaseName),
+		nullableString(record.TargetTableName),
+		record.PKValue,
+		record.Event.EventType,
+		record.Direction,
+		record.Status,
+		eventTime,
+		receivedAt,
+		nullableTime(record.AppliedAt),
+		nullableString(record.ErrorMessage),
+		string(payload),
+	)
+	if err != nil {
+		return fmt.Errorf("upsert event log: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) UpsertAck(ctx context.Context, record AckRecord) error {
@@ -157,6 +244,43 @@ LIMIT ?
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate failed events: %w", err)
+	}
+	return result, nil
+}
+
+func (s *Store) ListPendingReplays(ctx context.Context, limit int) ([]ReplayEvent, error) {
+	if s.DB == nil {
+		return nil, fmt.Errorf("sync store db is required")
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+
+	rows, err := s.DB.QueryContext(ctx, `
+SELECT a.event_id, a.target_node_id, e.event_payload, a.created_at
+FROM sync_ack_log a
+JOIN sync_event_log e ON e.event_id = a.event_id
+WHERE a.status = ? AND e.event_payload IS NOT NULL
+ORDER BY a.created_at ASC
+LIMIT ?
+`, StatusPending, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list pending replays: %w", err)
+	}
+	defer rows.Close()
+
+	var result []ReplayEvent
+	for rows.Next() {
+		var item ReplayEvent
+		var payload string
+		if err := rows.Scan(&item.EventID, &item.TargetNodeID, &payload, &item.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan pending replay: %w", err)
+		}
+		item.Payload = []byte(payload)
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate pending replays: %w", err)
 	}
 	return result, nil
 }

@@ -4,12 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
+	"time"
 
 	"github.com/YufeiSun5/NodeBridge/internal/apply"
 	"github.com/YufeiSun5/NodeBridge/internal/event"
 	"github.com/YufeiSun5/NodeBridge/internal/mapper"
 	"github.com/YufeiSun5/NodeBridge/internal/rabbitmq"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
+	"github.com/YufeiSun5/NodeBridge/internal/syncstore"
 )
 
 type MessageSource interface {
@@ -22,6 +26,16 @@ type EventPublisher interface {
 
 type DownlinkDispatcher interface {
 	Dispatch(ctx context.Context, evt event.SyncEvent, targetNodeID string) error
+}
+
+type EventLogStore interface {
+	UpsertEventLog(ctx context.Context, record syncstore.EventLogRecord) error
+}
+
+type ReplayStore interface {
+	ListPendingReplays(ctx context.Context, limit int) ([]syncstore.ReplayEvent, error)
+	UpsertAck(ctx context.Context, record syncstore.AckRecord) error
+	UpsertDispatch(ctx context.Context, record syncstore.DispatchRecord) error
 }
 
 type StepResult struct {
@@ -83,6 +97,7 @@ type ServerIngressRuntime struct {
 	Consumer   rabbitmq.Consumer
 	Rules      *rules.RuleSet
 	Worker     apply.Worker
+	EventStore EventLogStore
 	Dispatcher DownlinkDispatcher
 	EdgeNodes  []string
 }
@@ -167,8 +182,36 @@ func (r ServerIngressRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 		if !rule.Enable || rule.Direction == rules.DirectionIgnore {
 			return nil
 		}
+		if r.EventStore != nil {
+			// Persist first. / 先落库。 / 先に保存。
+			if err := r.EventStore.UpsertEventLog(ctx, syncstore.EventLogRecord{
+				Event:              evt,
+				TargetDatabaseName: mapped.TargetDatabase,
+				TargetTableName:    mapped.TargetTable,
+				PKValue:            pkValue(evt.PrimaryKey),
+				Direction:          rule.Direction,
+				Status:             syncstore.StatusPending,
+				Payload:            body,
+			}); err != nil {
+				return fmt.Errorf("persist ingress event: %w", err)
+			}
+		}
 		if _, err := r.Worker.Apply(ctx, mapped); err != nil {
 			return fmt.Errorf("apply ingress event: %w", err)
+		}
+		if r.EventStore != nil {
+			if err := r.EventStore.UpsertEventLog(ctx, syncstore.EventLogRecord{
+				Event:              evt,
+				TargetDatabaseName: mapped.TargetDatabase,
+				TargetTableName:    mapped.TargetTable,
+				PKValue:            pkValue(evt.PrimaryKey),
+				Direction:          rule.Direction,
+				Status:             syncstore.StatusSuccess,
+				AppliedAt:          time.Now(),
+				Payload:            body,
+			}); err != nil {
+				return fmt.Errorf("persist applied event: %w", err)
+			}
 		}
 		if shouldDispatch(*rule) {
 			count, err := r.dispatch(ctx, evt)
@@ -202,6 +245,69 @@ func (r ServerIngressRuntime) dispatch(ctx context.Context, evt event.SyncEvent)
 	return count, nil
 }
 
+type ReplayRuntime struct {
+	Store      ReplayStore
+	Dispatcher DownlinkDispatcher
+	Limit      int
+}
+
+func (r ReplayRuntime) RunOnce(ctx context.Context) (StepResult, error) {
+	if r.Store == nil {
+		return StepResult{}, fmt.Errorf("replay store is required")
+	}
+	if r.Dispatcher == nil {
+		return StepResult{}, fmt.Errorf("downlink dispatcher is required")
+	}
+	limit := r.Limit
+	if limit <= 0 {
+		limit = 1
+	}
+	items, err := r.Store.ListPendingReplays(ctx, limit)
+	if err != nil {
+		return StepResult{}, err
+	}
+	if len(items) == 0 {
+		return StepResult{Action: "empty"}, nil
+	}
+
+	item := items[0]
+	var evt event.SyncEvent
+	if err := json.Unmarshal(item.Payload, &evt); err != nil {
+		_ = r.Store.UpsertAck(ctx, syncstore.AckRecord{
+			EventID:      item.EventID,
+			TargetNodeID: item.TargetNodeID,
+			Status:       syncstore.StatusFailed,
+			ErrorMessage: "invalid replay payload",
+		})
+		return StepResult{Processed: true, EventID: item.EventID, Action: "failed"}, fmt.Errorf("parse replay event: %w", err)
+	}
+	// Replay only pending. / 只重放待处理。 / 保留だけ再送。
+	if err := r.Dispatcher.Dispatch(ctx, evt, item.TargetNodeID); err != nil {
+		_ = r.Store.UpsertAck(ctx, syncstore.AckRecord{
+			EventID:      item.EventID,
+			TargetNodeID: item.TargetNodeID,
+			Status:       syncstore.StatusFailed,
+			ErrorMessage: err.Error(),
+		})
+		return StepResult{Processed: true, EventID: item.EventID, Action: "failed"}, fmt.Errorf("replay dispatch event %s to %s: %w", item.EventID, item.TargetNodeID, err)
+	}
+	if err := r.Store.UpsertDispatch(ctx, syncstore.DispatchRecord{
+		EventID:      item.EventID,
+		TargetNodeID: item.TargetNodeID,
+		Status:       syncstore.StatusSuccess,
+	}); err != nil {
+		return StepResult{Processed: true, EventID: item.EventID, Action: "failed"}, err
+	}
+	if err := r.Store.UpsertAck(ctx, syncstore.AckRecord{
+		EventID:      item.EventID,
+		TargetNodeID: item.TargetNodeID,
+		Status:       syncstore.StatusSuccess,
+	}); err != nil {
+		return StepResult{Processed: true, EventID: item.EventID, Action: "failed"}, err
+	}
+	return StepResult{Processed: true, EventID: item.EventID, Action: "replayed", DispatchCount: 1}, nil
+}
+
 func shouldDispatch(rule rules.SyncRule) bool {
 	return rule.Direction == rules.DirectionBidirectional || rule.Direction == rules.DirectionServerToEdge
 }
@@ -223,4 +329,20 @@ func mapSyncEvent(body []byte, ruleSet *rules.RuleSet) (event.SyncEvent, mapper.
 		return event.SyncEvent{}, mapper.MappedEvent{}, fmt.Errorf("map sync event: %w", err)
 	}
 	return evt, mapped, nil
+}
+
+func pkValue(primaryKey map[string]any) string {
+	if len(primaryKey) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(primaryKey))
+	for key := range primaryKey {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", key, primaryKey[key]))
+	}
+	return strings.Join(parts, ",")
 }

@@ -183,6 +183,31 @@ func TestRunRetryEventRequiresIDs(t *testing.T) {
 	}
 }
 
+func TestRunReplayPendingOnceRequiresAMQPURL(t *testing.T) {
+	configPath := writeTempConfig(t, `
+mode: server
+node:
+  id: server-test
+  name: Server Test
+mysql:
+  database: scada_center
+rabbitmq: {}
+sync:
+  retry_interval_seconds: 1
+log_web:
+  enable: false
+`)
+	var stdout, stderr bytes.Buffer
+
+	err := run([]string{"replay-pending-once", "-config", configPath}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("expected missing amqp url error")
+	}
+	if !strings.Contains(err.Error(), "amqp-url or rabbitmq.server_url is required") {
+		t.Fatalf("unexpected error %v", err)
+	}
+}
+
 func TestRunForwardUploadOnceRequiresURLs(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 

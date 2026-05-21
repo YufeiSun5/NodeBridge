@@ -11,6 +11,7 @@ import (
 	"github.com/YufeiSun5/NodeBridge/internal/mapper"
 	"github.com/YufeiSun5/NodeBridge/internal/rabbitmq"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
+	"github.com/YufeiSun5/NodeBridge/internal/syncstore"
 )
 
 func TestEdgeUploadRuntimeForwardsAndAcks(t *testing.T) {
@@ -66,10 +67,12 @@ func TestServerIngressRuntimeAppliesDispatchesAndAcks(t *testing.T) {
 	msg := &fakeMessage{body: mustJSON(t, sampleEvent())}
 	worker := &fakeWorker{}
 	dispatcher := &fakeDispatcher{}
+	eventStore := &fakeEventStore{}
 	runtime := ServerIngressRuntime{
 		Source:     &fakeSource{msg: msg, ok: true},
 		Rules:      sampleRules(),
 		Worker:     worker,
+		EventStore: eventStore,
 		Dispatcher: dispatcher,
 		EdgeNodes:  []string{"edge-a", "edge-b", "edge-c"},
 	}
@@ -85,6 +88,9 @@ func TestServerIngressRuntimeAppliesDispatchesAndAcks(t *testing.T) {
 	if len(worker.events) != 1 {
 		t.Fatalf("expected one apply, got %d", len(worker.events))
 	}
+	if len(eventStore.records) != 2 || eventStore.records[0].Status != syncstore.StatusPending || eventStore.records[1].Status != syncstore.StatusSuccess {
+		t.Fatalf("expected pending and success event logs, got %+v", eventStore.records)
+	}
 	if worker.events[0].TargetTable != "device_settings" {
 		t.Fatalf("expected mapped target table, got %s", worker.events[0].TargetTable)
 	}
@@ -98,6 +104,25 @@ func TestServerIngressRuntimeAppliesDispatchesAndAcks(t *testing.T) {
 	}
 	if !msg.acked || msg.nacked {
 		t.Fatalf("expected ack only, got ack=%t nack=%t", msg.acked, msg.nacked)
+	}
+}
+
+func TestServerIngressRuntimeNacksOnEventStoreFailure(t *testing.T) {
+	msg := &fakeMessage{body: mustJSON(t, sampleEvent())}
+	runtime := ServerIngressRuntime{
+		Source:     &fakeSource{msg: msg, ok: true},
+		Consumer:   rabbitmq.Consumer{RequeueOnError: true},
+		Rules:      sampleRules(),
+		Worker:     &fakeWorker{},
+		EventStore: &fakeEventStore{err: errors.New("mysql log down")},
+	}
+
+	result, err := runtime.RunOnce(context.Background())
+	if err == nil {
+		t.Fatal("expected event store failure")
+	}
+	if result.Action != "failed" || msg.acked || !msg.nacked || !msg.requeue {
+		t.Fatalf("unexpected result=%+v ack=%t nack=%t requeue=%t", result, msg.acked, msg.nacked, msg.requeue)
 	}
 }
 
@@ -233,6 +258,52 @@ func TestRuntimeEmptySource(t *testing.T) {
 	}
 }
 
+func TestReplayRuntimeDispatchesPendingEvent(t *testing.T) {
+	dispatcher := &fakeDispatcher{}
+	store := &fakeReplayStore{
+		items: []syncstore.ReplayEvent{
+			{
+				EventID:      "evt-001",
+				TargetNodeID: "edge-b",
+				Payload:      mustJSON(t, sampleEvent()),
+			},
+		},
+	}
+	runtime := ReplayRuntime{Store: store, Dispatcher: dispatcher}
+
+	result, err := runtime.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.Action != "replayed" || result.EventID != "evt-001" || result.DispatchCount != 1 {
+		t.Fatalf("unexpected result %+v", result)
+	}
+	if len(dispatcher.targets) != 1 || dispatcher.targets[0] != "edge-b" {
+		t.Fatalf("unexpected targets %+v", dispatcher.targets)
+	}
+	if len(store.acks) != 1 || store.acks[0].Status != syncstore.StatusSuccess {
+		t.Fatalf("expected success ack, got %+v", store.acks)
+	}
+	if len(store.dispatches) != 1 || store.dispatches[0].Status != syncstore.StatusSuccess {
+		t.Fatalf("expected success dispatch, got %+v", store.dispatches)
+	}
+}
+
+func TestReplayRuntimeMarksInvalidPayloadFailed(t *testing.T) {
+	store := &fakeReplayStore{
+		items: []syncstore.ReplayEvent{
+			{EventID: "evt-001", TargetNodeID: "edge-b", Payload: []byte("{bad")},
+		},
+	}
+	result, err := ReplayRuntime{Store: store, Dispatcher: &fakeDispatcher{}}.RunOnce(context.Background())
+	if err == nil {
+		t.Fatal("expected invalid payload error")
+	}
+	if result.Action != "failed" || len(store.acks) != 1 || store.acks[0].Status != syncstore.StatusFailed {
+		t.Fatalf("unexpected result=%+v acks=%+v", result, store.acks)
+	}
+}
+
 type fakeSource struct {
 	msg rabbitmq.IncomingMessage
 	ok  bool
@@ -278,6 +349,37 @@ func (p *fakePublisher) Publish(ctx context.Context, req rabbitmq.PublishRequest
 type fakeWorker struct {
 	events []mapper.MappedEvent
 	err    error
+}
+
+type fakeEventStore struct {
+	records []syncstore.EventLogRecord
+	err     error
+}
+
+func (s *fakeEventStore) UpsertEventLog(ctx context.Context, record syncstore.EventLogRecord) error {
+	s.records = append(s.records, record)
+	return s.err
+}
+
+type fakeReplayStore struct {
+	items      []syncstore.ReplayEvent
+	acks       []syncstore.AckRecord
+	dispatches []syncstore.DispatchRecord
+	err        error
+}
+
+func (s *fakeReplayStore) ListPendingReplays(ctx context.Context, limit int) ([]syncstore.ReplayEvent, error) {
+	return s.items, s.err
+}
+
+func (s *fakeReplayStore) UpsertAck(ctx context.Context, record syncstore.AckRecord) error {
+	s.acks = append(s.acks, record)
+	return s.err
+}
+
+func (s *fakeReplayStore) UpsertDispatch(ctx context.Context, record syncstore.DispatchRecord) error {
+	s.dispatches = append(s.dispatches, record)
+	return s.err
 }
 
 func (w *fakeWorker) Apply(ctx context.Context, evt mapper.MappedEvent) (apply.Result, error) {

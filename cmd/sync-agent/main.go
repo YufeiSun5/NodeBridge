@@ -63,6 +63,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return runFailedEvents(args[1:], stdout, stderr)
 		case "retry-event":
 			return runRetryEvent(args[1:], stdout, stderr)
+		case "replay-pending-once":
+			return runReplayPendingOnce(args[1:], stdout, stderr)
 		case "serve-log-web":
 			return runServeLogWeb(args[1:], stdout, stderr)
 		case "run":
@@ -224,9 +226,10 @@ func runServerWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules
 				Channel: conn.Channel,
 				Queue:   "server.cdc.ingress.q",
 			},
-			Consumer: rabbitmq.Consumer{RequeueOnError: true},
-			Rules:    ruleSet,
-			Worker:   apply.NewSQLWorker(db),
+			Consumer:   rabbitmq.Consumer{RequeueOnError: true},
+			Rules:      ruleSet,
+			Worker:     apply.NewSQLWorker(db),
+			EventStore: syncstore.New(db),
 			Dispatcher: syncruntime.RoutingDownlinkDispatcher{
 				Publisher: publisher,
 				Exchange:  "server.dispatch.x",
@@ -457,9 +460,10 @@ func runConsumeOnce(args []string, stdout, stderr io.Writer) error {
 			Channel: conn.Channel,
 			Queue:   *queueName,
 		},
-		Consumer: rabbitmq.Consumer{RequeueOnError: *requeue},
-		Rules:    ruleSet,
-		Worker:   apply.NewSQLWorker(db),
+		Consumer:   rabbitmq.Consumer{RequeueOnError: *requeue},
+		Rules:      ruleSet,
+		Worker:     apply.NewSQLWorker(db),
+		EventStore: syncstore.New(db),
 	}
 	result, err := runtime.RunOnce(context.Background())
 	if err != nil {
@@ -673,6 +677,65 @@ func runRetryEvent(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	fmt.Fprintf(stdout, "event marked pending event_id=%s target_node_id=%s\n", *eventID, *targetNodeID)
+	return nil
+}
+
+func runReplayPendingOnce(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("replay-pending-once", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "configs/server.example.yaml", "path to sync-agent config file")
+	amqpURL := flags.String("amqp-url", "", "Server RabbitMQ AMQP URL")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+
+	cfg, err := appconfig.LoadFile(*configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load config failed: %v\n", err)
+		return err
+	}
+	if *amqpURL == "" {
+		*amqpURL = cfg.RabbitMQ.ServerURL
+	}
+	if *amqpURL == "" {
+		return fmt.Errorf("amqp-url or rabbitmq.server_url is required")
+	}
+	db, err := openMySQL(cfg)
+	if err != nil {
+		fmt.Fprintf(stderr, "open mysql failed: %v\n", err)
+		return err
+	}
+	defer db.Close()
+
+	conn, err := rabbitmq.Dial(*amqpURL)
+	if err != nil {
+		fmt.Fprintf(stderr, "rabbitmq connect failed: %v\n", err)
+		return err
+	}
+	defer conn.Close()
+	publisher, err := rabbitmq.NewPublisher(conn.Channel)
+	if err != nil {
+		fmt.Fprintf(stderr, "publisher init failed: %v\n", err)
+		return err
+	}
+
+	result, err := syncruntime.ReplayRuntime{
+		Store: syncstore.New(db),
+		Dispatcher: syncruntime.RoutingDownlinkDispatcher{
+			Publisher: publisher,
+			Exchange:  "server.dispatch.x",
+		},
+		Limit: 1,
+	}.RunOnce(context.Background())
+	if err != nil {
+		fmt.Fprintf(stderr, "replay pending failed: %v\n", err)
+		return err
+	}
+	if !result.Processed {
+		fmt.Fprintln(stdout, "no pending replay")
+		return nil
+	}
+	fmt.Fprintf(stdout, "pending replayed event_id=%s dispatch_count=%d\n", result.EventID, result.DispatchCount)
 	return nil
 }
 

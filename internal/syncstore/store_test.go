@@ -3,10 +3,12 @@ package syncstore
 import (
 	"context"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/YufeiSun5/NodeBridge/internal/event"
 )
 
 func TestStoreUpsertAckSuccess(t *testing.T) {
@@ -84,6 +86,52 @@ func TestStoreInsertError(t *testing.T) {
 	assertExpectations(t, mock)
 }
 
+func TestStoreUpsertEventLog(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	store := New(db)
+	store.Clock = fixedTime
+	evt := sampleSyncEvent()
+
+	mock.ExpectExec("INSERT INTO sync_event_log").
+		WithArgs(
+			"evt-001",
+			"edge-001",
+			"edge-001",
+			"scada_edge",
+			"device_config",
+			"scada_center",
+			"device_settings",
+			"id=1",
+			"UPDATE",
+			"BIDIRECTIONAL",
+			StatusSuccess,
+			evt.EventTime,
+			fixedTime(),
+			nil,
+			nil,
+			sqlmock.AnyArg(),
+		).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = store.UpsertEventLog(context.Background(), EventLogRecord{
+		Event:              evt,
+		TargetDatabaseName: "scada_center",
+		TargetTableName:    "device_settings",
+		PKValue:            "id=1",
+		Direction:          "BIDIRECTIONAL",
+		Status:             StatusSuccess,
+	})
+	if err != nil {
+		t.Fatalf("UpsertEventLog returned error: %v", err)
+	}
+	assertExpectations(t, mock)
+}
+
 func TestStoreListFailedEvents(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -108,6 +156,35 @@ LIMIT ?
 	}
 	if len(events) != 1 || events[0].EventID != "evt-001" {
 		t.Fatalf("unexpected failed events %+v", events)
+	}
+	assertExpectations(t, mock)
+}
+
+func TestStoreListPendingReplays(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery(regexp.QuoteMeta(`
+SELECT a.event_id, a.target_node_id, e.event_payload, a.created_at
+FROM sync_ack_log a
+JOIN sync_event_log e ON e.event_id = a.event_id
+WHERE a.status = ? AND e.event_payload IS NOT NULL
+ORDER BY a.created_at ASC
+LIMIT ?
+`)).
+		WithArgs(StatusPending, 10).
+		WillReturnRows(sqlmock.NewRows([]string{"event_id", "target_node_id", "event_payload", "created_at"}).
+			AddRow("evt-001", "edge-002", `{"event_id":"evt-001"}`, fixedTime()))
+
+	events, err := New(db).ListPendingReplays(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("ListPendingReplays returned error: %v", err)
+	}
+	if len(events) != 1 || events[0].TargetNodeID != "edge-002" || !strings.Contains(string(events[0].Payload), "evt-001") {
+		t.Fatalf("unexpected replay events %+v", events)
 	}
 	assertExpectations(t, mock)
 }
@@ -150,6 +227,9 @@ func TestStoreValidation(t *testing.T) {
 	if err := store.UpsertDispatch(context.Background(), DispatchRecord{}); err == nil {
 		t.Fatal("expected dispatch validation error")
 	}
+	if err := store.UpsertEventLog(context.Background(), EventLogRecord{}); err == nil {
+		t.Fatal("expected event log validation error")
+	}
 	if err := store.InsertError(context.Background(), ErrorRecord{}); err == nil {
 		t.Fatal("expected error log validation error")
 	}
@@ -164,4 +244,27 @@ func assertExpectations(t *testing.T, mock sqlmock.Sqlmock) {
 
 func fixedTime() time.Time {
 	return time.Date(2026, 5, 21, 14, 20, 0, 0, time.UTC)
+}
+
+func sampleSyncEvent() event.SyncEvent {
+	return event.SyncEvent{
+		EventID:      "evt-001",
+		EventType:    "UPDATE",
+		OriginNodeID: "edge-001",
+		SourceNodeID: "edge-001",
+		DatabaseName: "scada_edge",
+		TableName:    "device_config",
+		PrimaryKey: map[string]any{
+			"id": 1,
+		},
+		After: map[string]any{
+			"id":    1,
+			"name":  "Pump A",
+			"value": "ON",
+		},
+		SchemaVersion: 1,
+		CreatedAt:     fixedTime(),
+		EventTime:     fixedTime(),
+		TraceID:       "trace-001",
+	}
 }
