@@ -1,12 +1,36 @@
 # MEMORY
 
-Last updated: 2026-05-21 17:29 Asia/Shanghai
+Last updated: 2026-05-22 13:45 Asia/Shanghai
 
 ## 当前阶段
 
-- 项目处于 V0.18 CRUD E2E verified 阶段。
-- 当前仓库已有 Go MVP 骨架、配置样例、迁移样例、RabbitMQ 核心接口、表列映射、MySQL Apply Worker 和无感安装计划模型。
-- 当前已跑通节点注册、动态分发、HTTP 配置下发、CRUD/软删/幂等/单向表语义和三套独立 RabbitMQ 单机 Docker 联调；尚未实现批量发送/批量 Apply、Canal lab compose、Windows Service 和完整 Wails 前端。
+- 项目处于 V0.33 安装器预检阶段，正在把受管组件从 alpha manifest 执行器推进到离线安装包 catalog、SHA256 校验和命令计划。
+- 当前仓库已有 Go MVP 骨架、配置样例、迁移样例、RabbitMQ 核心接口、批量同步、表列映射、MySQL Apply Worker、Wails React UI 骨架、Wails UI API 契约和无感安装计划模型。
+- 当前已跑通节点注册、动态分发、HTTP 配置下发、CRUD/软删/幂等/单向表语义、50 条批量同步、三套独立 RabbitMQ 单机 Docker 联调，以及 1 Server + 10 Edge 的 11 MySQL / 11 RabbitMQ 现场拓扑验证；V0.21 改为优先支持 Wails 托盘常驻，不做 Windows Service。
+- 前后端协作已收敛为两文件模型：`frontend-backend-contract.md` 管稳定契约，`ai-collaboration-log.md` 管唯一活跃看板和历史流水。
+- 同步分发策略已从固定方向改为规则可配置：`dispatch_target` 控制是否下发、下发给所有 ACTIVE Edge 或指定 Edge；Server-side CDC 已可把中心库变更直接下发 Edge，不重复 Apply 中心库。
+- Wails 后端已开始消除 UI unknown 根因：Overview 暴露显式配置/节点/规则路径，时间 DTO 改为 RFC3339 字符串，规则 fallback 会落盘，外部 SyncAgent 输出进入日志文件并由 `GetLogs` 合并读取。
+- 前端需求已由后端批复；MCP Server 先做预留配置开关，默认关闭，前端只可通过 Wails 后端接口切换，不启动真实 MCP runtime。
+- Rules 编辑态已从超宽表格改为分组卡片；指定分发目标节点暂只能手填节点 ID，已在协作看板登记后端节点列表接口需求。
+- Rules 空字段语义已在 UI 中显式化：空源节点表示全部源节点，空列映射表示同名列映射，非 SELECTED_EDGES 时目标节点由分发策略自动决定。
+- Rules 编辑态已将空值默认语义改为醒目的提示条，并补齐目标库、目标表、包含列、排除列等空值说明。
+- 前端状态栏低调展示“遵循 MIT 协议”，Settings 页说明 MIT 允许范围和使用者注意事项。
+- V0.27 后端已冻结 SyncAgent 查找顺序和 stop-file 优雅停止协议，并新增 `GetAgentProcessStatus()` 供前端展示真实进程状态。
+- 压力测试已改为单进程批量发布入口 `publish-stress-batch`，避免逐条启动 CLI 造成吞吐数据失真。
+- 真实 Canal E2E 已通过：Edge A MySQL -> Canal -> 本地 RabbitMQ -> Server -> Edge B，以及 Server MySQL -> Canal -> Edge A / Edge B。
+- V0.27 门禁已通过：Go 全量测试、`go vet`、Wails contract check、前端 TypeScript/Vite build、`SyncAgent.exe` 构建。
+- 受管组件边界已落地为 `install-manifest.json` 模型；RabbitMQ/Canal 默认只管理带 NodeBridge 标识的 service、vhost、user、destination 和 config dir。
+- Config 页已接入 CDC `managed/external`、本机安装、配置目录和服务名字段，避免安装边界只停留在后端配置里。
+- 说明书页已新增独立“协议字段与关键字”章节，方向、分发、冲突、规则字段、空值默认和安全字段均提供三语解释。
+- V0.28 Canal soak 已通过 20 条批量验证，覆盖 Canal 批量捕获、RabbitMQ 批量转发、Apply、offset 和失败 ACK 基础校验。
+- V0.29 固定目录 package smoke 已通过：`build/bin/DataSync.exe`、`build/bin/SyncAgent.exe`、`config.yaml`、`sync-rules.yaml` 同目录可启动和校验。
+- 前端已接入 `GetAgentProcessStatus()`、批量失败重试和死信只读预览；`FB-012`、`FB-014` 已关闭。
+- V0.30 失败重试最小闭环已通过：失败 ACK 批量标记 `PENDING`、pending replay、Edge downlink apply 和死信只读预览均已跑通。
+- V0.31 已新增受管组件执行器 alpha 和只读 stdio MCP alpha；当前不执行真实离线安装包，只写 manifest/Canal 配置并可初始化 NodeBridge RabbitMQ topology。
+- Settings 页已接入受管组件安装计划与执行入口，展示 manifest 路径和操作结果，执行前要求管理解锁。
+- 前端页面规整已推进：Config 改为分组编辑，Overview/Failures 危险操作增加确认，Settings 开关和分组统一，Logs 筛选按钮语义明确。
+- V0.32 已新增 11 节点 soak 和断网恢复脚本，最小参数验证已通过，长参数可用于客户试用前压测。
+- V0.33 已新增离线安装包预检：`installer-assets-check` 校验路径和 SHA256，`installer-command-plan` 输出 Erlang/RabbitMQ/Canal Windows 命令计划；本版不真实安装、不注册服务。
 
 ## 已完成事项
 
@@ -90,6 +114,92 @@ Last updated: 2026-05-21 17:29 Asia/Shanghai
 - 已修复 Node API 测试脚本进程清理，避免 `go run` 子进程残留占用 18090。
 - 已让 Node API 使用独立 RabbitMQ topology channel 和 publisher channel，避免配置下发时通道状态互相影响。
 - 已新增 `docs/v0.18-crud-e2e.md`，记录 CRUD E2E 范围、命令和 V0.19 批量方向。
+- 已实现 V0.19 批量同步：默认 50 条或 500ms flush，Edge upload、Server ingress、Edge downlink 均支持 batch once。
+- 已新增批量 CLI：`forward-upload-batch-once`、`consume-batch-once`、`consume-downlink-batch-once`。
+- 已修复 RabbitMQ publisher confirm：确认通道改为初始化时注册并复用，避免批量发布时丢 confirm。
+- 已让同步事件解析兼容 Windows UTF-8 BOM，避免 PowerShell 生成 JSON 后解析失败。
+- 已新增 `scripts/lab-batch-e2e.ps1`，验证 50 条事件批量转发、批量应用、apply log 计数和顺序。
+- 已持久化暗色工业终端 UI 规范：`.ai/docs/ui-design-spec.md`，并接入 `AGENTS.md` 和前端 instruction。
+- 已创建 Wails React TypeScript 前端骨架：`frontend/`、设计 token、基础页面、Wails IPC service wrapper。
+- 已将 `cmd/datasync-ui` 接入 Wails2 app 入口，绑定现有 `App` 后端方法。
+- 已新增 `.ai/prompts/frontend-implementation.prompt.md`，便于把前端工作交给另一个 AI。
+- 已实现 V0.20 双线协作文档：`frontend-backend-contract.md`、`frontend-requirements.md`、`ai-collaboration-log.md`。
+- 已新增前端/后端轨道 Prompt：`frontend-track.prompt.md`、`backend-track.prompt.md`。
+- 已补强双线协作纪律：开工前查 open 项、解决后追加回复、阻塞时追加 blocker、交付时汇报协作项。
+- 已进一步约束后端：每次后端对话也必须读取协作日志，并主动记录需要前端处理的问题、DTO 变化和阻塞。
+- 已将前后端交流收敛为 Active Board：不再新增前端/后端分散看板，稳定接口只维护 contract。
+- 已新增 `internal/uiapi`，定义 Wails UI DTO、脱敏规则、空状态和操作结果结构。
+- 已扩展 `cmd/datasync-ui.App` 的稳定 Wails 方法，覆盖 Overview、Config、Rules、Queues、Failures、Logs 和 Agent control。
+- 已为 Wails UI 后端补充测试，覆盖配置脱敏、配置校验、规则读写和空状态。
+- 已实现前端初版页面交互：Overview、Config、Rules、Queues、Failures、Logs 均接入 Wails service wrapper，覆盖 loading、empty、error 和 unsupported 状态。
+- 已修复 vfox Node/npm 环境：重新安装并启用 nodejs@24.15.0，前端 `npm install` 和 `npm run build` 通过。
+- 已按 vfox 恢复 Go 1.25.5 环境，并完成 `go test ./...`、`go vet ./...` 验证。
+- 已实现 V0.21 Wails 后端真实接口基础：配置落盘、DPAPI 密钥保护、规则落盘、队列状态、失败事件、日志读取和诊断包导出。
+- 已实现托盘常驻后端支撑：退出密码校验、当前用户自启动查询和设置；托盘 UI 仍由前端负责。
+- 已新增 `scripts/lab-stress-e2e.ps1`，用于三 RabbitMQ + 三 MySQL 环境下 1,000 条默认压力测试。
+- 已明确 DataSync 前端三语要求：默认中文，支持中文、英文、日文切换，协议值和技术标识保持英文。
+- 已实现前端三语界面初版：新增 i18n provider、语言切换控件，并覆盖 Overview、Config、Rules、Queues、Failures、Logs 页面主要文案。
+- 已完成 V0.21 前端接口接入：托盘控制面、退出密码弹窗、自启动开关、诊断包导出和 `security.exit_password` 配置字段均已接入三语界面。
+- 已完成 V0.22 Wails 关闭行为：原生窗口关闭按钮隐藏到 Windows 系统托盘，显式退出通过 `RequestExit` 校验密码后只放行下一次 `runtime.Quit`。
+- 已修复 Wails 标准打包路径：根目录新增 Wails CLI 入口，后端实现抽到 `internal/datasyncui`，`cmd/datasync-ui` 保留薄入口；`wails build -clean` 已产出 `build/bin/DataSync.exe`。
+- 已补齐已有后端功能测试：密钥加密/合并、规则校验、诊断包、Wails 队列错误状态和退出密码空配置。
+- 已新增 `docs/backend-completion-plan.md`，整理后端已完成能力、测试覆盖和未完成计划。
+- 已实现管理解锁后端：`security.admin_password` 用于 `UnlockAdmin`，`security.exit_password` 用于托盘退出，敏感方法未解锁时拒绝执行，保存配置时管理密码不能为空。
+- 已更新前端要求：进入管理操作前必须解锁，锁定状态只允许只读概览和状态查看，前端需区分管理密码和退出密码。
+- 已修复 Wails 前端数据为空的直接原因：服务层改为优先调用 `window.go.datasyncui.App`，并保留旧 `main.App` fallback。
+- 已修复 Wails 打包资源风险：根目录入口改为 embed `frontend/dist`，避免 exe 启动时找不到前端资源。
+- 已删除临时前端审阅文档和过期 V0.20 交互说明，前后端交流统一回到 Active Board。
+- 已补齐 example/lab 配置中的 `security.admin_password` 与 `security.exit_password`。
+- 已实现 Wails 后端运行控制初版：`StartAgent`、`StopAgent`、`RestartAgent` 控制外部 `SyncAgent.exe` 进程，并支持重复启动保护。
+- 已构建 `build/bin/SyncAgent.exe`，并完成 Edge/Server 示例配置 CLI smoke；`DataSync.exe` 原生启动 smoke 通过。
+- 已按后端审阅意见完成前端 Admin Lock 接入：全局锁状态、解锁弹窗、敏感操作前置解锁、Rules 新增删除、Failures Retry 解锁和 Config 管理密码必填校验。
+- 已实现前端首次配置引导：空配置时 Overview、Queues、Failures、Logs 显示明确未配置提示，Start/Restart 先提示保存配置，Logs 增加诊断包导出入口。
+- 已修复 Wails Windows 标题栏关闭行为：点击 X 隐藏到系统托盘而不是退出；托盘双击或右键菜单可恢复窗口。
+- 已调整 Wails Windows 关闭路径：关闭按钮统一走 `OnBeforeClose` 拦截并隐藏窗口，只有退出密码通过后的 `RequestExit` 才允许真正退出，规避 Win11 下内置 `HideWindowOnClose` 行为不稳定。
+- 已优化 Windows 托盘交互：托盘图标左键单击或双击恢复窗口，右键弹出显示/退出菜单。
+- 已增强 Windows 托盘图标注册：通知区图标改为稳定 GUID 注册并启用 tooltip 显示，Explorer/任务栏重启后自动重新添加图标，同时记录 native tray ready 日志。
+- 已将 Windows 托盘图标改为代码生成的高对比度 HICON，并记录 `Shell_NotifyIcon` add/setversion/delete 结果，排查 Win11 通知区图标不可见问题。
+- 已修复托盘右键菜单兼容性：补充 NotifyIcon v4 / Win11 常用的 `WM_CONTEXTMENU` 处理，并优化前端顶部菜单和用户文案，移除不适合用户界面的 Wails/HTTP/后端调试提示。
+- 已按用户软件交互收敛顶部栏：窗口 X 默认隐藏到托盘，不再显示“隐藏到托盘”按钮；退出和语言选择移入软件设置，语言默认跟随操作系统并记住用户选择。
+- 已移除应用内重复品牌顶栏，原生窗口标题、总览产品名、托盘 tooltip 和托盘菜单统一为 `NodeBridge`；托盘事件改为按 NotifyIcon v4 低位事件码解析，修复右键菜单漏触发。
+- 已拆分 Settings 与 Sync Config：语言、窗口退出、安全密码和登录自启动归入软件设置；同步配置页只保留 Node/MySQL/RabbitMQ/CDC/Sync/Log Web 参数。
+- 已按后端协作意见补齐 Rules 分发策略 UI：`dispatch_target` 与 `dispatch_node_ids` 支持只读展示、编辑和三语说明。
+- 已实现 Windows 原生托盘 helper：托盘菜单提供显示窗口和退出入口，退出入口会触发前端退出密码弹窗，不绕过 `RequestExit`。
+- 已补强前端三语界面：托盘文案、状态文案、队列角色和 Rules `source_node_ids` 编辑均接入中英日。
+- 已优化 Rules 页使用引导：方向枚举保持英文协议值，右上角新增三语规则填写说明。
+- 已新增软件内说明书功能：独立 Manual 页面按首次配置、总览、配置、规则、队列、失败事件、日志诊断、托盘退出和常见状态分章展示三语说明。
+- 已优化前端锁定态：Config 和 Rules 未解锁时仅只读展示，不显示输入框或编辑/删除按钮；首次配置也需先解锁才进入编辑态，密码、token 等重要数据使用磨砂遮罩。
+- 已调整 Wails dev 前端命令：当前 vfox Node 缺少 `npm` shim，`wails.json` 改为直接调用本地 `tsc.cmd` 和 `vite.cmd`。
+- 已新增 `SyncRule.source_node_ids`，支持多个 Edge 源表同名但中心目标表不同的节点作用域规则。
+- 已让 Server ingress、Edge downlink、batch runtime 和 `apply-event` 使用事件来源节点匹配规则。
+- 已新增 `configs/sync-rules.10-edge.example.yaml`，覆盖 2 张多主同构表和 10 个 `data_all` 汇总表映射。
+- 已新增 `docs/v0.23-11-node-lab-plan.md`，明确 11 套 MySQL/RabbitMQ 实验范围和当前未测链路。
+- 已完成 V0.24 前置可用性测试盘点：现有三节点 lab、配置下发、断网缓存和 1,000 条压力测试通过。
+- 已新增 `docs/v0.24-backend-field-test-plan.md`，记录现场 11 节点缺口和后端修改计划。
+- 已实现 V0.24 现场拓扑验证：统一 lab 环境探测、补齐 `point_config` / `data_all` 迁移、生成 11 节点 Docker lab。
+- 已新增 11 节点 E2E：`data_all` 汇总到 `data_all_edge_001..010`、`device_config` / `point_config` 多主 fanout、Server-origin 模拟下发到 10 个 Edge。
+- 已新增 `dispatch-event-once`，用于 Server-origin 模拟事件直接走 Server dispatch，不经过 Server ingress apply。
+- 已通过 V0.24 门禁：`go test -count=1 ./...`、`go vet ./...`、Wails contract check、TypeScript + Vite build、3 节点全量回归和 11 节点新增 E2E。
+- 已新增可配置分发策略：`dispatch_target`、`dispatch_node_ids`，并记录到 `docs/sync-routing-policy.md`。
+- 已实现 V0.25 现场 MVP 同步策略：10 个 Edge `data_all` 汇总到中心 10 张目标表，两张多主表支持 Edge-origin fanout、Server-origin 下发和 SELECTED_EDGES 指定分发。
+- 已新增 Server-side CDC dispatch runtime、`server-cdc-dispatch-once` 和 Canal server dispatch worker 接入口，中心库变更可直接走下发链路。
+- 已写入 Frontend V0.26 Plan，要求前端使用 Overview 新字段、RFC3339 时间字段，并完成 exe 级验收。
+- 已实现 V0.26 后端 UI 状态补强：`GetOverview` 返回 `config_loaded/config_path/rules_path/node_id/node_name/cdc_message`，CDC 状态支持 `configured`。
+- 已修复 Wails `time.Time` 绑定警告方向：UI DTO 中失败事件、日志和 Auth 过期时间改为 RFC3339 string。
+- 已修复打包 exe 规则显示不稳定：`GetSyncRules` fallback 使用现场默认规则并自动落盘 `sync-rules.yaml`。
+- 已让外部 `SyncAgent.exe` stdout/stderr 写入 `logs/sync-agent.log`，`GetLogs` 合并读取 UI ring buffer 和 agent 日志。
+- 已新增 `docs/v0.26-backend-plan.md`，固化 V0.26 后端计划、前端输入、测试矩阵和退出条件。
+- 已批复前端 V0.26 需求，并新增 MCP Server 默认关闭的 Wails 预留接口与配置开关。
+- 已实现前端 V0.26 设置与状态接入：本地主题偏好、Overview 显式配置状态、CDC 详情、配置/规则路径和 Settings MCP Server 预留开关。
+- 已优化 Rules 页面：移除重复说明区，枚举字段保留下拉控件，启用字段改为滑动开关，复杂文本输入增加紧凑字段标签。
+- 已实现 V0.29 固定目录 package smoke：构建前端、`DataSync.exe`、`SyncAgent.exe`，复制配置/规则并验证 DataSync 进程启动。
+- 已新增试用运行手册，明确当前是工程试点 runbook，不是最终离线安装器。
+- 已实现 V0.30 失败重试闭环：批量重试 Wails/CLI、死信只读预览、pending replay 和三节点 lab retry E2E。
+- 已实现 V0.31 后端 alpha：`managed-plan/apply/repair/uninstall`、Wails 安装计划接口、诊断包安装摘要、只读 `mcp-stdio`。
+- 已接入 Settings 受管安装计划 UI：读取 `GetManagedInstallPlan`，执行 `ApplyManagedInstall` 前要求管理解锁，并展示 alpha 资源边界。
+- 已完成前端可用性优化：同步配置分组编辑、布尔项滑动开关、关键数字字段单位提示、失败批量重试确认、Agent 停止/重启确认和受管组件表格横向滚动。
+- 已实现 V0.32 11 节点长测入口：`lab-11-soak-e2e.ps1` 和 `lab-11-disconnect-e2e.ps1`，并将汇总文件纳入诊断包候选。
+- 已实现 V0.33 安装器安全预检：离线包 catalog 模型、SHA256 校验、命令计划 CLI 和 fake asset 单元测试。
 
 ## AI 工程化状态清单
 
@@ -129,12 +239,32 @@ Last updated: 2026-05-21 17:29 Asia/Shanghai
 - [x] V0.16 Separated RabbitMQ lab：Edge/Server 独立 broker，断开 Server broker 时 Edge 本地队列保留
 - [x] V0.17 Node management：HTTP 注册、非敏感配置管理、CONFIG_UPDATE 下发、动态 ACTIVE 节点分发
 - [x] V0.18 CRUD E2E：增删改、软删、幂等、单向表不分发、表列映射验收
+- [x] V0.19 Batch sync：50 条或 500ms flush、batch CLI、batch E2E
+- [x] V0.19 Wails UI skeleton：React TypeScript、暗色工业终端风格、Wails IPC 服务层
+- [x] V0.20 Frontend/backend contract：Wails API、DTO、前端需求和协作记录
+- [x] V0.21 Wails backend：配置持久化、密钥保护、托盘支撑接口、诊断包、压力测试脚本
+- [x] V0.22 Tray exit loop：窗口关闭隐藏到托盘、退出密码单次放行、前端退出流接入
+- [x] Wails native build：根目录 `wails build`、原生 exe 启动 smoke
+- [x] V0.22 Admin lock：管理解锁、手动锁定、敏感方法鉴权
+- [x] V0.22 Frontend Admin lock：全局锁状态、解锁弹窗、敏感操作拦截、规则新增删除
+- [x] V0.22 Frontend first-run guidance：配置缺失识别、unknown 文案分流、Logs 诊断导出
+- [x] V0.22 Wails tray close fix：Windows 标题栏 X 隐藏到系统托盘
+- [x] Wails dev command：绕过缺失 npm shim，直接调用本地 Vite/TypeScript
 - [x] RabbitMQ 无感安装计划：`internal/installer/rabbitmq`
+- [x] V0.24 11-node lab：1 Server + 10 Edge，11 MySQL / 11 RabbitMQ，汇总表、多主 fanout、Server-origin 模拟下发
+- [x] V0.28 Canal lab：Edge/Server 真实 Canal E2E 和 20 条 soak
+- [x] V0.29 Package smoke：固定目录 `DataSync.exe` + `SyncAgent.exe` 启动验证
+- [x] V0.30 Retry closure：失败 ACK 批量重试、pending replay、死信预览
+- [x] V0.31 Installer/MCP alpha：受管组件执行器 alpha、只读 stdio MCP
+- [x] V0.32 11-node soak：循环 stress、Server broker 恢复、Edge local broker 重启恢复
+- [x] V0.33 Installer preflight：离线包 catalog、SHA256 校验、命令计划，不触碰本机服务
 
 ## 后续建议
 
 - 使用正确 `NODEBRIDGE_RABBITMQ_URL` 和 `NODEBRIDGE_SERVER_MYSQL_DSN` 跑 `docs/v0.3-smoke.md`。
-- 下一步进入 V0.19：实现批量发送与批量 Apply，默认 `50 条或 500ms` 任一条件 flush，并保持单队列单 consumer 顺序。
+- 下一步继续 V0.34：在隔离 Windows VM 中执行 Erlang/OTP 与 RabbitMQ 静默安装、服务检测和卸载验证。
+- 前端待办：使用 `GetOverview` 新字段替代配置状态猜测，并用打包 exe 验收 Overview、Rules、Logs。
+- 后端未完成清单见 `docs/backend-completion-plan.md`。
 - 对接真实 MySQL 容器：设置 `NODEBRIDGE_APPLY_MYSQL_DSN` 后运行集成测试。
 - 进入 CDC 阶段：Canal Go client 选型、offset 保存、异常恢复。
 
@@ -142,8 +272,12 @@ Last updated: 2026-05-21 17:29 Asia/Shanghai
 
 - 项目最终名称是 `NodeBridge` 还是面向用户的 `DataSync`。
 - Canal Go client 当前使用 `github.com/withlin/canal-go`，后续可替换，依赖已隔离。
-- Windows Service 实现库、日志库、配置加密实现方式尚未确认。
-- 交付节奏：当前已具备后端技术试点基础；补齐 V0.19 批量性能、Windows Service 和最小 Wails 管理端后可做客户试用，V1.0 才是产品交付。
+- V0.21 不做 Windows Service；后续如需无人登录运行，再单独评估服务化版本。
+- vfox Node/npm 已可用；Go/Node shell 仍建议显式注入 vfox cache PATH 后执行自动化命令。
+- 当前 vfox Go 1.25.5 SDK/cache 缺少标准库 `src/` 和 `vet.exe`；已确认可用项目内 `.tools/go1.25.5/go` 作为 GOROOT 跑通 `go test ./...` 和 `go vet ./...`。
+- 前端当前通过空 `mode`、空 `node.id`、空 `mysql.database` 推断首次配置的问题已由后端 `GetOverview.config_loaded/config_path` 解决，前端仍需接入。
+- Wails 绑定生成 `Not found: time.Time` 警告已通过 UI DTO 时间字段 RFC3339 string 化解决。
+- 交付节奏：当前已具备后端技术试点基础；补齐 V0.20 前端构建/绑定、Windows Service 和最小管理端后可做客户试用，V1.0 才是产品交付。
 
 ## 改动记录
 
@@ -173,3 +307,72 @@ Last updated: 2026-05-21 17:29 Asia/Shanghai
 - 2026-05-21 16:41 | gpt-5 | 改为三套 RabbitMQ lab 并验证 Server 断开时 Edge 本地缓存。
 - 2026-05-21 17:10 | gpt-5 | 完成 V0.17 节点注册、动态分发和配置下发后端验收。
 - 2026-05-21 17:29 | gpt-5 | 完成 V0.18 CRUD/单向表 E2E、配置脚本修复和验收文档。
+- 2026-05-21 18:00 | gpt-5 | 完成 V0.19 批量同步、Wails React 骨架和 UI 规范持久化。
+- 2026-05-21 19:41 | gpt-5 | 完成 V0.20 前后端契约、协作文档和 Wails UI API 骨架。
+- 2026-05-21 19:45 | gpt-5 | 补强前后端 AI 协作日志检查、回复和交付汇报纪律。
+- 2026-05-21 19:47 | gpt-5 | 强化后端每次对话读取协作日志并主动记录前端待处理事项。
+- 2026-05-21 20:04 | gpt-5 | 实现前端初版 Wails 页面交互并恢复 vfox Node/Go 验证环境。
+- 2026-05-21 20:19 | gpt-5 | 完成 V0.21 Wails 后端真实接口、托盘支撑和压力测试脚本。
+- 2026-05-21 20:20 | gpt-5 | 更新 AGENTS 前端三语约束并实现 DataSync UI 中英日切换。
+- 2026-05-21 20:34 | gpt-5 | 接入 V0.21 前端托盘控制、退出鉴权、自启动、诊断包和安全配置界面。
+- 2026-05-21 20:46 | gpt-5 | 完成 V0.22 Wails 关闭隐藏到托盘和退出鉴权单次放行。
+- 2026-05-21 20:50 | gpt-5 | 修复 Wails 标准打包入口并完成原生 exe 构建和启动 smoke。
+- 2026-05-21 20:33 | gpt-5 | 补齐已有后端功能测试并整理后端未完成计划。
+- 2026-05-21 20:46 | gpt-5 | 增加管理解锁契约并保护敏感 Wails 后端方法。
+- 2026-05-21 21:02 | gpt-5 | 拆分管理密码和退出密码并更新前端协作契约。
+- 2026-05-21 21:08 | gpt-5 | 要求保存配置时必须设置管理密码并补充验证测试。
+- 2026-05-21 21:36 | gpt-5 | 修复 Wails 绑定入口和前端资源嵌入并补充契约检查。
+- 2026-05-21 21:36 | gpt-5 | 输出前端审阅意见并记录到协作日志。
+- 2026-05-21 21:36 | gpt-5 | 补齐示例配置安全字段，避免 UI 保存配置缺少管理密码。
+- 2026-05-21 21:58 | gpt-5 | 完成 Wails 后端外部 SyncAgent 进程控制和测试。
+- 2026-05-21 21:58 | gpt-5 | 构建 DataSync/SyncAgent 双 exe 并完成基础启动 smoke。
+- 2026-05-21 22:10 | gpt-5 | 按后端审阅意见接入前端 Admin Lock、敏感操作解锁和规则新增删除。
+- 2026-05-21 22:25 | gpt-5 | 实现前端首次配置引导、unknown 状态分流和后端待确认协作问题。
+- 2026-05-21 22:35 | gpt-5 | 修复 Wails Windows 标题栏关闭直接退出，改为隐藏到托盘。
+- 2026-05-21 22:55 | gpt-5 | 实现 Windows 原生托盘 helper，恢复“隐藏到托盘”行为，并补齐 Rules `source_node_ids` 与部分三语文案。
+- 2026-05-21 23:22 | gpt-5 | 优化 Rules 页说明区，补充 direction、source_node_ids、include/exclude 和 column mapping 的三语填写提示。
+- 2026-05-21 23:29 | gpt-5 | 新增软件内说明书页面，按功能章节提供中英日操作说明和协议字段速查。
+- 2026-05-21 23:49 | gpt-5 | 调整 Config/Rules 锁定态为只读展示，隐藏编辑控件并对重要数据做磨砂遮罩。
+- 2026-05-21 22:38 | gpt-5 | 修复当前 vfox Node 缺少 npm 时 Wails dev 无法启动的问题。
+- 2026-05-21 22:09 | gpt-5 | 增加节点作用域规则并记录 11 节点实验室计划。
+- 2026-05-21 22:39 | gpt-5 | 跑完整三节点可用性测试并制定 V0.24 后端现场测试计划。
+- 2026-05-21 23:51 | gpt-5 | 完成 V0.24 11 节点现场拓扑脚本、迁移、E2E 与门禁测试。
+- 2026-05-22 00:01 | gpt-5 | 收敛前后端交流为 contract 加 Active Board 两文件模型。
+- 2026-05-22 00:05 | gpt-5 | 删除临时前端审阅文档并开始收敛同步分发配置模型。
+- 2026-05-22 00:10 | gpt-5 | 增加可配置分发策略字段和同步路由策略文档。
+- 2026-05-22 00:10 | gpt-5 | 调整 Wails X 关闭处理为统一拦截隐藏，修复 Win11 下关闭未进托盘的兼容性问题。
+- 2026-05-22 00:16 | gpt-5 | 增加托盘图标左键单击恢复窗口，保留右键显示/退出菜单。
+- 2026-05-22 00:24 | gpt-5 | 增强 Windows 托盘图标注册稳定性，补 GUID、tooltip 和任务栏重建后自动恢复。
+- 2026-05-22 00:31 | gpt-5 | 将托盘图标替换为代码生成 HICON，并补充 Shell_NotifyIcon 结果日志。
+- 2026-05-22 00:42 | gpt-5 | 修复托盘右键菜单事件并收敛前端菜单、状态栏和用户文案。
+- 2026-05-22 00:52 | gpt-5 | 移除顶部隐藏/退出/语言控件，将语言和退出移入配置页应用设置，并默认使用系统语言。
+- 2026-05-22 01:02 | gpt-5 | 移除应用内顶部品牌行，统一 NodeBridge 可见名称，并修复托盘右键菜单事件解析。
+- 2026-05-22 01:20 | gpt-5 | 拆分 Settings 与 Sync Config 页面，更新前端契约测试以匹配新的软件设置边界。
+- 2026-05-22 01:21 | gpt-5 | 完成 V0.25 可配置分发、Server-origin 下发和 11 节点现场 E2E。
+- 2026-05-22 08:39 | gpt-5 | 审阅前端 unknown 数据问题并登记 V0.26 状态接口、规则路径和日志源缺口。
+- 2026-05-22 08:52 | gpt-5 | 接入 Rules 分发策略控件并关闭前端协作项 FB-004。
+- 2026-05-22 08:54 | gpt-5 | 写入前端 V0.26 计划并实现后端 UI 状态、规则落盘和 agent 日志补强。
+- 2026-05-22 09:00 | gpt-5 | 固化 V0.26 后端规划，覆盖 SyncAgent 控制、Canal soak、性能和 exe 验收。
+- 2026-05-22 09:17 | gpt-5 | 批复前端需求并新增 MCP Server 默认关闭的预留接口。
+- 2026-05-22 09:30 | gpt-5 | 实现前端主题切换、Overview V0.26 状态接入和 Settings MCP Server 开关。
+- 2026-05-22 09:42 | gpt-5 | 优化 Rules 页面输入形态，移除重复说明并将启用改为滑动开关。
+- 2026-05-22 10:04 | gpt-5 | 将 Rules 编辑态改为分组卡片布局，并登记 ACTIVE Edge 节点候选项接口需求。
+- 2026-05-22 10:13 | gpt-5 | 明确 Rules 空字段默认语义，避免源节点、目标节点和列映射空白被误认为未配置。
+- 2026-05-22 10:22 | gpt-5 | 增强 Rules 编辑态空值说明可读性，补齐缺失的默认语义提示。
+- 2026-05-22 10:14 | gpt-5 | 完成 V0.27 后端进程控制、可信压力入口和 Canal E2E 验证脚本。
+- 2026-05-22 10:20 | gpt-5 | 跑通 V0.27 Go、vet、Wails contract、前端 build 和 SyncAgent 构建门禁。
+- 2026-05-22 10:39 | gpt-5 | 新增 MIT License 并同步前端包许可元数据。
+- 2026-05-22 10:45 | gpt-5 | 在前端底部状态栏新增 MIT License 低调展示文案，并在 Settings 补充许可范围说明。
+- 2026-05-22 10:47 | gpt-5 | 实现受管组件 manifest、RabbitMQ/Canal 安装计划和资源归属边界。
+- 2026-05-22 10:51 | gpt-5 | 接入 Config 页 CDC 安装边界字段并跑通 Go/vet/contract/前端构建。
+- 2026-05-22 11:03 | gpt-5 | 写入优先级计划并实现 V0.28 Canal lab/soak 脚本，记录镜像拉取阻塞。
+- 2026-05-22 11:18 | gpt-5 | 只改说明书页，将协议字段从常驻参考区移入独立章节并补充规则字段细节。
+- 2026-05-22 11:21 | gpt-5 | 修复 Canal E2E/soak 脚本并跑通 Edge/Server 真实 CDC 验证。
+- 2026-05-22 11:58 | gpt-5 | 推进 V0.29 固定目录 package smoke、试用 runbook 和版本状态更新。
+- 2026-05-22 12:14 | gpt-5 | 完成 V0.30 失败重试、批量重试、死信预览和 lab 验证。
+- 2026-05-22 13:10 | gpt-5 | 完成 V0.31 受管安装执行器 alpha 和只读 MCP stdio alpha。
+- 2026-05-22 13:28 | gpt-5 | Settings 接入受管组件安装计划和执行入口，关闭 FB-015。
+- 2026-05-22 13:46 | gpt-5 | 完成前端页面规整和危险操作确认，保持 FB-011 由后端继续处理。
+- 2026-05-22 13:31 | gpt-5 | 完成 V0.32 11 节点 soak 和断网恢复验证入口。
+- 2026-05-22 13:45 | gpt-5 | 完成 V0.33 安装器离线包预检和命令计划。
+- 2026-05-22 12:28 | gpt-5 | 前端接入 SyncAgent 真实进程状态、Failures 批量重试和死信只读预览。

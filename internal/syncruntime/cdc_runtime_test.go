@@ -10,6 +10,8 @@ import (
 	"github.com/YufeiSun5/NodeBridge/internal/event"
 	"github.com/YufeiSun5/NodeBridge/internal/loop"
 	"github.com/YufeiSun5/NodeBridge/internal/rabbitmq"
+	"github.com/YufeiSun5/NodeBridge/internal/rules"
+	"github.com/YufeiSun5/NodeBridge/internal/syncstore"
 )
 
 func TestCDCUploadRuntimePublishesNormalizedEvent(t *testing.T) {
@@ -100,6 +102,53 @@ func TestCDCUploadRuntimePropagatesErrors(t *testing.T) {
 	}
 }
 
+func TestServerCDCDispatchRuntimeDispatchesWithoutApply(t *testing.T) {
+	dispatcher := &fakeDispatcher{}
+	eventStore := &fakeEventStore{}
+	result, err := (ServerCDCDispatchRuntime{
+		Source:     &fakeChangeSource{change: sampleServerChange(), ok: true},
+		Decider:    fakeDecider{decision: loop.Decision{Upload: true, Reason: "server local"}},
+		Normalizer: fakeNormalizer{event: sampleServerEvent()},
+		Rules:      sampleServerRules(),
+		Dispatcher: dispatcher,
+		EdgeNodes:  []string{"edge-001", "edge-002"},
+		EventStore: eventStore,
+	}).RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.Action != "dispatched" || result.EventID != "evt-server-001" || result.DispatchCount != 2 {
+		t.Fatalf("unexpected result %+v", result)
+	}
+	if len(dispatcher.targets) != 2 || dispatcher.targets[0] != "edge-001" || dispatcher.targets[1] != "edge-002" {
+		t.Fatalf("unexpected dispatch targets %+v", dispatcher.targets)
+	}
+	if len(eventStore.records) != 2 || eventStore.records[0].Status != syncstore.StatusPending || eventStore.records[1].Status != syncstore.StatusSuccess {
+		t.Fatalf("expected pending and success event logs, got %+v", eventStore.records)
+	}
+}
+
+func TestServerCDCDispatchRuntimeSuppressesReplay(t *testing.T) {
+	dispatcher := &fakeDispatcher{}
+	result, err := (ServerCDCDispatchRuntime{
+		Source:     &fakeChangeSource{change: sampleServerChange(), ok: true},
+		Decider:    fakeDecider{decision: loop.Decision{Upload: false, Reason: "replayed"}},
+		Normalizer: fakeNormalizer{event: sampleServerEvent()},
+		Rules:      sampleServerRules(),
+		Dispatcher: dispatcher,
+		EdgeNodes:  []string{"edge-001"},
+	}).RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.Action != "suppressed" || result.DispatchCount != 0 {
+		t.Fatalf("unexpected result %+v", result)
+	}
+	if len(dispatcher.targets) != 0 {
+		t.Fatalf("suppressed replay should not dispatch, got %+v", dispatcher.targets)
+	}
+}
+
 type fakeChangeSource struct {
 	change cdc.ChangeEvent
 	ok     bool
@@ -135,6 +184,42 @@ func sampleChange() cdc.ChangeEvent {
 		PrimaryKey:   map[string]any{"id": 1},
 		After:        map[string]any{"id": 1, "name": "Pump A"},
 	}
+}
+
+func sampleServerChange() cdc.ChangeEvent {
+	return cdc.ChangeEvent{
+		DatabaseName: "scada_center",
+		TableName:    "device_config",
+		Operation:    cdc.OperationUpdate,
+		PrimaryKey:   map[string]any{"id": 1},
+		After:        map[string]any{"id": 1, "name": "Server Pump", "value": "ON"},
+	}
+}
+
+func sampleServerEvent() event.SyncEvent {
+	evt := sampleEvent()
+	evt.EventID = "evt-server-001"
+	evt.OriginNodeID = "server-001"
+	evt.SourceNodeID = "server-001"
+	evt.DatabaseName = "scada_center"
+	evt.TableName = "device_config"
+	return evt
+}
+
+func sampleServerRules() *rules.RuleSet {
+	return &rules.RuleSet{Rules: []rules.SyncRule{
+		{
+			ID:                 "server-device",
+			DatabaseName:       "scada_center",
+			TableName:          "device_config",
+			TargetDatabaseName: "scada_edge",
+			TargetTableName:    "device_config",
+			Direction:          rules.DirectionServerToEdge,
+			DispatchTarget:     rules.DispatchActiveEdges,
+			Enable:             true,
+			PrimaryKeys:        []string{"id"},
+		},
+	}}
 }
 
 var _ = rabbitmq.PublishRequest{}

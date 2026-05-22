@@ -1,0 +1,168 @@
+rules:
+  # Same schema, multi-master. / 同结构多主。 / 同一構造のマルチマスター。
+  - id: device-config-bidirectional
+    database_name: scada_edge
+    table_name: device_config
+    target_database_name: scada_center
+    target_table_name: device_config
+    direction: BIDIRECTIONAL
+    dispatch_target: ACTIVE_EDGES
+    conflict_policy: LAST_WRITE_WIN
+    enable: true
+    primary_keys: [id]
+
+  - id: point-config-bidirectional
+    database_name: scada_edge
+    table_name: point_config
+    target_database_name: scada_center
+    target_table_name: point_config
+    direction: BIDIRECTIONAL
+    dispatch_target: ACTIVE_EDGES
+    conflict_policy: LAST_WRITE_WIN
+    enable: true
+    primary_keys: [id]
+
+  # Server-origin changes. / 中心本地变更。 / 中央側の変更。
+  - id: server-device-config-downlink
+    database_name: scada_center
+    table_name: device_config
+    target_database_name: scada_edge
+    target_table_name: device_config
+    direction: SERVER_TO_EDGE
+    dispatch_target: ACTIVE_EDGES
+    conflict_policy: LAST_WRITE_WIN
+    enable: true
+    primary_keys: [id]
+
+  - id: server-point-config-downlink
+    database_name: scada_center
+    table_name: point_config
+    target_database_name: scada_edge
+    target_table_name: point_config
+    direction: SERVER_TO_EDGE
+    dispatch_target: ACTIVE_EDGES
+    conflict_policy: LAST_WRITE_WIN
+    enable: true
+    primary_keys: [id]
+
+  # Edge summary tables share source name `data_all`; server tables are node-scoped.
+  # 从节点同名 data_all，中心按节点分表。 / Edgeのdata_allを中央でノード別に分ける。
+  - id: data-all-edge-001
+    database_name: scada_edge
+    table_name: data_all
+    source_node_ids: [edge-001]
+    target_database_name: scada_center
+    target_table_name: data_all_edge_001
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: data-all-edge-002
+    database_name: scada_edge
+    table_name: data_all
+    source_node_ids: [edge-002]
+    target_database_name: scada_center
+    target_table_name: data_all_edge_002
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: data-all-edge-003
+    database_name: scada_edge
+    table_name: data_all
+    source_node_ids: [edge-003]
+    target_database_name: scada_center
+    target_table_name: data_all_edge_003
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: data-all-edge-004
+    database_name: scada_edge
+    table_name: data_all
+    source_node_ids: [edge-004]
+    target_database_name: scada_center
+    target_table_name: data_all_edge_004
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: data-all-edge-005
+    database_name: scada_edge
+    table_name: data_all
+    source_node_ids: [edge-005]
+    target_database_name: scada_center
+    target_table_name: data_all_edge_005
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: data-all-edge-006
+    database_name: scada_edge
+    table_name: data_all
+    source_node_ids: [edge-006]
+    target_database_name: scada_center
+    target_table_name: data_all_edge_006
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: data-all-edge-007
+    database_name: scada_edge
+    table_name: data_all
+    source_node_ids: [edge-007]
+    target_database_name: scada_center
+    target_table_name: data_all_edge_007
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: data-all-edge-008
+    database_name: scada_edge
+    table_name: data_all
+    source_node_ids: [edge-008]
+    target_database_name: scada_center
+    target_table_name: data_all_edge_008
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: data-all-edge-009
+    database_name: scada_edge
+    table_name: data_all
+    source_node_ids: [edge-009]
+    target_database_name: scada_center
+    target_table_name: data_all_edge_009
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: data-all-edge-010
+    database_name: scada_edge
+    table_name: data_all
+    source_node_ids: [edge-010]
+    target_database_name: scada_center
+    target_table_name: data_all_edge_010
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]

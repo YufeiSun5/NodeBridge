@@ -13,16 +13,20 @@ const (
 	ModeUnknown = ""
 	ModeEdge    = "edge"
 	ModeServer  = "server"
+
+	RedactedSecret = "******"
 )
 
 type Config struct {
-	Mode     string         `json:"mode" yaml:"mode"`
-	Node     NodeConfig     `json:"node" yaml:"node"`
-	MySQL    MySQLConfig    `json:"mysql" yaml:"mysql"`
-	RabbitMQ RabbitMQConfig `json:"rabbitmq" yaml:"rabbitmq"`
-	CDC      CDCConfig      `json:"cdc" yaml:"cdc"`
-	Sync     SyncConfig     `json:"sync" yaml:"sync"`
-	LogWeb   LogWebConfig   `json:"log_web" yaml:"log_web"`
+	Mode     string          `json:"mode" yaml:"mode"`
+	Node     NodeConfig      `json:"node" yaml:"node"`
+	MySQL    MySQLConfig     `json:"mysql" yaml:"mysql"`
+	RabbitMQ RabbitMQConfig  `json:"rabbitmq" yaml:"rabbitmq"`
+	CDC      CDCConfig       `json:"cdc" yaml:"cdc"`
+	Sync     SyncConfig      `json:"sync" yaml:"sync"`
+	LogWeb   LogWebConfig    `json:"log_web" yaml:"log_web"`
+	MCP      MCPServerConfig `json:"mcp_server,omitempty" yaml:"mcp_server,omitempty"`
+	Security SecurityConfig  `json:"security,omitempty" yaml:"security,omitempty"`
 }
 
 type NodeConfig struct {
@@ -52,8 +56,12 @@ type RabbitMQConfig struct {
 
 type CDCConfig struct {
 	Type        string `json:"type" yaml:"type"`
+	Mode        string `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Install     bool   `json:"install,omitempty" yaml:"install,omitempty"`
 	ReaderName  string `json:"reader_name,omitempty" yaml:"reader_name,omitempty"`
 	CanalAddr   string `json:"canal_addr,omitempty" yaml:"canal_addr,omitempty"`
+	ConfigDir   string `json:"config_dir,omitempty" yaml:"config_dir,omitempty"`
+	ServiceName string `json:"service_name,omitempty" yaml:"service_name,omitempty"`
 	Destination string `json:"destination,omitempty" yaml:"destination,omitempty"`
 	Username    string `json:"username,omitempty" yaml:"username,omitempty"`
 	Password    string `json:"password,omitempty" yaml:"password,omitempty"`
@@ -65,6 +73,7 @@ type CDCConfig struct {
 type SyncConfig struct {
 	UploadBatchSize         int `json:"upload_batch_size,omitempty" yaml:"upload_batch_size,omitempty"`
 	DispatchBatchSize       int `json:"dispatch_batch_size,omitempty" yaml:"dispatch_batch_size,omitempty"`
+	FlushIntervalMillis     int `json:"flush_interval_millis,omitempty" yaml:"flush_interval_millis,omitempty"`
 	RetryIntervalSeconds    int `json:"retry_interval_seconds" yaml:"retry_interval_seconds"`
 	HeartbeatIntervalSecond int `json:"heartbeat_interval_seconds,omitempty" yaml:"heartbeat_interval_seconds,omitempty"`
 	NodeTimeoutSeconds      int `json:"node_timeout_seconds,omitempty" yaml:"node_timeout_seconds,omitempty"`
@@ -77,6 +86,15 @@ type LogWebConfig struct {
 	Token  string `json:"token" yaml:"token"`
 }
 
+type MCPServerConfig struct {
+	Enable bool `json:"enable" yaml:"enable"`
+}
+
+type SecurityConfig struct {
+	AdminPassword string `json:"admin_password,omitempty" yaml:"admin_password,omitempty"`
+	ExitPassword  string `json:"exit_password,omitempty" yaml:"exit_password,omitempty"`
+}
+
 func LoadFile(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -86,6 +104,9 @@ func LoadFile(path string) (*Config, error) {
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config %q: %w", path, err)
+	}
+	if err := DecryptSecrets(&cfg, DefaultSecretProtector()); err != nil {
+		return nil, fmt.Errorf("decrypt config %q: %w", path, err)
 	}
 
 	if err := cfg.Validate(); err != nil {

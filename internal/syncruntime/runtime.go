@@ -1,6 +1,7 @@
 package syncruntime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -51,6 +52,7 @@ type StepResult struct {
 	EventID       string
 	Action        string
 	DispatchCount int
+	Count         int
 }
 
 type EdgeUploadRuntime struct {
@@ -59,6 +61,16 @@ type EdgeUploadRuntime struct {
 	Consumer   rabbitmq.Consumer
 	Exchange   string
 	RoutingKey string
+}
+
+type EdgeUploadBatchRuntime struct {
+	Source        BatchMessageSource
+	Publisher     EventPublisher
+	Consumer      rabbitmq.Consumer
+	Exchange      string
+	RoutingKey    string
+	MaxBatch      int
+	FlushInterval time.Duration
 }
 
 func (r EdgeUploadRuntime) RunOnce(ctx context.Context) (StepResult, error) {
@@ -81,7 +93,7 @@ func (r EdgeUploadRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 	// ACK after apply. / Apply 后 ACK。 / Apply 後 ACK。
 	err = r.Consumer.Handle(ctx, msg, func(ctx context.Context, body []byte) error {
 		var evt event.SyncEvent
-		if err := json.Unmarshal(body, &evt); err != nil {
+		if err := json.Unmarshal(cleanJSONBody(body), &evt); err != nil {
 			return fmt.Errorf("parse upload event: %w", err)
 		}
 		eventID = evt.EventID
@@ -100,6 +112,43 @@ func (r EdgeUploadRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 	return StepResult{Processed: true, EventID: eventID, Action: "forwarded"}, nil
 }
 
+func (r EdgeUploadBatchRuntime) RunOnce(ctx context.Context) (StepResult, error) {
+	if r.Source == nil {
+		return StepResult{}, fmt.Errorf("batch message source is required")
+	}
+	if r.Publisher == nil {
+		return StepResult{}, fmt.Errorf("event publisher is required")
+	}
+	messages, err := r.Source.GetBatch(ctx, defaultBatchSize(r.MaxBatch), defaultFlushInterval(r.FlushInterval))
+	if err != nil {
+		return StepResult{}, err
+	}
+	if len(messages) == 0 {
+		return StepResult{Action: "empty"}, nil
+	}
+
+	var lastEventID string
+	err = r.Consumer.HandleBatch(ctx, messages, func(ctx context.Context, body []byte) error {
+		eventID, err := eventIDFromBody(body)
+		if err != nil {
+			return err
+		}
+		lastEventID = eventID
+		if err := r.Publisher.Publish(ctx, rabbitmq.PublishRequest{
+			Exchange:   r.Exchange,
+			RoutingKey: r.RoutingKey,
+			Body:       body,
+		}); err != nil {
+			return fmt.Errorf("forward upload event: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return StepResult{Processed: true, EventID: lastEventID, Action: "failed", Count: len(messages)}, err
+	}
+	return StepResult{Processed: true, EventID: lastEventID, Action: "forwarded", Count: len(messages)}, nil
+}
+
 type ServerIngressRuntime struct {
 	Source     MessageSource
 	Consumer   rabbitmq.Consumer
@@ -111,6 +160,19 @@ type ServerIngressRuntime struct {
 	NodeStore  ActiveNodeStore
 }
 
+type ServerIngressBatchRuntime struct {
+	Source        BatchMessageSource
+	Consumer      rabbitmq.Consumer
+	Rules         *rules.RuleSet
+	Worker        apply.Worker
+	EventStore    EventLogStore
+	Dispatcher    DownlinkDispatcher
+	EdgeNodes     []string
+	NodeStore     ActiveNodeStore
+	MaxBatch      int
+	FlushInterval time.Duration
+}
+
 type EdgeDownlinkRuntime struct {
 	Source                 MessageSource
 	Consumer               rabbitmq.Consumer
@@ -118,6 +180,17 @@ type EdgeDownlinkRuntime struct {
 	Worker                 apply.Worker
 	TargetDatabaseOverride string
 	ConfigStore            NodeConfigStore
+}
+
+type EdgeDownlinkBatchRuntime struct {
+	Source                 BatchMessageSource
+	Consumer               rabbitmq.Consumer
+	Rules                  *rules.RuleSet
+	Worker                 apply.Worker
+	TargetDatabaseOverride string
+	ConfigStore            NodeConfigStore
+	MaxBatch               int
+	FlushInterval          time.Duration
 }
 
 func (r EdgeDownlinkRuntime) RunOnce(ctx context.Context) (StepResult, error) {
@@ -143,7 +216,7 @@ func (r EdgeDownlinkRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 	// ACK after apply. / Apply 后 ACK。 / Apply 後 ACK。
 	err = r.Consumer.Handle(ctx, msg, func(ctx context.Context, body []byte) error {
 		var raw event.SyncEvent
-		if err := json.Unmarshal(body, &raw); err != nil {
+		if err := json.Unmarshal(cleanJSONBody(body), &raw); err != nil {
 			return fmt.Errorf("parse downlink event: %w", err)
 		}
 		eventID = raw.EventID
@@ -158,7 +231,7 @@ func (r EdgeDownlinkRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 			return err
 		}
 		eventID = evt.EventID
-		rule := r.Rules.Find(evt.DatabaseName, evt.TableName)
+		rule := findRuleForEvent(r.Rules, evt)
 		if !rule.Enable || rule.Direction == rules.DirectionIgnore {
 			return nil
 		}
@@ -176,6 +249,39 @@ func (r EdgeDownlinkRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 		return StepResult{Processed: true, EventID: eventID, Action: "failed"}, err
 	}
 	return StepResult{Processed: true, EventID: eventID, Action: "applied"}, nil
+}
+
+func (r EdgeDownlinkBatchRuntime) RunOnce(ctx context.Context) (StepResult, error) {
+	if r.Source == nil {
+		return StepResult{}, fmt.Errorf("batch message source is required")
+	}
+	if r.Rules == nil {
+		return StepResult{}, fmt.Errorf("rules are required")
+	}
+	if r.Worker == nil {
+		return StepResult{}, fmt.Errorf("apply worker is required")
+	}
+	messages, err := r.Source.GetBatch(ctx, defaultBatchSize(r.MaxBatch), defaultFlushInterval(r.FlushInterval))
+	if err != nil {
+		return StepResult{}, err
+	}
+	if len(messages) == 0 {
+		return StepResult{Action: "empty"}, nil
+	}
+
+	var lastEventID string
+	err = r.Consumer.HandleBatch(ctx, messages, func(ctx context.Context, body []byte) error {
+		eventID, err := r.applyDownlinkBody(ctx, body)
+		if err != nil {
+			return err
+		}
+		lastEventID = eventID
+		return nil
+	})
+	if err != nil {
+		return StepResult{Processed: true, EventID: lastEventID, Action: "failed", Count: len(messages)}, err
+	}
+	return StepResult{Processed: true, EventID: lastEventID, Action: "applied", Count: len(messages)}, nil
 }
 
 func (r ServerIngressRuntime) RunOnce(ctx context.Context) (StepResult, error) {
@@ -205,7 +311,7 @@ func (r ServerIngressRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 			return err
 		}
 		eventID = evt.EventID
-		rule := r.Rules.Find(evt.DatabaseName, evt.TableName)
+		rule := findRuleForEvent(r.Rules, evt)
 		if !rule.Enable || rule.Direction == rules.DirectionIgnore {
 			return nil
 		}
@@ -241,7 +347,7 @@ func (r ServerIngressRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 			}
 		}
 		if shouldDispatch(*rule) {
-			count, err := r.dispatch(ctx, evt)
+			count, err := r.dispatch(ctx, evt, *rule)
 			if err != nil {
 				return err
 			}
@@ -255,12 +361,150 @@ func (r ServerIngressRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 	return StepResult{Processed: true, EventID: eventID, Action: "applied", DispatchCount: dispatchCount}, nil
 }
 
-func (r ServerIngressRuntime) dispatch(ctx context.Context, evt event.SyncEvent) (int, error) {
+func (r ServerIngressBatchRuntime) RunOnce(ctx context.Context) (StepResult, error) {
+	if r.Source == nil {
+		return StepResult{}, fmt.Errorf("batch message source is required")
+	}
+	if r.Rules == nil {
+		return StepResult{}, fmt.Errorf("rules are required")
+	}
+	if r.Worker == nil {
+		return StepResult{}, fmt.Errorf("apply worker is required")
+	}
+	messages, err := r.Source.GetBatch(ctx, defaultBatchSize(r.MaxBatch), defaultFlushInterval(r.FlushInterval))
+	if err != nil {
+		return StepResult{}, err
+	}
+	if len(messages) == 0 {
+		return StepResult{Action: "empty"}, nil
+	}
+
+	var lastEventID string
+	dispatchTotal := 0
+	err = r.Consumer.HandleBatch(ctx, messages, func(ctx context.Context, body []byte) error {
+		eventID, dispatchCount, err := r.applyIngressBody(ctx, body)
+		if err != nil {
+			return err
+		}
+		lastEventID = eventID
+		dispatchTotal += dispatchCount
+		return nil
+	})
+	if err != nil {
+		return StepResult{Processed: true, EventID: lastEventID, Action: "failed", DispatchCount: dispatchTotal, Count: len(messages)}, err
+	}
+	return StepResult{Processed: true, EventID: lastEventID, Action: "applied", DispatchCount: dispatchTotal, Count: len(messages)}, nil
+}
+
+func (r EdgeDownlinkRuntime) applyDownlinkBody(ctx context.Context, body []byte) (string, error) {
+	var raw event.SyncEvent
+	if err := json.Unmarshal(cleanJSONBody(body), &raw); err != nil {
+		return "", fmt.Errorf("parse downlink event: %w", err)
+	}
+	if raw.EventType == event.TypeConfigUpdate {
+		if r.ConfigStore == nil {
+			return raw.EventID, fmt.Errorf("config store is required")
+		}
+		return raw.EventID, r.ConfigStore.UpsertNodeConfig(ctx, nodeConfigFromEvent(raw))
+	}
+	evt, mapped, err := mapSyncEvent(body, r.Rules)
+	if err != nil {
+		return raw.EventID, err
+	}
+	rule := findRuleForEvent(r.Rules, evt)
+	if !rule.Enable || rule.Direction == rules.DirectionIgnore {
+		return evt.EventID, nil
+	}
+	if r.TargetDatabaseOverride != "" {
+		// Local DB wins. / 本地库优先。 / ローカルDB優先。
+		mapped.TargetDatabase = r.TargetDatabaseOverride
+		mapped.Event.DatabaseName = r.TargetDatabaseOverride
+	}
+	if _, err := r.Worker.Apply(ctx, mapped); err != nil {
+		return evt.EventID, fmt.Errorf("apply downlink event: %w", err)
+	}
+	return evt.EventID, nil
+}
+
+func (r EdgeDownlinkBatchRuntime) applyDownlinkBody(ctx context.Context, body []byte) (string, error) {
+	return (EdgeDownlinkRuntime{
+		Rules:                  r.Rules,
+		Worker:                 r.Worker,
+		TargetDatabaseOverride: r.TargetDatabaseOverride,
+		ConfigStore:            r.ConfigStore,
+	}).applyDownlinkBody(ctx, body)
+}
+
+func (r ServerIngressRuntime) applyIngressBody(ctx context.Context, body []byte) (string, int, error) {
+	evt, mapped, err := mapSyncEvent(body, r.Rules)
+	if err != nil {
+		return "", 0, err
+	}
+	rule := findRuleForEvent(r.Rules, evt)
+	if !rule.Enable || rule.Direction == rules.DirectionIgnore {
+		return evt.EventID, 0, nil
+	}
+	if r.EventStore != nil {
+		// Persist first. / 先落库。 / 先に保存。
+		if err := r.EventStore.UpsertEventLog(ctx, syncstore.EventLogRecord{
+			Event:              evt,
+			TargetDatabaseName: mapped.TargetDatabase,
+			TargetTableName:    mapped.TargetTable,
+			PKValue:            pkValue(evt.PrimaryKey),
+			Direction:          rule.Direction,
+			Status:             syncstore.StatusPending,
+			Payload:            body,
+		}); err != nil {
+			return evt.EventID, 0, fmt.Errorf("persist ingress event: %w", err)
+		}
+	}
+	if _, err := r.Worker.Apply(ctx, mapped); err != nil {
+		return evt.EventID, 0, fmt.Errorf("apply ingress event: %w", err)
+	}
+	if r.EventStore != nil {
+		if err := r.EventStore.UpsertEventLog(ctx, syncstore.EventLogRecord{
+			Event:              evt,
+			TargetDatabaseName: mapped.TargetDatabase,
+			TargetTableName:    mapped.TargetTable,
+			PKValue:            pkValue(evt.PrimaryKey),
+			Direction:          rule.Direction,
+			Status:             syncstore.StatusSuccess,
+			AppliedAt:          time.Now(),
+			Payload:            body,
+		}); err != nil {
+			return evt.EventID, 0, fmt.Errorf("persist applied event: %w", err)
+		}
+	}
+	if shouldDispatch(*rule) {
+		count, err := r.dispatch(ctx, evt, *rule)
+		if err != nil {
+			return evt.EventID, count, err
+		}
+		return evt.EventID, count, nil
+	}
+	return evt.EventID, 0, nil
+}
+
+func (r ServerIngressBatchRuntime) applyIngressBody(ctx context.Context, body []byte) (string, int, error) {
+	return (ServerIngressRuntime{
+		Rules:      r.Rules,
+		Worker:     r.Worker,
+		EventStore: r.EventStore,
+		Dispatcher: r.Dispatcher,
+		EdgeNodes:  r.EdgeNodes,
+		NodeStore:  r.NodeStore,
+	}).applyIngressBody(ctx, body)
+}
+
+func (r ServerIngressRuntime) dispatch(ctx context.Context, evt event.SyncEvent, rule rules.SyncRule) (int, error) {
 	if r.Dispatcher == nil {
 		return 0, nil
 	}
-	nodeIDs := r.EdgeNodes
-	if len(nodeIDs) == 0 && r.NodeStore != nil {
+	nodeIDs := rule.DispatchNodeIDs
+	if dispatchTarget(rule) == rules.DispatchActiveEdges {
+		nodeIDs = r.EdgeNodes
+	}
+	if len(nodeIDs) == 0 && dispatchTarget(rule) == rules.DispatchActiveEdges && r.NodeStore != nil {
 		var err error
 		nodeIDs, err = r.NodeStore.ListActiveEdgeNodeIDs(ctx)
 		if err != nil {
@@ -344,15 +588,34 @@ func (r ReplayRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 }
 
 func shouldDispatch(rule rules.SyncRule) bool {
-	return rule.Direction == rules.DirectionBidirectional || rule.Direction == rules.DirectionServerToEdge
+	switch dispatchTarget(rule) {
+	case rules.DispatchNone:
+		return false
+	case rules.DispatchActiveEdges, rules.DispatchSelectedEdges:
+		return true
+	default:
+		return false
+	}
+}
+
+func dispatchTarget(rule rules.SyncRule) string {
+	switch rule.DispatchTarget {
+	case "", rules.DispatchAuto:
+		if rule.Direction == rules.DirectionBidirectional || rule.Direction == rules.DirectionServerToEdge {
+			return rules.DispatchActiveEdges
+		}
+		return rules.DispatchNone
+	default:
+		return rule.DispatchTarget
+	}
 }
 
 func mapSyncEvent(body []byte, ruleSet *rules.RuleSet) (event.SyncEvent, mapper.MappedEvent, error) {
 	var evt event.SyncEvent
-	if err := json.Unmarshal(body, &evt); err != nil {
+	if err := json.Unmarshal(cleanJSONBody(body), &evt); err != nil {
 		return event.SyncEvent{}, mapper.MappedEvent{}, fmt.Errorf("parse sync event: %w", err)
 	}
-	rule := ruleSet.Find(evt.DatabaseName, evt.TableName)
+	rule := findRuleForEvent(ruleSet, evt)
 	if rule == nil {
 		return event.SyncEvent{}, mapper.MappedEvent{}, fmt.Errorf("sync rule not found for %s.%s", evt.DatabaseName, evt.TableName)
 	}
@@ -364,6 +627,13 @@ func mapSyncEvent(body []byte, ruleSet *rules.RuleSet) (event.SyncEvent, mapper.
 		return event.SyncEvent{}, mapper.MappedEvent{}, fmt.Errorf("map sync event: %w", err)
 	}
 	return evt, mapped, nil
+}
+
+func findRuleForEvent(ruleSet *rules.RuleSet, evt event.SyncEvent) *rules.SyncRule {
+	if ruleSet == nil {
+		return nil
+	}
+	return ruleSet.FindForNode(evt.DatabaseName, evt.TableName, evt.OriginNodeID, evt.SourceNodeID)
 }
 
 func pkValue(primaryKey map[string]any) string {
@@ -439,4 +709,30 @@ func int64MapValue(values map[string]any, key string) int64 {
 	default:
 		return 0
 	}
+}
+
+func eventIDFromBody(body []byte) (string, error) {
+	var evt event.SyncEvent
+	if err := json.Unmarshal(cleanJSONBody(body), &evt); err != nil {
+		return "", fmt.Errorf("parse upload event: %w", err)
+	}
+	return evt.EventID, nil
+}
+
+func cleanJSONBody(body []byte) []byte {
+	return bytes.TrimPrefix(body, []byte{0xEF, 0xBB, 0xBF})
+}
+
+func defaultBatchSize(value int) int {
+	if value > 0 {
+		return value
+	}
+	return DefaultBatchSize
+}
+
+func defaultFlushInterval(value time.Duration) time.Duration {
+	if value > 0 {
+		return value
+	}
+	return DefaultFlushInterval
 }

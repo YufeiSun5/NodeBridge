@@ -32,6 +32,23 @@ func TestPublisherPublishAck(t *testing.T) {
 	}
 }
 
+func TestPublisherPublishMultipleConfirms(t *testing.T) {
+	channel := newFakePublishChannel()
+	publisher, err := rabbitmq.NewPublisher(channel)
+	if err != nil {
+		t.Fatalf("NewPublisher returned error: %v", err)
+	}
+
+	for i := 0; i < 3; i++ {
+		if err := publisher.Publish(context.Background(), rabbitmq.PublishRequest{Exchange: "events.x", RoutingKey: "events"}); err != nil {
+			t.Fatalf("Publish %d returned error: %v", i, err)
+		}
+	}
+	if channel.notifyCount != 1 {
+		t.Fatalf("expected one confirm channel registration, got %d", channel.notifyCount)
+	}
+}
+
 func TestPublisherPublishNack(t *testing.T) {
 	channel := newFakePublishChannel()
 	channel.ack = false
@@ -66,6 +83,7 @@ type fakePublishChannel struct {
 	publishErr     error
 	published      amqp091.Publishing
 	confirmations  chan amqp091.Confirmation
+	notifyCount    int
 }
 
 func newFakePublishChannel() *fakePublishChannel {
@@ -78,6 +96,7 @@ func (c *fakePublishChannel) Confirm(noWait bool) error {
 }
 
 func (c *fakePublishChannel) NotifyPublish(confirm chan amqp091.Confirmation) chan amqp091.Confirmation {
+	c.notifyCount++
 	c.confirmations = confirm
 	return confirm
 }

@@ -15,17 +15,21 @@ mysql:
 rabbitmq:
   mode: managed
   install: true
-  local_url: amqp://sync:password@127.0.0.1:5672/edge-sync
-  server_url: amqp://edge-001:password@192.168.1.10:5672/server-sync
+  local_url: amqp://nb-edge-001-local:password@127.0.0.1:5672/nodebridge-edge
+  server_url: amqp://nb-edge-001:password@192.168.1.10:5672/nodebridge-server
   management_url: http://127.0.0.1:15672
-  username: edge-001
+  username: nb-edge-001
   password: encrypted_password
-  vhost: /edge-sync
+  vhost: /nodebridge-edge
 
 cdc:
   type: canal
+  mode: managed
+  install: true
   reader_name: edge-001
   canal_addr: 127.0.0.1:11111
+  config_dir: C:\ProgramData\NodeBridge\canal
+  service_name: NodeBridgeCanal
   destination: edge-001
   username: ""
   password: encrypted_password
@@ -34,7 +38,9 @@ cdc:
   use_gtid: false
 
 sync:
-  upload_batch_size: 500
+  upload_batch_size: 50
+  dispatch_batch_size: 50
+  flush_interval_millis: 500
   retry_interval_seconds: 10
   heartbeat_interval_seconds: 15
 
@@ -43,3 +49,10 @@ log_web:
   bind: 127.0.0.1
   port: 18080
   token: encrypted_token
+
+mcp_server:
+  enable: false
+
+security:
+  admin_password: encrypted_admin_password
+  exit_password: encrypted_exit_password

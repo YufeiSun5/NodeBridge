@@ -359,6 +359,15 @@ ON DUPLICATE KEY UPDATE
 	return nil
 }
 
+func (s *Store) Exists(eventID string) bool {
+	if s.DB == nil || eventID == "" {
+		return false
+	}
+	var count int
+	err := s.DB.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM sync_apply_log WHERE event_id = ?", eventID).Scan(&count)
+	return err == nil && count > 0
+}
+
 func (s *Store) InsertError(ctx context.Context, record ErrorRecord) error {
 	if s.DB == nil {
 		return fmt.Errorf("sync store db is required")
@@ -415,6 +424,21 @@ LIMIT ?
 	return result, nil
 }
 
+func (s *Store) CountFailedEvents(ctx context.Context) (int64, error) {
+	if s.DB == nil {
+		return 0, fmt.Errorf("sync store db is required")
+	}
+	var count int64
+	if err := s.DB.QueryRowContext(ctx, `
+SELECT COUNT(1)
+FROM sync_ack_log
+WHERE status = ?
+`, StatusFailed).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count failed events: %w", err)
+	}
+	return count, nil
+}
+
 func (s *Store) ListPendingReplays(ctx context.Context, limit int) ([]ReplayEvent, error) {
 	if s.DB == nil {
 		return nil, fmt.Errorf("sync store db is required")
@@ -458,6 +482,21 @@ func (s *Store) MarkRetryPending(ctx context.Context, eventID, targetNodeID stri
 		TargetNodeID: targetNodeID,
 		Status:       StatusPending,
 	})
+}
+
+func (s *Store) MarkFailedEventsPending(ctx context.Context, limit int) (int, error) {
+	events, err := s.ListFailedEvents(ctx, limit)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, event := range events {
+		if err := s.MarkRetryPending(ctx, event.EventID, event.TargetNodeID); err != nil {
+			return count, err
+		}
+		count++
+	}
+	return count, nil
 }
 
 func (s *Store) now() time.Time {

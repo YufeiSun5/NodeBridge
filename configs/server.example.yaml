@@ -14,14 +14,31 @@ mysql:
 rabbitmq:
   mode: managed
   install: true
-  server_url: amqp://sync:password@127.0.0.1:5672/server-sync
+  server_url: amqp://nb-server-sync:password@127.0.0.1:5672/nodebridge-server
   management_url: http://127.0.0.1:15672
-  username: server-sync
+  username: nb-server-sync
   password: encrypted_password
-  vhost: /server-sync
+  vhost: /nodebridge-server
+
+cdc:
+  type: canal
+  mode: managed
+  install: true
+  reader_name: server-001
+  canal_addr: 127.0.0.1:11111
+  config_dir: C:\ProgramData\NodeBridge\canal
+  service_name: NodeBridgeCanal
+  destination: server-001
+  username: ""
+  password: encrypted_password
+  filter: scada_center\..*
+  batch_size: 1000
+  use_gtid: false
 
 sync:
-  dispatch_batch_size: 500
+  upload_batch_size: 50
+  dispatch_batch_size: 50
+  flush_interval_millis: 500
   retry_interval_seconds: 10
   node_timeout_seconds: 60
 
@@ -30,3 +47,10 @@ log_web:
   bind: 127.0.0.1
   port: 18080
   token: encrypted_token
+
+mcp_server:
+  enable: false
+
+security:
+  admin_password: encrypted_admin_password
+  exit_password: encrypted_exit_password

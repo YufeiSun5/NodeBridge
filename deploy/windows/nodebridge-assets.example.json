@@ -1,0 +1,29 @@
+{
+  "version": "0.33.0",
+  "assets": [
+    {
+      "name": "erlang-otp-windows-x64",
+      "component": "erlang",
+      "path": "packages/otp_win64.exe",
+      "version": "27.x",
+      "sha256": "<fill-real-sha256>",
+      "install_args": ["/S"]
+    },
+    {
+      "name": "rabbitmq-server-windows",
+      "component": "rabbitmq",
+      "path": "packages/rabbitmq-server.exe",
+      "version": "4.x",
+      "sha256": "<fill-real-sha256>",
+      "install_args": ["/S"]
+    },
+    {
+      "name": "canal-server",
+      "component": "canal",
+      "path": "packages/canal-server.zip",
+      "version": "1.1.x",
+      "sha256": "<fill-real-sha256>",
+      "install_args": ["-Destination", "%ProgramData%/NodeBridge/canal"]
+    }
+  ]
+}

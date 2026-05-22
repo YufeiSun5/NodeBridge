@@ -132,6 +132,42 @@ func TestSQLWorkerApplySoftDelete(t *testing.T) {
 	}
 }
 
+func TestSQLWorkerApplyBatchPreservesOrder(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	first := mappedEvent(event.TypeInsert)
+	second := mappedEvent(event.TypeInsert)
+	second.Event.EventID = "evt-002"
+	second.TargetPrimaryKey = map[string]any{"setting_id": 2}
+	second.TargetAfter["setting_id"] = 2
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT COUNT").WithArgs("evt-001").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectExec("INSERT INTO `scada_center`.`device_settings`").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO sync_apply_log").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT COUNT").WithArgs("evt-002").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectExec("INSERT INTO `scada_center`.`device_settings`").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO sync_apply_log").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	result, err := apply.NewSQLWorker(db).ApplyBatch(context.Background(), []mapper.MappedEvent{first, second})
+	if err != nil {
+		t.Fatalf("ApplyBatch returned error: %v", err)
+	}
+	if len(result.Results) != 2 || result.Results[0].EventID != "evt-001" || result.Results[1].EventID != "evt-002" {
+		t.Fatalf("unexpected batch result %+v", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
 func mappedEvent(eventType string) mapper.MappedEvent {
 	evt := event.SyncEvent{
 		EventID:      "evt-001",

@@ -9,6 +9,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $compose = Join-Path $root "deploy/docker-compose.dev.yml"
 $syncAgent = "go run ./cmd/sync-agent"
 
+. (Join-Path $root "scripts/lib/env.ps1") -RepoRoot $root
 $env:PATH = "$root\.vfox\sdks\golang\bin;$root\.vfox\sdks\golang\packages\bin;$root\.vfox\sdks\nodejs;$env:PATH"
 $env:PATH = "C:\Program Files\Docker\Docker\resources\bin;$env:PATH"
 

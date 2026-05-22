@@ -16,3 +16,11 @@ type Result struct {
 type Worker interface {
 	Apply(ctx context.Context, event mapper.MappedEvent) (Result, error)
 }
+
+type BatchResult struct {
+	Results []Result
+}
+
+type BatchWorker interface {
+	ApplyBatch(ctx context.Context, events []mapper.MappedEvent) (BatchResult, error)
+}

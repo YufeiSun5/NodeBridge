@@ -7,9 +7,17 @@ applyTo: "**/*.go,cmd/**,internal/**,configs/**,migrations/**,deploy/**"
 
 ## 进程边界
 
-- `DataSync.exe` 负责管理界面和控制操作。
-- `SyncAgent.exe` 负责长期运行的同步任务。
-- 不要把 CDC、MQ 消费、Apply Worker 等长期运行逻辑塞进 Wails UI 进程。
+- 当前试用版采用 `DataSync.exe` 托盘常驻模型，Wails 关闭窗口不等于退出。
+- 后端只提供退出鉴权、自启动、配置、状态和运行时控制接口；托盘 UI 由前端处理。
+- `SyncAgent.exe` 仍保留为长期运行核心入口，后续可切换 Windows Service。
+- 不要把托盘交互、退出弹窗、页面状态写入 Go 后端。
+
+## 前后端协作
+
+- 后端任务开始前必须读取 `.ai/docs/ai-collaboration-log.md` 的 Active Board。
+- Wails 方法、DTO 字段、错误语义、页面所需数据变化，先写 Active Board，再改 contract 和代码。
+- 后端发现需要前端处理的问题，必须写入 Active Board，不只写在最终回复里。
+- 不新增单独的后端看板；稳定接口只维护 `.ai/docs/frontend-backend-contract.md`。
 
 ## 包职责
 
@@ -36,6 +44,13 @@ applyTo: "**/*.go,cmd/**,internal/**,configs/**,migrations/**,deploy/**"
 - 消费者必须在业务写入和系统日志提交成功后才 ACK。
 - Apply Worker 必须先查 `sync_apply_log.event_id` 实现幂等。
 - MySQL Apply 必须使用事务包裹业务写入和系统表写入。
+
+## 安装边界
+
+- 默认安装器只能管理 NodeBridge 自己创建并登记在 `install-manifest.json` 的资源。
+- `rabbitmq.mode=external` 或 `cdc.mode=external` 时，只读取连接配置，不创建、不删除、不改权限。
+- RabbitMQ/Canal 受管资源必须带 NodeBridge 标识，例如 `NodeBridgeRabbitMQ`、`/nodebridge-server`、`nb-*`、`NodeBridgeCanal`。
+- 卸载时只清理 manifest 记录的资源，客户已有 RabbitMQ/Canal/MySQL 不属于 NodeBridge 资源。
 
 ## 示例接口
 

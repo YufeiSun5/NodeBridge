@@ -16,12 +16,14 @@ const (
 )
 
 type DesiredState struct {
+	Mode                  string
 	ErlangInstallerPath   string
 	RabbitMQInstallerPath string
 	ServiceName           string
 	VHosts                []string
 	Users                 []UserSpec
 	PreserveData          bool
+	ManagedResourceID     string
 }
 
 type UserSpec struct {
@@ -55,6 +57,10 @@ type Plan struct {
 }
 
 func BuildPlan(current CurrentState, desired DesiredState) Plan {
+	if desired.Mode == "external" {
+		return Plan{Steps: []Step{{Component: ComponentRabbitMQ, Action: ActionNoop, Target: "external-rabbitmq"}}}
+	}
+
 	var steps []Step
 
 	if !current.ErlangInstalled {
@@ -101,15 +107,17 @@ func BuildPlan(current CurrentState, desired DesiredState) Plan {
 
 func DefaultDesiredState() DesiredState {
 	return DesiredState{
+		Mode:                  "managed",
 		ErlangInstallerPath:   "deploy/windows/otp_win64.exe",
 		RabbitMQInstallerPath: "deploy/windows/rabbitmq-server.exe",
-		ServiceName:           "RabbitMQ",
-		VHosts:                []string{"/edge-sync", "/server-sync"},
+		ServiceName:           "NodeBridgeRabbitMQ",
+		VHosts:                []string{"/nodebridge-edge", "/nodebridge-server"},
 		Users: []UserSpec{
-			{Username: "server-sync", VHost: "/server-sync", ConfigureRE: ".*", WriteRE: ".*", ReadRE: ".*"},
-			{Username: "edge-001", VHost: "/server-sync", ConfigureRE: "^$", WriteRE: "server\\.ingress\\..*", ReadRE: "edge-001\\.downlink\\..*"},
-			{Username: "edge-001-local", VHost: "/edge-sync", ConfigureRE: ".*", WriteRE: ".*", ReadRE: ".*"},
+			{Username: "nb-server-sync", VHost: "/nodebridge-server", ConfigureRE: ".*", WriteRE: ".*", ReadRE: ".*"},
+			{Username: "nb-edge-001", VHost: "/nodebridge-server", ConfigureRE: "^$", WriteRE: "server\\.ingress\\..*", ReadRE: "edge-001\\.downlink\\..*"},
+			{Username: "nb-edge-001-local", VHost: "/nodebridge-edge", ConfigureRE: ".*", WriteRE: ".*", ReadRE: ".*"},
 		},
-		PreserveData: true,
+		PreserveData:      true,
+		ManagedResourceID: "nodebridge",
 	}
 }

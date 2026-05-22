@@ -23,6 +23,18 @@ func NewSQLWorker(db *sql.DB) *SQLWorker {
 	return &SQLWorker{DB: db, Clock: time.Now}
 }
 
+func (w *SQLWorker) ApplyBatch(ctx context.Context, events []mapper.MappedEvent) (BatchResult, error) {
+	results := make([]Result, 0, len(events))
+	for _, evt := range events {
+		result, err := w.Apply(ctx, evt)
+		if err != nil {
+			return BatchResult{Results: results}, err
+		}
+		results = append(results, result)
+	}
+	return BatchResult{Results: results}, nil
+}
+
 func (w *SQLWorker) Apply(ctx context.Context, mapped mapper.MappedEvent) (Result, error) {
 	if w.DB == nil {
 		return Result{}, errors.New("mysql db is nil")

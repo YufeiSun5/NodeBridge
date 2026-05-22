@@ -29,11 +29,22 @@ MySQL -> CDC -> ChangeEvent -> SyncEvent -> RabbitMQ -> Apply -> MySQL
 ## 表列映射
 
 - 表映射由 `target_database_name` 和 `target_table_name` 描述，缺省时等于源库表。
+- 当多个 Edge 的源库表同名但中心目标表不同，必须使用 `source_node_ids` 做节点作用域匹配。
 - 列映射由 `column_mappings` 描述，未配置的列默认同名。
 - `include_columns` 和 `exclude_columns` 使用源列名，过滤必须发生在列名映射之前。
 - `primary_keys` 使用源列名；`target_primary_keys` 为空时按列映射自动推导。
 - MVP 只做名称映射，不做类型转换、表达式计算、字段拆分或字段合并。
 - CDC 和 RabbitMQ 不处理映射语义；映射必须在 Apply Worker 前完成。
+
+## 分发策略
+
+- `direction` 表示默认流向，不应写死所有场景。
+- `dispatch_target` 可覆盖默认分发：`AUTO`、`NONE`、`ACTIVE_EDGES`、`SELECTED_EDGES`。
+- `dispatch_node_ids` 只在 `SELECTED_EDGES` 下使用。
+- 默认兼容旧规则：`BIDIRECTIONAL` 和 `SERVER_TO_EDGE` 分发到 ACTIVE Edge；`EDGE_TO_SERVER` 不分发。
+- 需要“从节点上传到主节点后再分发给其他从节点”时，可配置 `direction: EDGE_TO_SERVER` 加 `dispatch_target: ACTIVE_EDGES`。
+- 需要“只汇总到中心”时，配置 `dispatch_target: NONE`。
+- Server 分发仍默认跳过 `origin_node_id`，避免回源。
 
 ## 回环抑制
 

@@ -8,6 +8,7 @@ $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
 
+. (Join-Path $root "scripts/lib/env.ps1") -RepoRoot $root
 $env:PATH = "$root\.vfox\sdks\golang\bin;$root\.vfox\sdks\golang\packages\bin;$root\.vfox\sdks\nodejs;$env:PATH"
 $env:PATH = "C:\Program Files\Docker\Docker\resources\bin;$env:PATH"
 

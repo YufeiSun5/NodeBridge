@@ -25,9 +25,9 @@ func TestBuildPlanPartialInstall(t *testing.T) {
 		RabbitMQInstalled: true,
 		ServiceInstalled:  true,
 		ServiceRunning:    false,
-		VHosts:            map[string]bool{"/edge-sync": true},
-		Users:             map[string]bool{"server-sync": true},
-		Permissions:       map[string]bool{"server-sync@/server-sync": true},
+		VHosts:            map[string]bool{"/nodebridge-edge": true},
+		Users:             map[string]bool{"nb-server-sync": true},
+		Permissions:       map[string]bool{"nb-server-sync@/nodebridge-server": true},
 	}
 
 	plan := installer.BuildPlan(current, desired)
@@ -35,8 +35,19 @@ func TestBuildPlanPartialInstall(t *testing.T) {
 	requireNoStep(t, plan, installer.ComponentErlang, installer.ActionInstall)
 	requireNoStep(t, plan, installer.ComponentRabbitMQ, installer.ActionInstall)
 	requireStep(t, plan, installer.ComponentService, installer.ActionStart)
-	requireTarget(t, plan, installer.ComponentRabbitMQ, installer.ActionCreate, "vhost:/server-sync")
+	requireTarget(t, plan, installer.ComponentRabbitMQ, installer.ActionCreate, "vhost:/nodebridge-server")
 	requireStep(t, plan, installer.ComponentTopology, installer.ActionInitialize)
+}
+
+func TestBuildPlanExternalDoesNothing(t *testing.T) {
+	desired := installer.DefaultDesiredState()
+	desired.Mode = "external"
+
+	plan := installer.BuildPlan(installer.CurrentState{}, desired)
+
+	if len(plan.Steps) != 1 || plan.Steps[0].Target != "external-rabbitmq" {
+		t.Fatalf("external rabbitmq must not be modified, got %+v", plan.Steps)
+	}
 }
 
 func TestBuildPlanAlreadyReady(t *testing.T) {
@@ -46,16 +57,16 @@ func TestBuildPlanAlreadyReady(t *testing.T) {
 		RabbitMQInstalled: true,
 		ServiceInstalled:  true,
 		ServiceRunning:    true,
-		VHosts:            map[string]bool{"/edge-sync": true, "/server-sync": true},
+		VHosts:            map[string]bool{"/nodebridge-edge": true, "/nodebridge-server": true},
 		Users: map[string]bool{
-			"server-sync":    true,
-			"edge-001":       true,
-			"edge-001-local": true,
+			"nb-server-sync":    true,
+			"nb-edge-001":       true,
+			"nb-edge-001-local": true,
 		},
 		Permissions: map[string]bool{
-			"server-sync@/server-sync":  true,
-			"edge-001@/server-sync":     true,
-			"edge-001-local@/edge-sync": true,
+			"nb-server-sync@/nodebridge-server":  true,
+			"nb-edge-001@/nodebridge-server":     true,
+			"nb-edge-001-local@/nodebridge-edge": true,
 		},
 		TopologyReady: true,
 	}

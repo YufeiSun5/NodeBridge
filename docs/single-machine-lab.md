@@ -91,3 +91,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/lab-crud-e2e.ps1 -Sk
 The script verifies `device_config -> device_settings` INSERT, duplicate idempotency, UPDATE, soft DELETE, table/column remapping, and `alarm_history` as `EDGE_TO_SERVER` without Edge B dispatch.
 
 Details: `docs/v0.18-crud-e2e.md`.
+
+## Batch E2E
+
+V0.19 adds 50-message batch verification:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/lab-batch-e2e.ps1 -SkipPrepare
+```
+
+The script publishes 50 `device_config` events to Edge A local RabbitMQ, batch-forwards them to Server, batch-applies and dispatches them, then batch-applies them on Edge B. It verifies row counts, apply log counts, last value, and apply order.
+
+Details: `docs/v0.19-batch-ui.md`.

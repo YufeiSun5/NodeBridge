@@ -93,6 +93,26 @@ func TestShouldUploadLocalBusinessChange(t *testing.T) {
 	}
 }
 
+func TestShouldUploadUsesLocalNodeScopedRule(t *testing.T) {
+	set := rules.RuleSet{Rules: []rules.SyncRule{
+		{
+			DatabaseName:  "scada_edge",
+			TableName:     "data_all",
+			SourceNodeIDs: []string{"edge-002"},
+			Enable:        true,
+			Direction:     rules.DirectionEdgeToServer,
+			PrimaryKeys:   []string{"id"},
+		},
+	}}
+	s := loop.NewSuppressor("edge-002", set, fakeApplyLog{})
+
+	decision := s.ShouldUpload(cdc.ChangeEvent{DatabaseName: "scada_edge", TableName: "data_all"})
+
+	if !decision.Upload {
+		t.Fatalf("expected node-scoped data_all change to upload, got %+v", decision)
+	}
+}
+
 func TestShouldUploadWhenApplyLogNil(t *testing.T) {
 	s := loop.NewSuppressor("edge-002", ruleSet(rules.SyncRule{
 		Enable:    true,

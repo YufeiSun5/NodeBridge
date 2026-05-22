@@ -34,7 +34,9 @@ cdc:
   use_gtid: false
 
 sync:
-  upload_batch_size: 500
+  upload_batch_size: 50
+  dispatch_batch_size: 50
+  flush_interval_millis: 500
   retry_interval_seconds: 2
   heartbeat_interval_seconds: 15
 
@@ -43,3 +45,10 @@ log_web:
   bind: 127.0.0.1
   port: 18081
   token: lab_token
+
+mcp_server:
+  enable: false
+
+security:
+  admin_password: admin-pass
+  exit_password: exit-pass

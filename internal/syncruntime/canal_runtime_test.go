@@ -94,6 +94,56 @@ func TestCanalUploadRuntimeStop(t *testing.T) {
 	}
 }
 
+func TestServerCanalDispatchRuntimeDispatchesThenCommits(t *testing.T) {
+	source := &fakeCanalBatchSource{
+		changes: []cdc.ChangeEvent{sampleServerChange()},
+		offset:  cdc.Offset{ReaderName: "server-001", BatchID: 11, BinlogFile: "mysql-bin.000002"},
+	}
+	dispatcher := &fakeDispatcher{}
+	result, err := (&ServerCanalDispatchRuntime{
+		Source:     source,
+		Decider:    fakeDecider{decision: loop.Decision{Upload: true}},
+		Normalizer: fakeNormalizer{event: sampleServerEvent()},
+		Rules:      sampleServerRules(),
+		Dispatcher: dispatcher,
+		EdgeNodes:  []string{"edge-001", "edge-002"},
+	}).RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.Action != "dispatched" || result.EventID != "evt-server-001" || result.DispatchCount != 2 {
+		t.Fatalf("unexpected result %+v", result)
+	}
+	if !source.started || !source.committed {
+		t.Fatalf("expected start and commit, got %+v", source)
+	}
+	if len(dispatcher.targets) != 2 {
+		t.Fatalf("expected two dispatches, got %+v", dispatcher.targets)
+	}
+}
+
+func TestServerCanalDispatchRuntimeSuppressesThenCommits(t *testing.T) {
+	source := &fakeCanalBatchSource{changes: []cdc.ChangeEvent{sampleServerChange()}}
+	dispatcher := &fakeDispatcher{}
+	result, err := (&ServerCanalDispatchRuntime{
+		Source:     source,
+		Decider:    fakeDecider{decision: loop.Decision{Upload: false}},
+		Normalizer: fakeNormalizer{event: sampleServerEvent()},
+		Rules:      sampleServerRules(),
+		Dispatcher: dispatcher,
+		EdgeNodes:  []string{"edge-001"},
+	}).RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.Action != "suppressed" || result.DispatchCount != 0 || !source.committed {
+		t.Fatalf("unexpected result=%+v committed=%t", result, source.committed)
+	}
+	if len(dispatcher.targets) != 0 {
+		t.Fatalf("suppressed server cdc should not dispatch, got %+v", dispatcher.targets)
+	}
+}
+
 type fakeCanalBatchSource struct {
 	changes   []cdc.ChangeEvent
 	offset    cdc.Offset

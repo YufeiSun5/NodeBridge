@@ -31,7 +31,7 @@ func NewSuppressor(localNodeID string, ruleSet rules.RuleSet, applyLog ApplyLog)
 }
 
 func (s *Suppressor) ShouldUpload(change cdc.ChangeEvent) Decision {
-	rule := s.rules.Find(change.DatabaseName, change.TableName)
+	rule := s.rules.FindForNode(change.DatabaseName, change.TableName, s.localNodeID, s.localNodeID)
 	if rule == nil || !rule.Enable {
 		return Decision{Upload: false, Reason: "table not in sync rules"}
 	}

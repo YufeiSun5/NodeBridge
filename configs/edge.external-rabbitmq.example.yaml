@@ -24,6 +24,8 @@ rabbitmq:
 
 cdc:
   type: canal
+  mode: external
+  install: false
   reader_name: edge-001
   canal_addr: 127.0.0.1:11111
   destination: edge-001
@@ -31,7 +33,9 @@ cdc:
   use_gtid: false
 
 sync:
-  upload_batch_size: 500
+  upload_batch_size: 50
+  dispatch_batch_size: 50
+  flush_interval_millis: 500
   retry_interval_seconds: 10
   heartbeat_interval_seconds: 15
 
@@ -40,3 +44,10 @@ log_web:
   bind: 127.0.0.1
   port: 18080
   token: encrypted_token
+
+mcp_server:
+  enable: false
+
+security:
+  admin_password: encrypted_admin_password
+  exit_password: encrypted_exit_password

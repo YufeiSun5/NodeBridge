@@ -20,6 +20,12 @@ func TestLoadEdgeExample(t *testing.T) {
 	if cfg.Node.ID != "edge-001" {
 		t.Fatalf("expected node edge-001, got %q", cfg.Node.ID)
 	}
+	if cfg.RabbitMQ.Mode != "managed" || !cfg.RabbitMQ.Install || cfg.RabbitMQ.VHost != "/nodebridge-edge" {
+		t.Fatalf("expected managed NodeBridge RabbitMQ, got %+v", cfg.RabbitMQ)
+	}
+	if cfg.CDC.Mode != "managed" || !cfg.CDC.Install || cfg.CDC.ServiceName != "NodeBridgeCanal" {
+		t.Fatalf("expected managed NodeBridge Canal, got %+v", cfg.CDC)
+	}
 }
 
 func TestLoadServerExample(t *testing.T) {
@@ -32,6 +38,12 @@ func TestLoadServerExample(t *testing.T) {
 	}
 	if cfg.Node.ID != "server-001" {
 		t.Fatalf("expected node server-001, got %q", cfg.Node.ID)
+	}
+	if cfg.RabbitMQ.Mode != "managed" || !cfg.RabbitMQ.Install || cfg.RabbitMQ.VHost != "/nodebridge-server" {
+		t.Fatalf("expected managed NodeBridge RabbitMQ, got %+v", cfg.RabbitMQ)
+	}
+	if cfg.CDC.Mode != "managed" || !cfg.CDC.Install || cfg.CDC.ServiceName != "NodeBridgeCanal" {
+		t.Fatalf("expected managed NodeBridge Canal, got %+v", cfg.CDC)
 	}
 }
 

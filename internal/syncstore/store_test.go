@@ -189,6 +189,30 @@ LIMIT ?
 	assertExpectations(t, mock)
 }
 
+func TestStoreCountFailedEvents(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	mock.ExpectQuery(regexp.QuoteMeta(`
+SELECT COUNT(1)
+FROM sync_ack_log
+WHERE status = ?
+`)).
+		WithArgs(StatusFailed).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
+
+	count, err := New(db).CountFailedEvents(context.Background())
+	if err != nil {
+		t.Fatalf("CountFailedEvents returned error: %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("expected count 3, got %d", count)
+	}
+}
+
 func TestStoreMarkRetryPending(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -205,6 +229,48 @@ func TestStoreMarkRetryPending(t *testing.T) {
 
 	if err := store.MarkRetryPending(context.Background(), "evt-001", "edge-002"); err != nil {
 		t.Fatalf("MarkRetryPending returned error: %v", err)
+	}
+	assertExpectations(t, mock)
+}
+
+func TestStoreMarkFailedEventsPending(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	store := New(db)
+	store.Clock = fixedTime
+	mock.ExpectQuery(regexp.QuoteMeta(`
+SELECT event_id, target_node_id, status, COALESCE(error_message, ''), created_at
+FROM sync_ack_log
+WHERE status = ?
+ORDER BY created_at DESC
+LIMIT ?
+`)).
+		WithArgs(StatusFailed, 2).
+		WillReturnRows(sqlmock.NewRows([]string{"event_id", "target_node_id", "status", "error_message", "created_at"}).
+			AddRow("evt-001", "edge-002", StatusFailed, "failed", fixedTime()).
+			AddRow("evt-002", "edge-003", StatusFailed, "failed", fixedTime()))
+	for _, item := range []struct {
+		eventID string
+		nodeID  string
+	}{
+		{"evt-001", "edge-002"},
+		{"evt-002", "edge-003"},
+	} {
+		mock.ExpectExec("INSERT INTO sync_ack_log").
+			WithArgs(item.eventID, item.nodeID, StatusPending, nil, nil, fixedTime()).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+	}
+
+	count, err := store.MarkFailedEventsPending(context.Background(), 2)
+	if err != nil {
+		t.Fatalf("MarkFailedEventsPending returned error: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("expected 2 marked events, got %d", count)
 	}
 	assertExpectations(t, mock)
 }

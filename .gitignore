@@ -1,4 +1,6 @@
 .vfox/
+.tools/
+.playwright-cli/
 
 # Go
 bin/
@@ -10,8 +12,12 @@ node_modules/
 dist/
 build/
 frontend/dist/
+frontend/tsconfig.tsbuildinfo
+frontend/package.json.md5
 
 # Logs and local env
 *.log
 .env
 .env.*
+.cache/
+configs/lab11/

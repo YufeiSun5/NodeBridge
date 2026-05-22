@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/rabbitmq/amqp091-go"
 )
@@ -15,14 +16,17 @@ type PublishChannel interface {
 }
 
 type Publisher struct {
-	channel PublishChannel
+	channel       PublishChannel
+	confirmations <-chan amqp091.Confirmation
+	mu            sync.Mutex
 }
 
 func NewPublisher(channel PublishChannel) (*Publisher, error) {
 	if err := channel.Confirm(false); err != nil {
 		return nil, fmt.Errorf("enable publisher confirm: %w", err)
 	}
-	return &Publisher{channel: channel}, nil
+	confirmations := channel.NotifyPublish(make(chan amqp091.Confirmation, 64))
+	return &Publisher{channel: channel, confirmations: confirmations}, nil
 }
 
 type PublishRequest struct {
@@ -34,7 +38,9 @@ type PublishRequest struct {
 }
 
 func (p *Publisher) Publish(ctx context.Context, req PublishRequest) error {
-	confirmations := p.channel.NotifyPublish(make(chan amqp091.Confirmation, 1))
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	contentType := req.ContentType
 	if contentType == "" {
 		contentType = "application/json"
@@ -50,7 +56,7 @@ func (p *Publisher) Publish(ctx context.Context, req PublishRequest) error {
 	}
 
 	select {
-	case confirmation := <-confirmations:
+	case confirmation := <-p.confirmations:
 		if !confirmation.Ack {
 			return errors.New("publish not acknowledged by broker")
 		}

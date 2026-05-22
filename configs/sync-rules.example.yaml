@@ -2,8 +2,11 @@ rules:
   - id: alarm-history-upload
     database_name: scada_edge
     table_name: alarm_history
+    # Optional source node scope for same source table names.
+    # 同名源表可按节点限定。 / 同名元テーブルはノードで限定。
     target_database_name: scada_center
     direction: EDGE_TO_SERVER
+    dispatch_target: NONE
     conflict_policy: NONE
     enable: true
     primary_keys:
@@ -16,6 +19,7 @@ rules:
     target_database_name: scada_center
     target_table_name: device_settings
     direction: BIDIRECTIONAL
+    dispatch_target: ACTIVE_EDGES
     conflict_policy: LAST_WRITE_WIN
     enable: true
     primary_keys:
@@ -37,3 +41,16 @@ rules:
         target_column: display_name
       - source_column: value
         target_column: setting_value
+
+  # Same schema server-origin downlink. / 中心同构下发。 / 中央同一構造配信。
+  - id: server-point-config-downlink
+    database_name: scada_center
+    table_name: point_config
+    target_database_name: scada_edge
+    target_table_name: point_config
+    direction: SERVER_TO_EDGE
+    dispatch_target: ACTIVE_EDGES
+    conflict_policy: LAST_WRITE_WIN
+    enable: true
+    primary_keys:
+      - id

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "DataSync",
+  "outputfilename": "DataSync",
+  "frontend:dir": "frontend",
+  "frontend:install": "node -e \"process.exit(0)\"",
+  "frontend:build": "node_modules\\.bin\\tsc.cmd && node_modules\\.bin\\vite.cmd build",
+  "frontend:dev:watcher": "node_modules\\.bin\\vite.cmd --host 127.0.0.1",
+  "frontend:dev:serverUrl": "http://127.0.0.1:5173",
+  "author": {
+    "name": "NodeBridge",
+    "email": ""
+  }
+}
