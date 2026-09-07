@@ -1,16 +1,16 @@
 # MEMORY
 
-Last updated: 2026-09-07 17:45 Asia/Singapore
+Last updated: 2026-09-07 17:59 Asia/Singapore
 
 ## 当前阶段
 
-- 2026-09-07 backend-ai 推进 FB-039 覆盖安装：发现并修复 NSIS 在复制文件前未停止运行中 NodeBridge/SyncAgent 的缺口，新增路径限定的 `upgrade-preflight.ps1` 和真实双安装测试。`scripts/test-nsis-upgrade.ps1` 已验证第一次安装、运行中旧 `SyncAgent.exe` 占用、第二次覆盖、二进制替换、配置字段/规则保留及两轮摘要通过，证据 `.cache/nsis-upgrade/20260907-174024-917/`；15 项安装器回归通过。最终发布包 SHA256 `DD6852F3BA87550C8C1C708A52B8507875562E322EA3FE114DB4B8A6CAB1D6F9`。第一台边缘机 `192.168.10.102` TCP/22 在线但 SSH 在 banner 前主动断开，远端真实覆盖升级待连接恢复。
+- 2026-09-07 backend-ai 推进 FB-039 覆盖安装：发现并修复 NSIS 在复制文件前未停止运行中 NodeBridge/SyncAgent 的缺口，新增路径限定的 `upgrade-preflight.ps1` 和真实双安装测试。`scripts/test-nsis-upgrade.ps1` 已验证第一次安装、运行中旧 `SyncAgent.exe` 占用、第二次覆盖、二进制替换、配置字段/规则保留及两轮摘要通过，最终证据 `.cache/nsis-upgrade/20260907-174932-107/`；15 项安装器回归通过，证据 `.cache/installer-regression/d1f5e525f97a40f5a461b26205344d03/`。最终发布包 SHA256 `DD6852F3BA87550C8C1C708A52B8507875562E322EA3FE114DB4B8A6CAB1D6F9`。第一台边缘机 `192.168.10.102` TCP/22 在线但 SSH 在 banner 前主动断开，远端真实覆盖升级待连接恢复。
 
-- 2026-09-07 backend-ai 完成 FB-038 v0.46.3 内网更新包：新装配置不再预设节点身份、MySQL 凭据/数据库或同步规则，Log Web 默认关闭；解锁/退出及 NodeBridge 自有 RabbitMQ 密码统一为 `1234`。托管 RabbitMQ 用户按 `mode/node.id` 推导，边缘本机 `nb-<node>-local`、中心连接 `nb-<node>`、中心本机 `nb-server-sync`；MCP 保存先迁移本机 RabbitMQ 服务用户再落盘，并新增中心端 `nodebridge_ensure_server_edge_user`。升级保留 MySQL/Canal/规则并迁移旧 NodeBridge 密码。修复 UI 脱敏密码连接测试和 MCP `restart_agent:true`。最终 EXE SHA256 `62AE97804A620B3669C9F26BEAC75EDA885FE28C0FDF5F2AB2BD6EA65FE24014`；Go test/vet/lint、前端 test/build、15 项安装器回归、NSIS 列表和包内 27 工具 smoke 通过，真实异机安装/升级待 test-ai。
+- 2026-09-07 backend-ai 完成 FB-038 v0.46.3 功能修订：新装配置不再预设节点身份、MySQL 凭据/数据库或同步规则，Log Web 默认关闭；解锁/退出及 NodeBridge 自有 RabbitMQ 密码统一为 `1234`。托管 RabbitMQ 用户按 `mode/node.id` 推导，边缘本机 `nb-<node>-local`、中心连接 `nb-<node>`、中心本机 `nb-server-sync`；MCP 保存先迁移本机 RabbitMQ 服务用户再落盘，并新增中心端 `nodebridge_ensure_server_edge_user`。升级保留 MySQL/Canal/规则并迁移旧 NodeBridge 密码。修复 UI 脱敏密码连接测试和 MCP `restart_agent:true`。该阶段生成的初始安装包已由 FB-039 覆盖安装修订包取代，不得继续分发；Go test/vet/lint、前端 test/build、15 项安装器回归、NSIS 列表和包内 27 工具 smoke 通过。
 
 - 2026-09-07 test-ai 推进 FB-034 真实内网 MCP 验收：Windows 控制端通过 SSH 公钥连接第一台边缘机 `192.168.10.102`，MCP `initialize`、26 工具列表、配置读写和实时探测通过。已将 MySQL 配置改为 `127.0.0.1:3306/scada_edge`（凭据加密保存且回读脱敏），在目标机创建 `scada_edge` UTF8MB4 空库，`nodebridge_test_mysql` 与 overview 均为 running；当前/旧版两个规则文件均通过 MCP 清空，队列均为 0，SyncAgent 保持 stopped。完整 Agent 启停/重连和安装器二次安装/卸载仍待验证。
 
-- 2026-09-07 backend-ai 准备发布文档（FB-037）：新增根 README 和一台中心服务器、N 台边缘节点、Windows/Mac 调试电脑的内网部署与 SSH/MCP 授权手册。发布目标已升级为 FB-039 的 v0.46.3 覆盖安装修订包，SHA256 `B1EBE6FBB6055E7BB23614A6508FDEE6C2AB34F26E74793F40C7ACEDDFF809D1`；发行提交、标签和 GitHub Release 待完成。
+- 2026-09-07 backend-ai 完成发布文档与 GitHub 发行（FB-037）：新增根 README 和一台中心服务器、N 台边缘节点、Windows/Mac 调试电脑的内网部署与 SSH/MCP 授权手册。源码提交 `01d48ed` 已推送，`v0.46.3` 标签和 prerelease 已创建；Windows 安装包大小 `339408073` 字节，SHA256 `DD6852F3BA87550C8C1C708A52B8507875562E322EA3FE114DB4B8A6CAB1D6F9`，GitHub API 资产核对通过。
 
 - 2026-09-07 backend-ai 修复目标机配置保存 Access denied（FB-036）：ProgramData/NodeBridge 原 ACL 只有 Users Write，缺少原子 rename 所需 delete-child。已远程按 `admin\xx` SID 授予继承 Modify，替换测试通过；SSH 防火墙改为 LocalSubnet，当前 Windows Codex 已注册 nodebridge MCP，真实 initialize/tools/list/overview/save_config_patch 通过。安装器加入安装账户 ACL 设置并生成 v0.46.2，SHA256 `620208E9B275EAFA1DA2C856C1BFE774F996A5A00FD402DAC6304A7EC3D6BA14`；32/64 位各 13 项回归、解包/资产/preflight 通过。
 
@@ -434,7 +434,7 @@ Last updated: 2026-09-07 17:45 Asia/Singapore
 
 ## 改动记录
 
-- 2026-09-07 16:50 | GPT-5 / backend-ai | FB-037：新增一主多边缘部署与 Windows/Mac SSH/MCP 授权手册，统一 v0.46.2 对外版本并完成最终安装包门禁，准备 GitHub 发行。
+- 2026-09-07 17:59 | GPT-5 / backend-ai | FB-037：新增一主多边缘部署与 Windows/Mac SSH/MCP 授权手册，发布 v0.46.3 GitHub prerelease；标签、安装包大小和 SHA256 digest 已复核。
 
 - 2026-09-07 15:30 | GPT-5 / backend-ai | FB-036：修复安装后 config.yaml 原子替换 Access denied，远程完成目标 ACL/LocalSubnet 防火墙和 Windows Codex MCP 注册，继续发布 v0.46.2。
 
