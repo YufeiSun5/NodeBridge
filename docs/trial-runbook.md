@@ -15,7 +15,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-smoke.ps1 
 
 ```text
 build/bin/
-  DataSync.exe
+  NodeBridge.exe
   SyncAgent.exe
   config.yaml
   sync-rules.yaml
@@ -81,7 +81,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\lab-canal-soak.ps1
 ## 6. Start UI
 
 ```powershell
-.\build\bin\DataSync.exe
+.\build\bin\NodeBridge.exe
 ```
 
 当前试用版采用 Wails 托盘常驻模型：

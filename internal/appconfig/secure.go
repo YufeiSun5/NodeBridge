@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/YufeiSun5/NodeBridge/internal/atomicfile"
 	"gopkg.in/yaml.v3"
 )
 
@@ -36,6 +37,33 @@ func SaveFileWithProtector(path string, cfg Config, protector SecretProtector) e
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+	return SaveFileAllowIncomplete(path, cfg, protector)
+}
+
+func LoadFileAllowIncomplete(path string) (*Config, error) {
+	return LoadFileAllowIncompleteWithProtector(path, DefaultSecretProtector())
+}
+
+func LoadFileAllowIncompleteWithProtector(path string, protector SecretProtector) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read config %q: %w", path, err)
+	}
+
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse config %q: %w", path, err)
+	}
+	if protector == nil {
+		protector = plainProtector{}
+	}
+	if err := DecryptSecrets(&cfg, protector); err != nil {
+		return nil, fmt.Errorf("decrypt config %q: %w", path, err)
+	}
+	return &cfg, nil
+}
+
+func SaveFileAllowIncomplete(path string, cfg Config, protector SecretProtector) error {
 	if protector == nil {
 		protector = plainProtector{}
 	}
@@ -49,7 +77,7 @@ func SaveFileWithProtector(path string, cfg Config, protector SecretProtector) e
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create config directory: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := atomicfile.Write(path, data, 0o600); err != nil {
 		return fmt.Errorf("write config %q: %w", path, err)
 	}
 	return nil

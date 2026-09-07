@@ -46,6 +46,10 @@ export function GetManagedInstallPlan(arg1) {
   return window['go']['datasyncui']['App']['GetManagedInstallPlan'](arg1);
 }
 
+export function GetNodeOptions() {
+  return window['go']['datasyncui']['App']['GetNodeOptions']();
+}
+
 export function GetOverview() {
   return window['go']['datasyncui']['App']['GetOverview']();
 }

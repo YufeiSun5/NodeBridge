@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/YufeiSun5/NodeBridge/internal/agentstate"
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
 	"github.com/YufeiSun5/NodeBridge/internal/apply"
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
@@ -35,6 +36,7 @@ import (
 	"github.com/YufeiSun5/NodeBridge/internal/status"
 	"github.com/YufeiSun5/NodeBridge/internal/syncruntime"
 	"github.com/YufeiSun5/NodeBridge/internal/syncstore"
+	"github.com/YufeiSun5/NodeBridge/internal/uiapi"
 )
 
 func main() {
@@ -94,12 +96,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return runManagedRepair(args[1:], stdout, stderr)
 		case "managed-uninstall":
 			return runManagedUninstall(args[1:], stdout, stderr)
+		case "managed-config-migrate":
+			return runManagedConfigMigrate(args[1:], stdout, stderr)
 		case "installer-assets-check":
 			return runInstallerAssetsCheck(args[1:], stdout, stderr)
 		case "installer-command-plan":
 			return runInstallerCommandPlan(args[1:], stdout, stderr)
 		case "mcp-stdio":
 			return runMCPStdio(args[1:], stdout, stderr)
+		case "mcp-client-config":
+			return runMCPClientConfig(args[1:], stdout, stderr)
 		case "replay-pending-once":
 			return runReplayPendingOnce(args[1:], stdout, stderr)
 		case "dispatch-event-once":
@@ -146,6 +152,18 @@ func runAgent(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
+	if *stopFile == "" {
+		*stopFile = filepath.Join(filepath.Dir(*configPath), "run", "sync-agent.stop")
+	}
+	releaseAgent, err := agentstate.Acquire(*configPath, *stopFile)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return err
+	}
+	defer releaseAgent()
+	if err := os.Remove(*stopFile); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	ctx, cancel := context.WithCancel(signalCtx)
@@ -268,6 +286,7 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules.R
 				ConfigStore:            syncstore.New(db),
 				MaxBatch:               syncBatchSize(cfg.Sync.DispatchBatchSize),
 				FlushInterval:          syncFlushInterval(cfg.Sync.FlushIntervalMillis),
+				AllowCRUDCompact:       cfg.Sync.EnableCRUDCompact,
 			},
 			Status: store,
 		},
@@ -354,10 +373,12 @@ func runServerWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules
 					Publisher: publisher,
 					Exchange:  "server.dispatch.x",
 				},
-				EdgeNodes:     edgeNodeIDs,
-				NodeStore:     syncStore,
-				MaxBatch:      syncBatchSize(cfg.Sync.DispatchBatchSize),
-				FlushInterval: syncFlushInterval(cfg.Sync.FlushIntervalMillis),
+				EdgeNodes:        edgeNodeIDs,
+				NodeStore:        syncStore,
+				MaxBatch:         syncBatchSize(cfg.Sync.DispatchBatchSize),
+				FlushInterval:    syncFlushInterval(cfg.Sync.FlushIntervalMillis),
+				ApplyLanes:       syncApplyLanes(cfg.Sync.ApplyLanes),
+				AllowCRUDCompact: cfg.Sync.EnableCRUDCompact,
 			},
 			Status: store,
 		},
@@ -771,7 +792,7 @@ func runCanalPublishOnce(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintln(stdout, "canal batch empty")
 		return nil
 	}
-	fmt.Fprintf(stdout, "canal batch published action=%s event_id=%s count=%d\n", result.Action, result.EventID, result.DispatchCount)
+	fmt.Fprintf(stdout, "canal batch action=%s event_id=%s count=%d\n", result.Action, result.EventID, result.DispatchCount)
 	return nil
 }
 
@@ -783,7 +804,7 @@ func runConsumeOnce(args []string, stdout, stderr io.Writer) error {
 	amqpURL := flags.String("amqp-url", "", "RabbitMQ AMQP URL")
 	queueName := flags.String("queue", "server.cdc.ingress.q", "RabbitMQ queue")
 	edges := flags.String("edges", "", "comma-separated edge node ids for server dispatch")
-	requeue := flags.Bool("requeue-on-error", false, "requeue message when apply fails")
+	requeue := flags.Bool("requeue-on-error", true, "requeue message when apply fails")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -1060,8 +1081,10 @@ func runConsumeBatchOnce(args []string, stdout, stderr io.Writer) error {
 	queueName := flags.String("queue", "server.cdc.ingress.q", "RabbitMQ queue")
 	maxBatch := flags.Int("max-batch", syncruntime.DefaultBatchSize, "maximum messages per batch")
 	flushMillis := flags.Int("flush-interval-millis", int(syncruntime.DefaultFlushInterval/time.Millisecond), "batch flush interval in milliseconds")
+	applyLanes := flags.Int("apply-lanes", 0, "parallel apply lanes for independent keys")
+	enableCRUDCompact := flags.Bool("enable-crud-compact", false, "allow crud_ordered_compact sync mode")
 	edges := flags.String("edges", "", "comma-separated edge node ids for server dispatch")
-	requeue := flags.Bool("requeue-on-error", false, "requeue message when apply fails")
+	requeue := flags.Bool("requeue-on-error", true, "requeue message when apply fails")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -1112,15 +1135,17 @@ func runConsumeBatchOnce(args []string, stdout, stderr io.Writer) error {
 			Channel: conn.Channel,
 			Queue:   *queueName,
 		},
-		Consumer:      rabbitmq.Consumer{RequeueOnError: *requeue},
-		Rules:         ruleSet,
-		Worker:        apply.NewSQLWorker(db),
-		EventStore:    syncstore.New(db),
-		Dispatcher:    dispatcher,
-		EdgeNodes:     edgeNodeIDs,
-		NodeStore:     syncstore.New(db),
-		MaxBatch:      *maxBatch,
-		FlushInterval: time.Duration(*flushMillis) * time.Millisecond,
+		Consumer:         rabbitmq.Consumer{RequeueOnError: *requeue},
+		Rules:            ruleSet,
+		Worker:           apply.NewSQLWorker(db),
+		EventStore:       syncstore.New(db),
+		Dispatcher:       dispatcher,
+		EdgeNodes:        edgeNodeIDs,
+		NodeStore:        syncstore.New(db),
+		MaxBatch:         *maxBatch,
+		FlushInterval:    time.Duration(*flushMillis) * time.Millisecond,
+		ApplyLanes:       syncApplyLanes(*applyLanes),
+		AllowCRUDCompact: *enableCRUDCompact || cfg.Sync.EnableCRUDCompact,
 	}).RunOnce(context.Background())
 	if err != nil {
 		fmt.Fprintf(stderr, "consume batch failed: %v\n", err)
@@ -1143,6 +1168,7 @@ func runConsumeDownlinkBatchOnce(args []string, stdout, stderr io.Writer) error 
 	queueName := flags.String("queue", "", "Edge downlink queue on Server RabbitMQ")
 	maxBatch := flags.Int("max-batch", syncruntime.DefaultBatchSize, "maximum messages per batch")
 	flushMillis := flags.Int("flush-interval-millis", int(syncruntime.DefaultFlushInterval/time.Millisecond), "batch flush interval in milliseconds")
+	enableCRUDCompact := flags.Bool("enable-crud-compact", false, "allow crud_ordered_compact sync mode")
 	requeue := flags.Bool("requeue-on-error", true, "requeue message when apply fails")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -1187,6 +1213,7 @@ func runConsumeDownlinkBatchOnce(args []string, stdout, stderr io.Writer) error 
 		ConfigStore:            syncstore.New(db),
 		MaxBatch:               *maxBatch,
 		FlushInterval:          time.Duration(*flushMillis) * time.Millisecond,
+		AllowCRUDCompact:       *enableCRUDCompact || cfg.Sync.EnableCRUDCompact,
 	}).RunOnce(context.Background())
 	if err != nil {
 		fmt.Fprintf(stderr, "consume downlink batch failed: %v\n", err)
@@ -1897,6 +1924,33 @@ func runManagedUninstall(args []string, stdout, stderr io.Writer) error {
 	return runManagedExecutor(args, stdout, stderr, installerexec.ModeUninstall)
 }
 
+func runManagedConfigMigrate(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("managed-config-migrate", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", appconfig.DefaultConfigPath(), "path to config")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	cfg, err := appconfig.LoadFileAllowIncomplete(*configPath)
+	if err != nil {
+		return err
+	}
+	cfg.Security.AdminPassword = "1234"
+	cfg.Security.ExitPassword = "1234"
+	if strings.TrimSpace(cfg.Mode) != "" && strings.TrimSpace(cfg.Node.ID) != "" && appconfig.IsManagedRabbitMQ(*cfg) {
+		if err := appconfig.NormalizeManagedRabbitMQ(cfg); err != nil {
+			return err
+		}
+	}
+	if err := appconfig.SaveFileAllowIncomplete(*configPath, *cfg, appconfig.DefaultSecretProtector()); err != nil {
+		return err
+	}
+	return writeJSON(stdout, map[string]any{
+		"ok": true, "status": "migrated", "config_path": *configPath,
+		"security_passwords": "migrated", "rabbitmq": uiapi.RedactConfig(uiapi.ConfigFromApp(*cfg)).RabbitMQ,
+	})
+}
+
 func runInstallerAssetsCheck(args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("installer-assets-check", flag.ContinueOnError)
 	flags.SetOutput(stderr)
@@ -1988,28 +2042,73 @@ func runManagedExecutor(args []string, stdout, stderr io.Writer, mode string) er
 func runMCPStdio(args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("mcp-stdio", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	configPath := flags.String("config", "configs/edge.example.yaml", "path to config")
-	rulesPath := flags.String("rules", "configs/sync-rules.example.yaml", "path to sync rules")
+	configPath := flags.String("config", appconfig.DefaultConfigPath(), "path to config")
+	rulesPath := flags.String("rules", "", "path to sync rules; defaults beside config")
+	logPath := flags.String("log", "", "optional sync-agent log file to expose read-only")
+	lab := flags.Bool("lab-full-access", false, "lab mode: bypass MCP enable/admin gates and allow all configuration fields and management tools")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	cfg, err := appconfig.LoadFile(*configPath)
-	if err != nil {
-		fmt.Fprintf(stderr, "load config failed: %v\n", err)
-		return err
+	if *rulesPath == "" {
+		*rulesPath = filepath.Join(filepath.Dir(*configPath), "sync-rules.yaml")
 	}
-	ruleSet, err := rules.LoadFile(*rulesPath)
+	service, err := newMCPService(*configPath, *rulesPath, *logPath, *lab)
 	if err != nil {
-		fmt.Fprintf(stderr, "load rules failed: %v\n", err)
+		fmt.Fprintln(stderr, err)
 		return err
-	}
-	service := mcpstdio.StaticService{
-		ConfigPath: *configPath,
-		RulesPath:  *rulesPath,
-		Config:     *cfg,
-		Rules:      append([]rules.SyncRule(nil), ruleSet.Rules...),
 	}
 	return (mcpstdio.Server{Service: service}).Serve(context.Background(), os.Stdin, stdout)
+}
+
+func runMCPClientConfig(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("mcp-client-config", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", appconfig.DefaultConfigPath(), "path to config on target")
+	rulesPath := flags.String("rules", "", "path to sync rules on target; defaults beside config")
+	logPath := flags.String("log", "", "optional sync-agent log file")
+	exePath := flags.String("exe", "", "path to SyncAgent.exe; default is current executable")
+	serverName := flags.String("name", "nodebridge", "MCP server name")
+	lab := flags.Bool("lab-full-access", false, "enable full-access lab mode in generated command")
+	sshHost := flags.String("ssh-host", "", "SSH target, for example labuser@192.168.1.25")
+	sshPort := flags.Int("ssh-port", 22, "SSH port")
+	sshKey := flags.String("ssh-key", "", "private key path on the client computer")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	command := *exePath
+	if *rulesPath == "" {
+		*rulesPath = filepath.Join(filepath.Dir(*configPath), "sync-rules.yaml")
+	}
+	if strings.TrimSpace(command) == "" {
+		current, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		command = current
+	}
+	mcpArgs := []string{"mcp-stdio", "-config", *configPath, "-rules", *rulesPath}
+	if *lab {
+		mcpArgs = append(mcpArgs, "-lab-full-access")
+	}
+	if strings.TrimSpace(*logPath) != "" {
+		mcpArgs = append(mcpArgs, "-log", *logPath)
+	}
+	if *sshHost != "" {
+		var err error
+		mcpArgs, err = mcpstdio.SSHArguments(*sshHost, *sshPort, *sshKey, command, mcpArgs)
+		if err != nil {
+			return err
+		}
+		command = "ssh"
+	}
+	return writeJSON(stdout, map[string]any{
+		"mcpServers": map[string]any{
+			*serverName: map[string]any{
+				"command": command,
+				"args":    mcpArgs,
+			},
+		},
+	})
 }
 
 func defaultManifestPath() string {
@@ -2221,6 +2320,13 @@ func syncBatchSize(value int) int {
 		return value
 	}
 	return syncruntime.DefaultBatchSize
+}
+
+func syncApplyLanes(value int) int {
+	if value > 0 {
+		return value
+	}
+	return 4
 }
 
 func syncFlushInterval(millis int) time.Duration {

@@ -17,14 +17,16 @@ func TestManifestOwnership(t *testing.T) {
 	if m.OwnsRabbitMQVHost("/customer") {
 		t.Fatal("must not own customer vhost")
 	}
-	if !m.OwnsRabbitMQUser("nb-edge-001") {
-		t.Fatal("expected NodeBridge user ownership")
+	m.ManagedComponents.RabbitMQ.Users = []string{"nb-edge-002-local"}
+	if !m.OwnsRabbitMQUser("nb-edge-002-local") {
+		t.Fatal("expected manifest-recorded NodeBridge user ownership")
 	}
 	if m.OwnsRabbitMQUser("guest") {
 		t.Fatal("must not own guest user")
 	}
-	if !m.OwnsCanalDestination("nodebridge-edge-001") {
-		t.Fatal("expected NodeBridge canal destination ownership")
+	m.ManagedComponents.Canal.Destinations = []string{"nodebridge-edge-002"}
+	if !m.OwnsCanalDestination("nodebridge-edge-002") {
+		t.Fatal("expected manifest-recorded Canal destination ownership")
 	}
 }
 

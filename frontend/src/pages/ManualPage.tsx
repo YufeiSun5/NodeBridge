@@ -75,6 +75,24 @@ const chapters: ManualChapter[] = [
     bullets: ['manualTray1', 'manualTray2', 'manualTray3', 'manualTray4'],
   },
   {
+    key: 'mcp',
+    titleKey: 'manualMcpTitle',
+    summaryKey: 'manualMcpSummary',
+    bullets: ['manualMcp1', 'manualMcp2', 'manualMcp3', 'manualMcp4', 'manualMcp5', 'manualMcp6'],
+  },
+  {
+    key: 'password-recovery',
+    titleKey: 'manualPasswordRecoveryTitle',
+    summaryKey: 'manualPasswordRecoverySummary',
+    bullets: [
+      'manualPasswordRecovery1',
+      'manualPasswordRecovery2',
+      'manualPasswordRecovery3',
+      'manualPasswordRecovery4',
+      'manualPasswordRecovery5',
+    ],
+  },
+  {
     key: 'status',
     titleKey: 'manualStatusTitle',
     summaryKey: 'manualStatusSummary',
@@ -110,6 +128,14 @@ const referenceGroups: ReferenceGroup[] = [
     ],
   },
   {
+    titleKey: 'manualReferenceSyncMode',
+    items: [
+      { value: 'crud_ordered', detailKey: 'syncModeOrderedCRUDHint' },
+      { value: 'append_only', detailKey: 'syncModeAppendOnlyHint' },
+      { value: 'crud_ordered_compact', detailKey: 'syncModeCompactHint' },
+    ],
+  },
+  {
     titleKey: 'manualReferenceBlankDefaults',
     items: [
       { value: 'source_node_ids', detailKey: 'manualBlankSourceNodes' },
@@ -127,6 +153,7 @@ const referenceGroups: ReferenceGroup[] = [
       { value: 'table_name', detailKey: 'manualFieldTableName' },
       { value: 'target_database_name', detailKey: 'manualFieldTargetDatabaseName' },
       { value: 'target_table_name', detailKey: 'manualFieldTargetTableName' },
+      { value: 'sync_mode', detailKey: 'manualReferenceSyncMode' },
       { value: 'primary_keys', detailKey: 'manualFieldPrimaryKeys' },
       { value: 'source_node_ids', detailKey: 'manualFieldSourceNodeIDs' },
       { value: 'dispatch_node_ids', detailKey: 'manualFieldDispatchNodeIDs' },

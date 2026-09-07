@@ -71,12 +71,14 @@ type CDCConfig struct {
 }
 
 type SyncConfig struct {
-	UploadBatchSize         int `json:"upload_batch_size,omitempty" yaml:"upload_batch_size,omitempty"`
-	DispatchBatchSize       int `json:"dispatch_batch_size,omitempty" yaml:"dispatch_batch_size,omitempty"`
-	FlushIntervalMillis     int `json:"flush_interval_millis,omitempty" yaml:"flush_interval_millis,omitempty"`
-	RetryIntervalSeconds    int `json:"retry_interval_seconds" yaml:"retry_interval_seconds"`
-	HeartbeatIntervalSecond int `json:"heartbeat_interval_seconds,omitempty" yaml:"heartbeat_interval_seconds,omitempty"`
-	NodeTimeoutSeconds      int `json:"node_timeout_seconds,omitempty" yaml:"node_timeout_seconds,omitempty"`
+	UploadBatchSize         int  `json:"upload_batch_size,omitempty" yaml:"upload_batch_size,omitempty"`
+	DispatchBatchSize       int  `json:"dispatch_batch_size,omitempty" yaml:"dispatch_batch_size,omitempty"`
+	ApplyLanes              int  `json:"apply_lanes,omitempty" yaml:"apply_lanes,omitempty"`
+	EnableCRUDCompact       bool `json:"enable_crud_compact,omitempty" yaml:"enable_crud_compact,omitempty"`
+	FlushIntervalMillis     int  `json:"flush_interval_millis,omitempty" yaml:"flush_interval_millis,omitempty"`
+	RetryIntervalSeconds    int  `json:"retry_interval_seconds" yaml:"retry_interval_seconds"`
+	HeartbeatIntervalSecond int  `json:"heartbeat_interval_seconds,omitempty" yaml:"heartbeat_interval_seconds,omitempty"`
+	NodeTimeoutSeconds      int  `json:"node_timeout_seconds,omitempty" yaml:"node_timeout_seconds,omitempty"`
 }
 
 type LogWebConfig struct {
@@ -96,6 +98,10 @@ type SecurityConfig struct {
 }
 
 func LoadFile(path string) (*Config, error) {
+	return LoadFileWithProtector(path, DefaultSecretProtector())
+}
+
+func LoadFileWithProtector(path string, protector SecretProtector) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read config %q: %w", path, err)
@@ -105,7 +111,10 @@ func LoadFile(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config %q: %w", path, err)
 	}
-	if err := DecryptSecrets(&cfg, DefaultSecretProtector()); err != nil {
+	if protector == nil {
+		protector = plainProtector{}
+	}
+	if err := DecryptSecrets(&cfg, protector); err != nil {
 		return nil, fmt.Errorf("decrypt config %q: %w", path, err)
 	}
 

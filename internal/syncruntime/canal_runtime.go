@@ -57,14 +57,22 @@ func (r *CanalUploadRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 
 	changes, offset, err := r.Source.FetchChangesOnce(ctx)
 	if err != nil {
+		r.resetSource()
 		return StepResult{}, err
 	}
 	if len(changes) == 0 {
+		if offset.HasCanalBatch() {
+			if err := r.Source.Commit(ctx, offset); err != nil {
+				r.resetSource()
+				return StepResult{Processed: true, Action: "failed"}, err
+			}
+			return StepResult{Processed: true, Action: "committed-empty"}, nil
+		}
 		return StepResult{Action: "empty"}, nil
 	}
 
 	var lastEventID string
-	published := 0
+	requests := make([]rabbitmq.PublishRequest, 0, len(changes))
 	for _, change := range changes {
 		if r.Decider != nil {
 			decision := r.Decider.ShouldUpload(change)
@@ -80,27 +88,29 @@ func (r *CanalUploadRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 		if err != nil {
 			return StepResult{Processed: true, EventID: evt.EventID, Action: "failed"}, err
 		}
-		// ACK after publish. / 发布后 ACK。 / Publish 後 ACK。
-		if err := r.Publisher.Publish(ctx, rabbitmq.PublishRequest{
+		requests = append(requests, rabbitmq.PublishRequest{
 			Exchange:   r.Exchange,
 			RoutingKey: r.RoutingKey,
 			Body:       body,
-		}); err != nil {
-			return StepResult{Processed: true, EventID: evt.EventID, Action: "failed"}, fmt.Errorf("publish canal event: %w", err)
-		}
+		})
 		lastEventID = evt.EventID
-		published++
 	}
-	if published == 0 {
+	if len(requests) == 0 {
 		if err := r.Source.Commit(ctx, offset); err != nil {
+			r.resetSource()
 			return StepResult{Processed: true, Action: "failed"}, err
 		}
 		return StepResult{Processed: true, Action: "suppressed"}, nil
 	}
+	// ACK after publish. / 发布后 ACK。 / Publish 後 ACK。
+	if err := publishCanalBatch(ctx, r.Publisher, requests); err != nil {
+		return StepResult{Processed: true, EventID: lastEventID, Action: "failed"}, fmt.Errorf("publish canal event: %w", err)
+	}
 	if err := r.Source.Commit(ctx, offset); err != nil {
+		r.resetSource()
 		return StepResult{Processed: true, EventID: lastEventID, Action: "failed"}, err
 	}
-	return StepResult{Processed: true, EventID: lastEventID, Action: "published", DispatchCount: published}, nil
+	return StepResult{Processed: true, EventID: lastEventID, Action: "published", DispatchCount: len(requests)}, nil
 }
 
 func (r *CanalUploadRuntime) Stop(ctx context.Context) error {
@@ -109,6 +119,26 @@ func (r *CanalUploadRuntime) Stop(ctx context.Context) error {
 	}
 	r.started = false
 	return r.Source.Stop(ctx)
+}
+
+func (r *CanalUploadRuntime) resetSource() {
+	if r.Source == nil || !r.started {
+		return
+	}
+	r.started = false
+	_ = r.Source.Stop(context.Background())
+}
+
+func publishCanalBatch(ctx context.Context, publisher EventPublisher, requests []rabbitmq.PublishRequest) error {
+	if batchPublisher, ok := publisher.(BatchEventPublisher); ok {
+		return batchPublisher.PublishBatch(ctx, requests)
+	}
+	for _, req := range requests {
+		if err := publisher.Publish(ctx, req); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *ServerCanalDispatchRuntime) RunOnce(ctx context.Context) (StepResult, error) {
@@ -123,9 +153,17 @@ func (r *ServerCanalDispatchRuntime) RunOnce(ctx context.Context) (StepResult, e
 	}
 	changes, offset, err := r.Source.FetchChangesOnce(ctx)
 	if err != nil {
+		r.resetSource()
 		return StepResult{}, err
 	}
 	if len(changes) == 0 {
+		if offset.HasCanalBatch() {
+			if err := r.Source.Commit(ctx, offset); err != nil {
+				r.resetSource()
+				return StepResult{Processed: true, Action: "failed"}, err
+			}
+			return StepResult{Processed: true, Action: "committed-empty"}, nil
+		}
 		return StepResult{Action: "empty"}, nil
 	}
 	var lastEventID string
@@ -141,6 +179,7 @@ func (r *ServerCanalDispatchRuntime) RunOnce(ctx context.Context) (StepResult, e
 		dispatchTotal += count
 	}
 	if err := r.Source.Commit(ctx, offset); err != nil {
+		r.resetSource()
 		return StepResult{Processed: true, EventID: lastEventID, Action: "failed", DispatchCount: dispatchTotal}, err
 	}
 	if dispatchTotal == 0 {
@@ -155,4 +194,12 @@ func (r *ServerCanalDispatchRuntime) Stop(ctx context.Context) error {
 	}
 	r.started = false
 	return r.Source.Stop(ctx)
+}
+
+func (r *ServerCanalDispatchRuntime) resetSource() {
+	if r.Source == nil || !r.started {
+		return
+	}
+	r.started = false
+	_ = r.Source.Stop(context.Background())
 }

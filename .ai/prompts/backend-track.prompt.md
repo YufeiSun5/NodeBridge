@@ -9,9 +9,9 @@ tools: [read, edit, search, run]
 Read first:
 
 - [AGENTS.md](../../AGENTS.md)
+- [AI_BOARD.md](../../AI_BOARD.md) Active Board
 - [.ai/docs/frontend-backend-contract.md](../docs/frontend-backend-contract.md)
 - [.ai/docs/frontend-requirements.md](../docs/frontend-requirements.md)
-- [.ai/docs/ai-collaboration-log.md](../docs/ai-collaboration-log.md) Active Board
 - [.ai/instructions/go-syncagent.md](../instructions/go-syncagent.md)
 
 Ownership:
@@ -22,7 +22,7 @@ Ownership:
 
 Rules:
 
-- Before every backend dialog or task, read `ai-collaboration-log.md` Active Board and scan every `open` or `blocked` item.
+- Before every backend dialog or task, read root-level `AI_BOARD.md` Active Board and scan every `open` or `blocked` item.
 - Keep Wails method names and JSON fields stable.
 - Return empty/unknown/unsupported instead of fake success.
 - Redact secrets before returning config.

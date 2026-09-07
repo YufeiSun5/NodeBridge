@@ -1,0 +1,90 @@
+name: nodebridge-longtest
+
+services:
+  rabbitmq-edge-longtest:
+    image: rabbitmq:3-management
+    container_name: nodebridge-longtest-rabbitmq-edge
+    ports:
+      - "5701:5672"
+      - "15701:15672"
+    volumes:
+      - ./rabbitmq/rabbitmq.dev.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.longtest.json:/etc/rabbitmq/definitions.json:ro
+      - nodebridge-longtest-rabbitmq-edge:/var/lib/rabbitmq
+
+  rabbitmq-server-longtest:
+    image: rabbitmq:3-management
+    container_name: nodebridge-longtest-rabbitmq-server
+    ports:
+      - "5702:5672"
+      - "15702:15672"
+    volumes:
+      - ./rabbitmq/rabbitmq.dev.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq/definitions.longtest.json:/etc/rabbitmq/definitions.json:ro
+      - nodebridge-longtest-rabbitmq-server:/var/lib/rabbitmq
+
+  mysql-edge-longtest:
+    image: mysql:8.4
+    container_name: nodebridge-longtest-mysql-edge
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: scada_edge_longtest
+      MYSQL_USER: sync_user
+      MYSQL_PASSWORD: sync_password
+    ports:
+      - "3341:3306"
+    command:
+      - "--server-id=301"
+      - "--log-bin=mysql-bin"
+      - "--binlog-format=ROW"
+      - "--binlog-row-image=FULL"
+      - "--max-connections=300"
+    volumes:
+      - nodebridge-longtest-mysql-edge:/var/lib/mysql
+
+  mysql-server-longtest:
+    image: mysql:8.4
+    container_name: nodebridge-longtest-mysql-server
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: scada_center_longtest
+      MYSQL_USER: sync_user
+      MYSQL_PASSWORD: sync_password
+    ports:
+      - "3342:3306"
+    command:
+      - "--server-id=302"
+      - "--log-bin=mysql-bin"
+      - "--binlog-format=ROW"
+      - "--binlog-row-image=FULL"
+      - "--max-connections=300"
+    volumes:
+      - nodebridge-longtest-mysql-server:/var/lib/mysql
+
+  canal-edge-longtest:
+    image: canal/canal-server:latest
+    container_name: nodebridge-longtest-canal-edge
+    depends_on:
+      - mysql-edge-longtest
+    ports:
+      - "11121:11111"
+    volumes:
+      - ./canal/longtest/canal.properties:/home/admin/canal-server/conf/canal.properties:ro
+      - ./canal/longtest/edge-longtest-001/instance.properties:/home/admin/canal-server/conf/edge-longtest-001/instance.properties:ro
+    environment:
+      canal.auto.scan: "false"
+      canal.destinations: "edge-longtest-001"
+      canal.instance.master.address: "mysql-edge-longtest:3306"
+      canal.instance.dbUsername: "sync_user"
+      canal.instance.dbPassword: "sync_password"
+      canal.instance.connectionCharset: "UTF-8"
+      canal.instance.tsdb.enable: "false"
+      canal.instance.gtidon: "false"
+      canal.instance.mysql.slaveId: "401"
+      canal.instance.filter.regex: "scada_edge_longtest\\.(collect_data_.*|tag_state_.*)"
+
+volumes:
+  nodebridge-longtest-rabbitmq-edge:
+  nodebridge-longtest-rabbitmq-server:
+  nodebridge-longtest-mysql-edge:
+  nodebridge-longtest-mysql-server:

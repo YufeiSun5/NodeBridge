@@ -14,10 +14,10 @@ mysql:
 rabbitmq:
   mode: managed
   install: true
-  server_url: amqp://nb-server-sync:password@127.0.0.1:5672/nodebridge-server
+  server_url: amqp://nb-server-sync:1234@127.0.0.1:5672/%2Fnodebridge-server
   management_url: http://127.0.0.1:15672
   username: nb-server-sync
-  password: encrypted_password
+  password: "1234"
   vhost: /nodebridge-server
 
 cdc:
@@ -52,5 +52,5 @@ mcp_server:
   enable: false
 
 security:
-  admin_password: encrypted_admin_password
-  exit_password: encrypted_exit_password
+  admin_password: "1234"
+  exit_password: "1234"

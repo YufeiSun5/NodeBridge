@@ -64,7 +64,7 @@ Evidence / 依据 / 根拠: user-provided V1.0 design document plus the current 
 - `.ai/docs/ui-design-spec.md`: dark industrial terminal UI style. / 暗色工业终端 UI 风格。 / ダーク産業端末 UI スタイル。
 - `.ai/docs/frontend-backend-contract.md`: stable Wails UI API contract. / 稳定 Wails UI 接口契约。 / 安定した Wails UI API 契約。
 - `.ai/docs/frontend-requirements.md`: frontend implementation scope. / 前端实现范围。 / フロントエンド実装範囲。
-- `.ai/docs/ai-collaboration-log.md`: only active frontend/backend collaboration board. / 唯一活跃前后端协作看板。 / 唯一の有効なフロント/バックエンド連携ボード。
+- `AI_BOARD.md`: only active AI collaboration board for frontend/backend/test/review identities. / 前端、后端、测试、审阅身份的唯一活跃 AI 协作看板。 / フロントエンド、バックエンド、テスト、レビュー用の唯一の有効な AI 連携ボード。
 
 ## On-Demand Resources / 按需资源 / 必要時のリソース
 
@@ -75,13 +75,46 @@ Evidence / 依据 / 根拠: user-provided V1.0 design document plus the current 
 | `.ai/docs/ui-design-spec.md` | Frontend visual style / 前端视觉风格 / フロントエンド視覚スタイル |
 | `.ai/docs/frontend-requirements.md` | Frontend AI page scope / 前端 AI 页面范围 / フロントエンド AI 画面範囲 |
 | `.ai/docs/frontend-backend-contract.md` | Stable API/DTO lookup / 稳定接口与 DTO 查询 / 安定 API・DTO 確認 |
-| `.ai/docs/ai-collaboration-log.md` | Active cross-AI board / 活跃跨 AI 看板 / 有効な AI 間ボード |
+| `docs/test-credentials.md` | Lab-only passwords and tokens / 仅测试用密码和 token / テスト専用パスワードと token |
+| `AI_BOARD.md` | Active cross-AI board for frontend/backend/test/review identities / 前端、后端、测试、审阅身份的活跃跨 AI 看板 / フロントエンド、バックエンド、テスト、レビュー用の有効な AI 間ボード |
+| `.ai/docs/ai-collaboration-log.md` | Moved-file notice only; do not write active items here / 仅保留迁移提示，不写活跃事项 / 移行通知のみ。有効な項目は書き込まない |
 | `docs/managed-components.md` | Installer ownership boundary / 安装器资源归属边界 / インストーラー所有境界 |
 | `.ai/skills/README.md` | Skill creation and usage rules / 技能创建与使用规则 / スキル作成・利用ルール |
 | `.ai/agents/architecture-review.agent.md` | Read-only architecture review / 只读架构审查 / 読み取り専用構成レビュー |
 | `.ai/prompts/implement-sync-module.prompt.md` | Implement a sync module / 实现同步模块 / 同期モジュール実装 |
 | `.ai/prompts/add-management-page.prompt.md` | Add a management page / 新增管理页面 / 管理画面追加 |
 | `.ai/prompts/architecture-review.prompt.md` | Focused design/code review / 设计或代码审查 / 設計・コードレビュー |
+| `.ai/prompts/frontend-track.prompt.md` | Frontend AI identity entry / 前端 AI 身份入口 / フロントエンド AI ロール入口 |
+| `.ai/prompts/backend-track.prompt.md` | Backend AI identity entry / 后端 AI 身份入口 / バックエンド AI ロール入口 |
+| `.ai/prompts/test-track.prompt.md` | Test AI identity entry / 测试 AI 身份入口 / テスト AI ロール入口 |
+| `.ai/prompts/review-track.prompt.md` | Review AI identity entry / 审阅 AI 身份入口 / レビュー AI ロール入口 |
+
+## AI Identity Model / AI 身份模型 / AI アイデンティティモデル
+
+Every AI must declare one active identity before changing files, running validation, or updating the collaboration board.
+每个 AI 在修改文件、运行验证或更新协作看板前，必须先声明一个当前身份。
+各 AI はファイル変更、検証実行、連携ボード更新の前に、現在の役割を一つ宣言します。
+
+Allowed identities / 允许身份 / 許可ロール:
+
+| Identity | Scope / 范围 / 範囲 | Main rule / 核心规则 / 主要ルール |
+| --- | --- | --- |
+| `frontend-ai` | React/Wails UI, frontend service wrapper, UI text and style. | Do not implement sync core or directly access RabbitMQ/MySQL/HTTP. |
+| `backend-ai` | Go backend, SyncAgent, Wails API, DTO, config, migrations, installer, MCP stdio. | Record frontend-facing API/DTO/UI impacts in Active Board before handoff. |
+| `test-ai` | Tests, smoke scripts, lab validation, release gate evidence. | Prefer verification and reports; do not change product behavior unless fixing a test harness defect. |
+| `review-ai` | Cross-cutting review, architecture assessment, release readiness, scoped corrective edits. | Lead with findings and record cross-role decisions or blockers in Active Board. |
+
+All four identities must communicate through root-level `AI_BOARD.md` Active Board.
+四种身份都必须通过根级 `AI_BOARD.md` Active Board 协作。
+4 つのロールはすべてルートの `AI_BOARD.md` Active Board で連携します。
+
+`.ai/docs/` is for stable docs, closed records, phase summaries, and archives. Do not create a second active board under `.ai/docs/`.
+`.ai/docs/` 用于稳定文档、闭合记录、阶段总结和归档材料；不得在 `.ai/docs/` 下创建第二个活跃看板。
+`.ai/docs/` は安定文書、完了記録、フェーズ要約、アーカイブ用です。二つ目の有効ボードを作らないでください。
+
+Cross-identity work is allowed only when it is explicitly declared and the Active Board records the reason, affected scope, and owner.
+跨身份工作必须显式声明，并在 Active Board 记录原因、影响范围和 owner。
+ロールをまたぐ作業は明示し、理由・影響範囲・owner を Active Board に記録します。
 
 ## Mandatory Workflow / 强制工作流 / 必須ワークフロー
 
@@ -90,9 +123,10 @@ Evidence / 依据 / 根拠: user-provided V1.0 design document plus the current 
 3. Mark unresolved uncertainty with `<!-- 待确认 -->`. / 不确定内容标记为 `<!-- 待确认 -->`。 / 未確定事項は `<!-- 待确认 -->` と記載します。
 4. Keep changes scoped and update tests/examples when behavior changes. / 控制改动范围，行为变化时更新测试或示例。 / 変更範囲を絞り、挙動変更時はテストや例を更新します。
 5. After meaningful changes, update `MEMORY.md`. / 有实质变更后更新 `MEMORY.md`。 / 重要な変更後は `MEMORY.md` を更新します。
-6. For frontend/backend split work, use only two core files: contract for stable API, collaboration board for active questions. / 前后端分工只用两个核心文件：contract 管稳定接口，协作看板管活跃问题。 / フロント/バックエンド分担では、契約は安定 API、連携ボードは有効な質問に限定します。
-7. Before every frontend/backend task, including backend-only dialogs, read `.ai/docs/ai-collaboration-log.md` Active Board; close, answer, or block relevant items before handoff. / 每次前后端任务开始前，包括纯后端对话，都必须读取协作看板 Active Board；交付前关闭、回复或标记阻塞。 / フロント/バックエンド作業前、バックエンドのみでも Active Board を読み、引き渡し前に完了・回答・ブロックを記録します。
-8. Backend must actively record frontend-facing questions, required UI changes, DTO changes, and blockers in the Active Board. / 后端必须主动把需要前端处理的问题、UI 变更、DTO 变更和阻塞写入 Active Board。 / バックエンドはフロント側対応、UI 変更、DTO 変更、ブロッカーを Active Board に記録します。
+6. Before operation, declare one identity: `frontend-ai`, `backend-ai`, `test-ai`, or `review-ai`. / 操作前声明一个身份。 / 作業前に一つのロールを宣言します。
+7. For frontend/backend/test/review split work, use only two core files: contract for stable API, collaboration board for active questions. / 前端、后端、测试、审阅分工只用两个核心文件：contract 管稳定接口，协作看板管活跃问题。 / 分担作業では、契約は安定 API、連携ボードは有効な質問に限定します。
+8. Before every frontend/backend/test/review task, including single-role dialogs, read root-level `AI_BOARD.md` Active Board; close, answer, or block relevant items before handoff. / 每次前端、后端、测试、审阅任务开始前，包括单身份对话，都必须读取根级 `AI_BOARD.md` Active Board；交付前关闭、回复或标记阻塞。 / 各ロール作業前にルートの `AI_BOARD.md` Active Board を読み、引き渡し前に完了・回答・ブロックを記録します。
+9. Backend must actively record frontend-facing questions, required UI changes, DTO changes, and blockers in the Active Board. / 后端必须主动把需要前端处理的问题、UI 变更、DTO 变更和阻塞写入 Active Board。 / バックエンドはフロント側対応、UI 変更、DTO 変更、ブロッカーを Active Board に記録します。
 
 ## Test Gate / 测试门禁 / テストゲート
 
@@ -100,7 +134,7 @@ Evidence / 依据 / 根拠: user-provided V1.0 design document plus the current 
 - CLI and config changes need smoke or validation tests. / CLI 和配置变更需要 smoke 或 validation 测试。 / CLI と設定変更には smoke または validation テストが必要です。
 - Run `go test ./...` and `go vet ./...` before handoff. / 交付前运行 `go test ./...` 和 `go vet ./...`。 / 引き渡し前に `go test ./...` と `go vet ./...` を実行します。
 - Run `golangci-lint run ./...` when installed. / 已安装时运行 `golangci-lint run ./...`。 / インストール済みなら `golangci-lint run ./...` を実行します。
-- For split frontend/backend work, final response must summarize Active Board items handled and still open/blocked. / 前后端分工任务的最终回复必须说明已处理和仍 open/blocked 的看板项。 / 分担作業の最終応答では処理済み項目と open/blocked 項目を要約します。
+- For split frontend/backend/test/review work, final response must summarize the active identity, Active Board items handled, and still open/blocked items. / 前端、后端、测试、审阅分工任务的最终回复必须说明当前身份、已处理和仍 open/blocked 的看板项。 / 分担作業の最終応答では現在のロール、処理済み項目、open/blocked 項目を要約します。
 
 ## Wails And Logs / Wails 与日志 / Wails とログ
 
@@ -108,7 +142,7 @@ Evidence / 依据 / 根拠: user-provided V1.0 design document plus the current 
 - Frontend calls Go through Wails bindings. / 前端通过 Wails binding 调 Go。 / フロントエンドは Wails binding で Go を呼びます。
 - Closing the Wails window should hide it to tray; authenticated exit must use the explicit exit flow. / 关闭 Wails 窗口应隐藏到托盘；真正退出必须走显式退出鉴权流程。 / Wails ウィンドウを閉じる場合はトレイへ隠し、実際の終了は明示的な認証付き終了フローを使います。
 - Log Web is separate and opt-in. / 日志 Web 独立且默认关闭。 / ログ Web は独立で任意有効です。
-- MCP Server is reserved and disabled by default; the UI may toggle only the Wails backend config switch. / MCP Server 预留且默认关闭；前端只能切换 Wails 后端配置开关。 / MCP Server は予約機能で既定は無効、UI は Wails バックエンド設定スイッチのみ切替可能です。
+- MCP Server is reserved and disabled by default; when enabled, the Wails backend persists the switch until the user disables it. / MCP Server 预留且默认关闭；启用后由 Wails 后端持久保存，直到用户手动关闭。 / MCP Server は予約機能で既定は無効、有効化後は Wails バックエンドが永続保存し、ユーザーが手動で無効化するまで維持します。
 
 ## Language / 语言 / 言語
 

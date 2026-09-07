@@ -21,17 +21,22 @@ manifest 记录：
 
 卸载和修复只能处理 manifest 中登记的资源。没有登记的 RabbitMQ vhost/user、Canal destination、客户配置文件一律视为外部资源。
 
-## RabbitMQ 默认受管资源
+## RabbitMQ 受管资源
 
 ```text
 service: NodeBridgeRabbitMQ
 vhost: /nodebridge-edge
 vhost: /nodebridge-server
 user: nb-server-sync
-user: nb-edge-001
-user: nb-edge-001-local
+user: nb-<edge-node-id>
+user: nb-<edge-node-id>-local
 topology_tag: nodebridge
 ```
+
+- 中心服务器本机用户固定为 `nb-server-sync`。
+- 边缘节点按 `node.id` 生成账号，例如 `edge-002` 对应本机 `nb-edge-002-local`、中心 `nb-edge-002`。
+- `*-local` 只连接边缘机本地 RabbitMQ；不带 `-local` 的账号只连接中心 RabbitMQ。
+- 当前隔离内网试用密码统一为 `1234`。修改配置时必须同步执行 RabbitMQ `change_password`；后端 MCP/托管安装流程已封装该操作。
 
 队列和 exchange 当前仍使用同步协议名，例如 `edge.upload.cdc.q`、`server.cdc.ingress.q`。隔离边界依赖 NodeBridge vhost 和账号权限，不依赖全局队列名前缀。
 
@@ -40,8 +45,7 @@ topology_tag: nodebridge
 ```text
 service: NodeBridgeCanal
 config_dir: %ProgramData%\NodeBridge\canal
-destination: nodebridge-edge-001
-destination: nodebridge-server-001
+destination: nodebridge-<node-id>
 ```
 
 Canal 配置只写入 NodeBridge config dir。外部 Canal 只保存 `canal_addr`、`destination`、`filter` 等连接参数，不修改客户 Canal 配置。
@@ -81,10 +85,11 @@ SyncAgent.exe managed-repair -config config.yaml -manifest install-manifest.json
 SyncAgent.exe managed-uninstall -config config.yaml -manifest install-manifest.json
 ```
 
-当前 alpha 只执行安全动作：
+当前执行器执行：
 
 - 写入 `install-manifest.json`。
 - 生成 NodeBridge Canal destination 配置。
+- 按 `mode` 和 `node.id` 创建或迁移 NodeBridge 自有 RabbitMQ 用户与权限。
 - 在配置的 AMQP URL 可连接时初始化 NodeBridge RabbitMQ topology。
 
 真实 Erlang/RabbitMQ/Canal 离线安装包执行和 Windows Service 注册仍属于后续 beta。

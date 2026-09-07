@@ -1,0 +1,42 @@
+mode: server
+
+node:
+  id: server-longtest-001
+  name: Longtest Server
+  location: single-pc-longtest
+
+mysql:
+  host: 127.0.0.1
+  port: 3342
+  username: sync_user
+  password: sync_password
+  database: scada_center_longtest
+
+rabbitmq:
+  mode: external
+  install: false
+  server_url: amqp://sync:sync_password@127.0.0.1:5702/server-longtest-sync
+  management_url: http://127.0.0.1:15702
+  username: sync
+  password: sync_password
+  vhost: server-longtest-sync
+
+sync:
+  upload_batch_size: 10000
+  dispatch_batch_size: 10000
+  flush_interval_millis: 500
+  retry_interval_seconds: 2
+  node_timeout_seconds: 60
+
+log_web:
+  enable: false
+  bind: 127.0.0.1
+  port: 18280
+  token: longtest_token
+
+mcp_server:
+  enable: false
+
+security:
+  admin_password: admin-pass
+  exit_password: exit-pass

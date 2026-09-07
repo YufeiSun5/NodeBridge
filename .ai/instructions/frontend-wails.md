@@ -24,7 +24,7 @@ applyTo: "frontend/**,cmd/datasync-ui/**,**/*.ts,**/*.tsx,**/*.css"
 
 ## 协作看板
 
-- 前端任务开始前必须读取 `.ai/docs/ai-collaboration-log.md` 的 Active Board。
+- 前端任务开始前必须读取根级 `AI_BOARD.md` 的 Active Board。
 - 前端发现接口缺口、DTO 疑问或需要后端处理的问题，写入 Active Board。
 - 不新增单独的前端看板；稳定接口只查 `.ai/docs/frontend-backend-contract.md`。
 

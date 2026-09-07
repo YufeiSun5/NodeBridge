@@ -15,11 +15,11 @@ mysql:
 rabbitmq:
   mode: managed
   install: true
-  local_url: amqp://nb-edge-001-local:password@127.0.0.1:5672/nodebridge-edge
-  server_url: amqp://nb-edge-001:password@192.168.1.10:5672/nodebridge-server
+  local_url: amqp://nb-edge-001-local:1234@127.0.0.1:5672/%2Fnodebridge-edge
+  server_url: amqp://nb-edge-001:1234@192.168.1.10:5672/%2Fnodebridge-server
   management_url: http://127.0.0.1:15672
-  username: nb-edge-001
-  password: encrypted_password
+  username: nb-edge-001-local
+  password: "1234"
   vhost: /nodebridge-edge
 
 cdc:
@@ -54,5 +54,5 @@ mcp_server:
   enable: false
 
 security:
-  admin_password: encrypted_admin_password
-  exit_password: encrypted_exit_password
+  admin_password: "1234"
+  exit_password: "1234"

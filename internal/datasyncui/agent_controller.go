@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/YufeiSun5/NodeBridge/internal/agentstate"
 	"github.com/YufeiSun5/NodeBridge/internal/status"
 	"github.com/YufeiSun5/NodeBridge/internal/uiapi"
 )
@@ -38,6 +39,7 @@ type externalAgentController struct {
 	exitedAt   time.Time
 	lastError  string
 	logPath    string
+	configPath string
 }
 
 func newExternalAgentController() *externalAgentController {
@@ -47,7 +49,13 @@ func newExternalAgentController() *externalAgentController {
 func (c *externalAgentController) Start(ctx context.Context, configPath, rulesPath, stopFile string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.configPath = configPath
 	if c.runningLocked() {
+		return errAgentAlreadyRunning
+	}
+	if state, err := agentstate.Read(configPath); err != nil {
+		return err
+	} else if state != nil {
 		return errAgentAlreadyRunning
 	}
 	executable, err := c.resolveExecutable()
@@ -59,7 +67,6 @@ func (c *externalAgentController) Start(ctx context.Context, configPath, rulesPa
 	args := []string{"run", "-config", configPath, "-rules", rulesPath}
 	if stopFile != "" {
 		args = append(args, "-stop-file", stopFile)
-		_ = os.Remove(stopFile)
 	}
 	cmd := exec.CommandContext(ctx, executable, args...)
 	logFile, err := openAgentLog(configPath)
@@ -119,7 +126,11 @@ func (c *externalAgentController) Stop(ctx context.Context, stopFile string, gra
 	cmd := c.cmd
 	done := c.done
 	if cmd == nil || done == nil {
+		config := c.configPath
 		c.mu.Unlock()
+		if config != "" {
+			return stopDiscoveredAgent(ctx, config, gracefulTimeout)
+		}
 		return status.AgentStopped, errAgentNotRunning
 	}
 	c.mu.Unlock()
@@ -168,12 +179,28 @@ func (c *externalAgentController) Stop(ctx context.Context, stopFile string, gra
 func (c *externalAgentController) Running() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.runningLocked()
+	if c.runningLocked() {
+		return true
+	}
+	if c.configPath != "" {
+		state, err := agentstate.Read(c.configPath)
+		return err == nil && state != nil
+	}
+	return false
 }
 
 func (c *externalAgentController) Status() uiapi.AgentProcessStatus {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if !c.runningLocked() && c.configPath != "" {
+		state, err := agentstate.Read(c.configPath)
+		if err != nil {
+			return uiapi.AgentProcessStatus{Status: status.AgentError, LastError: err.Error()}
+		}
+		if state != nil {
+			return uiapi.AgentProcessStatus{Status: status.AgentRunning, PID: state.PID, StartedAt: state.StartedAt, ExecutablePath: state.Executable, LogPath: agentLogPath(c.configPath)}
+		}
+	}
 	state := c.status
 	if state == "" {
 		state = status.AgentStopped
@@ -263,4 +290,49 @@ func openAgentLog(configPath string) (*os.File, error) {
 		return nil, fmt.Errorf("open agent log: %w", err)
 	}
 	return file, nil
+}
+
+func stopDiscoveredAgent(ctx context.Context, config string, timeout time.Duration) (string, error) {
+	state, err := agentstate.Read(config)
+	if err != nil {
+		return status.AgentError, err
+	}
+	if state == nil {
+		return status.AgentStopped, errAgentNotRunning
+	}
+	if state.StopFile == "" {
+		return status.AgentError, errors.New("running agent does not expose a stop file")
+	}
+	if err := os.MkdirAll(filepath.Dir(state.StopFile), 0o755); err != nil {
+		return status.AgentError, err
+	}
+	if err := os.WriteFile(state.StopFile, []byte(time.Now().Format(time.RFC3339Nano)), 0o600); err != nil {
+		return status.AgentError, err
+	}
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return status.AgentError, ctx.Err()
+		case <-timer.C:
+			return status.AgentError, errors.New("agent did not stop before timeout; inspect logs before retrying")
+		case <-tick.C:
+			current, err := agentstate.Read(config)
+			if err != nil {
+				return status.AgentError, err
+			}
+			if current == nil {
+				return status.AgentStopped, nil
+			}
+			if current.StartedAt != state.StartedAt || current.PID != state.PID {
+				return status.AgentError, errors.New("another agent started while stopping")
+			}
+		}
+	}
 }

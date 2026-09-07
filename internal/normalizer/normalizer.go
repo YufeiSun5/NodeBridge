@@ -2,7 +2,9 @@ package normalizer
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -11,12 +13,14 @@ import (
 )
 
 type IDGenerator func(now time.Time) (string, error)
+type ChangeIDGenerator func(change cdc.ChangeEvent, nodeID string, now time.Time) (string, error)
 
 type Options struct {
 	NodeID        string
 	SchemaVersion int64
 	Now           func() time.Time
 	NewEventID    IDGenerator
+	NewChangeID   ChangeIDGenerator
 }
 
 type Normalizer struct {
@@ -27,8 +31,18 @@ func New(options Options) Normalizer {
 	if options.Now == nil {
 		options.Now = time.Now
 	}
+	hasCustomEventID := options.NewEventID != nil
 	if options.NewEventID == nil {
 		options.NewEventID = RandomEventID
+	}
+	if options.NewChangeID == nil {
+		if hasCustomEventID {
+			options.NewChangeID = func(change cdc.ChangeEvent, nodeID string, now time.Time) (string, error) {
+				return "", nil
+			}
+		} else {
+			options.NewChangeID = StableCDCEventID
+		}
 	}
 	return Normalizer{options: options}
 }
@@ -49,9 +63,15 @@ func (n Normalizer) Normalize(change cdc.ChangeEvent) (event.SyncEvent, error) {
 	if eventTime.IsZero() {
 		eventTime = now
 	}
-	eventID, err := n.options.NewEventID(now)
+	eventID, err := n.options.NewChangeID(change, n.options.NodeID, now)
 	if err != nil {
 		return event.SyncEvent{}, err
+	}
+	if eventID == "" {
+		eventID, err = n.options.NewEventID(now)
+		if err != nil {
+			return event.SyncEvent{}, err
+		}
 	}
 
 	return event.SyncEvent{
@@ -83,6 +103,40 @@ func RandomEventID(now time.Time) (string, error) {
 		return "", fmt.Errorf("generate event id: %w", err)
 	}
 	return fmt.Sprintf("%016x%s", now.UnixNano(), hex.EncodeToString(random)), nil
+}
+
+func StableCDCEventID(change cdc.ChangeEvent, nodeID string, now time.Time) (string, error) {
+	_ = now
+	if change.BinlogFile == "" || change.BinlogPos == 0 || len(change.PrimaryKey) == 0 {
+		return "", nil
+	}
+	key := struct {
+		NodeID     string         `json:"node_id"`
+		Database   string         `json:"database"`
+		Table      string         `json:"table"`
+		Operation  cdc.Operation  `json:"operation"`
+		BinlogFile string         `json:"binlog_file"`
+		BinlogPos  uint32         `json:"binlog_pos"`
+		PrimaryKey map[string]any `json:"primary_key"`
+		Before     map[string]any `json:"before,omitempty"`
+		After      map[string]any `json:"after,omitempty"`
+	}{
+		NodeID:     nodeID,
+		Database:   change.DatabaseName,
+		Table:      change.TableName,
+		Operation:  change.Operation,
+		BinlogFile: change.BinlogFile,
+		BinlogPos:  change.BinlogPos,
+		PrimaryKey: change.PrimaryKey,
+		Before:     change.Before,
+		After:      change.After,
+	}
+	body, err := json.Marshal(key)
+	if err != nil {
+		return "", fmt.Errorf("build stable event id: %w", err)
+	}
+	sum := sha256.Sum256(body)
+	return "cdc" + hex.EncodeToString(sum[:])[:29], nil
 }
 
 func validOperation(operation cdc.Operation) bool {

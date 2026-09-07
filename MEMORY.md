@@ -1,19 +1,43 @@
 # MEMORY
 
-Last updated: 2026-05-22 13:45 Asia/Shanghai
+Last updated: 2026-09-07 17:45 Asia/Singapore
 
 ## 当前阶段
 
-- 项目处于 V0.33 安装器预检阶段，正在把受管组件从 alpha manifest 执行器推进到离线安装包 catalog、SHA256 校验和命令计划。
+- 2026-09-07 backend-ai 推进 FB-039 覆盖安装：发现并修复 NSIS 在复制文件前未停止运行中 NodeBridge/SyncAgent 的缺口，新增路径限定的 `upgrade-preflight.ps1` 和真实双安装测试。`scripts/test-nsis-upgrade.ps1` 已验证第一次安装、运行中旧 `SyncAgent.exe` 占用、第二次覆盖、二进制替换、配置字段/规则保留及两轮摘要通过，证据 `.cache/nsis-upgrade/20260907-174024-917/`；15 项安装器回归通过。最终发布包 SHA256 `DD6852F3BA87550C8C1C708A52B8507875562E322EA3FE114DB4B8A6CAB1D6F9`。第一台边缘机 `192.168.10.102` TCP/22 在线但 SSH 在 banner 前主动断开，远端真实覆盖升级待连接恢复。
+
+- 2026-09-07 backend-ai 完成 FB-038 v0.46.3 内网更新包：新装配置不再预设节点身份、MySQL 凭据/数据库或同步规则，Log Web 默认关闭；解锁/退出及 NodeBridge 自有 RabbitMQ 密码统一为 `1234`。托管 RabbitMQ 用户按 `mode/node.id` 推导，边缘本机 `nb-<node>-local`、中心连接 `nb-<node>`、中心本机 `nb-server-sync`；MCP 保存先迁移本机 RabbitMQ 服务用户再落盘，并新增中心端 `nodebridge_ensure_server_edge_user`。升级保留 MySQL/Canal/规则并迁移旧 NodeBridge 密码。修复 UI 脱敏密码连接测试和 MCP `restart_agent:true`。最终 EXE SHA256 `62AE97804A620B3669C9F26BEAC75EDA885FE28C0FDF5F2AB2BD6EA65FE24014`；Go test/vet/lint、前端 test/build、15 项安装器回归、NSIS 列表和包内 27 工具 smoke 通过，真实异机安装/升级待 test-ai。
+
+- 2026-09-07 test-ai 推进 FB-034 真实内网 MCP 验收：Windows 控制端通过 SSH 公钥连接第一台边缘机 `192.168.10.102`，MCP `initialize`、26 工具列表、配置读写和实时探测通过。已将 MySQL 配置改为 `127.0.0.1:3306/scada_edge`（凭据加密保存且回读脱敏），在目标机创建 `scada_edge` UTF8MB4 空库，`nodebridge_test_mysql` 与 overview 均为 running；当前/旧版两个规则文件均通过 MCP 清空，队列均为 0，SyncAgent 保持 stopped。完整 Agent 启停/重连和安装器二次安装/卸载仍待验证。
+
+- 2026-09-07 backend-ai 准备发布文档（FB-037）：新增根 README 和一台中心服务器、N 台边缘节点、Windows/Mac 调试电脑的内网部署与 SSH/MCP 授权手册。发布目标已升级为 FB-039 的 v0.46.3 覆盖安装修订包，SHA256 `B1EBE6FBB6055E7BB23614A6508FDEE6C2AB34F26E74793F40C7ACEDDFF809D1`；发行提交、标签和 GitHub Release 待完成。
+
+- 2026-09-07 backend-ai 修复目标机配置保存 Access denied（FB-036）：ProgramData/NodeBridge 原 ACL 只有 Users Write，缺少原子 rename 所需 delete-child。已远程按 `admin\xx` SID 授予继承 Modify，替换测试通过；SSH 防火墙改为 LocalSubnet，当前 Windows Codex 已注册 nodebridge MCP，真实 initialize/tools/list/overview/save_config_patch 通过。安装器加入安装账户 ACL 设置并生成 v0.46.2，SHA256 `620208E9B275EAFA1DA2C856C1BFE774F996A5A00FD402DAC6304A7EC3D6BA14`；32/64 位各 13 项回归、解包/资产/preflight 通过。
+
+- 2026-09-07 backend-ai 修复异机 NSIS 安装失败（FB-035）：复现 32 位 PowerShell 的 ProgramFiles 与 ProgramFiles(x86) 同指 x86 目录，漏查用户已成功安装的 x64 Erlang。v0.46.1 改用 Sysnative PowerShell、ProgramW6432 检测、原生参数转义/进程句柄保留/300 秒安装后探测；安装日志按次写到 ProgramData/NodeBridgeInstallerLogs，卸载后保留。32/64 位各 12 项回归、Go test/vet/lint、五个离线资产 hash 和包内 MCP 26 工具 smoke 通过；真实目标机重装仍待 FB-034 验收。
+
+- 2026-09-07 review-ai（Windows 第二任务）完成 MCP v0.46 实验室全配置管理：26 个工具，覆盖全部 Config/SyncRule 字段、密码/token/security、自启动、真实队列/失败事件/表结构、同步进程和受管拓扑；`-lab-full-access` 显式绕过 MCP 开关/管理解锁，SSH stdio 支持 Windows/Mac 控制端。新增 MCP 跨进程请求锁、Agent 独占锁/状态发现、原子配置/规则写入及协议错误处理。`go test ./...`、`go vet ./...`、golangci-lint、Wails/前端构建和真实 EXE smoke 通过；异机 SSH 与安装卸载尚未执行，交接 FB-033/FB-034。使用 `docs/mcp-service.md` 和安装目录 `app/mcp-lab-client-config.ps1`。
+
+- 项目处于 V0.34 安装器隔离 VM 准备阶段，已在 Hyper-V 中准备私有交换机和关机状态测试 VM，后续只在 VM 内验证 Erlang/RabbitMQ/Canal 安装器，不触碰宿主机组件。
 - 当前仓库已有 Go MVP 骨架、配置样例、迁移样例、RabbitMQ 核心接口、批量同步、表列映射、MySQL Apply Worker、Wails React UI 骨架、Wails UI API 契约和无感安装计划模型。
 - 当前已跑通节点注册、动态分发、HTTP 配置下发、CRUD/软删/幂等/单向表语义、50 条批量同步、三套独立 RabbitMQ 单机 Docker 联调，以及 1 Server + 10 Edge 的 11 MySQL / 11 RabbitMQ 现场拓扑验证；V0.21 改为优先支持 Wails 托盘常驻，不做 Windows Service。
-- 前后端协作已收敛为两文件模型：`frontend-backend-contract.md` 管稳定契约，`ai-collaboration-log.md` 管唯一活跃看板和历史流水。
+- AI 协作已收敛为根级活跃看板模型：`AI_BOARD.md` 与 `MEMORY.md` 同级，承载 frontend/backend/test/review 的 open/blocked/交接；`.ai/docs/` 只放稳定文档、闭合记录和归档材料。
 - 同步分发策略已从固定方向改为规则可配置：`dispatch_target` 控制是否下发、下发给所有 ACTIVE Edge 或指定 Edge；Server-side CDC 已可把中心库变更直接下发 Edge，不重复 Apply 中心库。
 - Wails 后端已开始消除 UI unknown 根因：Overview 暴露显式配置/节点/规则路径，时间 DTO 改为 RFC3339 字符串，规则 fallback 会落盘，外部 SyncAgent 输出进入日志文件并由 `GetLogs` 合并读取。
 - 前端需求已由后端批复；MCP Server 先做预留配置开关，默认关闭，前端只可通过 Wails 后端接口切换，不启动真实 MCP runtime。
 - Rules 编辑态已从超宽表格改为分组卡片；指定分发目标节点暂只能手填节点 ID，已在协作看板登记后端节点列表接口需求。
 - Rules 空字段语义已在 UI 中显式化：空源节点表示全部源节点，空列映射表示同名列映射，非 SELECTED_EDGES 时目标节点由分发策略自动决定。
 - Rules 编辑态已将空值默认语义改为醒目的提示条，并补齐目标库、目标表、包含列、排除列等空值说明。
+- Rules 已接入后端 `sync_mode` 规则字段：新增规则默认 `crud_ordered`，`append_only` 仅用于历史倾倒/采集流水等 INSERT-only 表，UI 已补中英日危险提示。
+- V0.45 性能优化 P1a 已完成：mixed batch 内连续 `append_only INSERT` 安全段按目标表批量写入，遇到 `crud_ordered` 立即停段，不跨越 CRUD 边界；已重建 `build/bin/SyncAgent.exe`，待 test-ai 用新二进制重跑 mixed 恢复压测。
+- V0.45 性能优化 P2/P3/P4 后端已完成：Server Apply 支持 `sync.apply_lanes` 独立主键 lane 并行，`crud_ordered_compact` 只合并同一主键连续 UPDATE；compact 必须 Settings 全局开关和单条规则同时开启，禁止一键全开全部规则。
+- 前端已配合 P4 compact：Settings 增加 `sync.enable_crud_compact` 全局开关，Rules 增加单条 `crud_ordered_compact` 选项；未开全局开关时不能新增选择 compact，且无一键批量开启入口。
+- 2026-06-03 08:30 test-ai 复核 `mixed-15d-offline-002`：`recovery-summary.json` 显示 `drain completed`，但当前 `server.cdc.ingress.q=9000`、`server_event_log=7,340,000`（少 9000），`sync_apply_log=7,349,000`，且相关进程已退出。当前判定为尾段未完全清空，需要复核/补跑尾段后再定性通过。
+- 2026-06-03 09:08 test-ai 补测复核 `mixed-15d-offline-002`：修正规则文件后补 `consume-batch-once` 手工 drain 9,000 条，最终核验 `server.cdc.ingress.q=0`、`server_rows=5,189,000`、`sync_apply_log=7,349,000`、`sync_event_log=7,349,000`、`sync_ack_log failed=0`，长测尾段闭环通过。
+- MCP 目标已调整为远程 AI 受控查看和修改本机 NodeBridge 配置：前端需补 Settings/Manual 说明，后端需设计白名单写配置能力，当前有效交接见 `AI_BOARD.md` 的 FB-030/FB-031。
+- 前端已完成 MCP 新目标说明：Settings、说明书和 `docs/mcp-service.md` 明确 MCP 默认关闭、stdio、不开放 HTTP 端口、不自动远程控制，前端只展示后端状态和 `mcp-client-config` 使用提示。
+- MCP 后端已实现白名单写配置能力：`nodebridge_validate_config_patch` 先验证不落盘，`nodebridge_save_config_patch` 只接受非敏感字段，`nodebridge_save_sync_rules` 走规则校验，读写从磁盘取最新配置/规则，成功写和拒绝写均记录 `logs/mcp-audit.log`；`mcp-stdio` 强制要求 `mcp_server.enable=true`；已重建 `build/bin/SyncAgent.exe`。
+- 2026-06-03 MCP 真实 stdio smoke 已通过：initialize、tools/list、dry-run、保存非敏感配置、拒绝敏感字段、保存规则、审计日志均通过；关闭态 `mcp_server.enable=false` 返回非 0 且输出明确 stderr 诊断。
 - 前端状态栏低调展示“遵循 MIT 协议”，Settings 页说明 MIT 允许范围和使用者注意事项。
 - V0.27 后端已冻结 SyncAgent 查找顺序和 stop-file 优雅停止协议，并新增 `GetAgentProcessStatus()` 供前端展示真实进程状态。
 - 压力测试已改为单进程批量发布入口 `publish-stress-batch`，避免逐条启动 CLI 造成吞吐数据失真。
@@ -31,6 +55,130 @@ Last updated: 2026-05-22 13:45 Asia/Shanghai
 - 前端页面规整已推进：Config 改为分组编辑，Overview/Failures 危险操作增加确认，Settings 开关和分组统一，Logs 筛选按钮语义明确。
 - V0.32 已新增 11 节点 soak 和断网恢复脚本，最小参数验证已通过，长参数可用于客户试用前压测。
 - V0.33 已新增离线安装包预检：`installer-assets-check` 校验路径和 SHA256，`installer-command-plan` 输出 Erlang/RabbitMQ/Canal Windows 命令计划；本版不真实安装、不注册服务。
+- V0.34 已下载 Microsoft Windows Server 2022 Evaluation ISO 到 `.cache/iso/`，创建 Hyper-V 私有交换机 `NodeBridge-V034-Isolated`，并改用 Gen1 VM `NodeBridge-V034-InstallerLab-G1` 继续安装测试；PowerShell Direct 已验证可操作 VM，`Clean-Windows-Installed` 快照已创建。
+- V0.34 已生成交给测试 AI 的无 GUI 安装测试包：`build/NodeBridge-headless-installer-test-v0.34.0.zip`；默认预检不安装组件，`-ExecuteInstall` 可在 VM 内验证 Erlang/RabbitMQ 安装，Canal Service 当前仍为待实现。
+- V0.34 headless installer 默认预检已在 `NodeBridge-V034-InstallerLab-G1` 通过，证据回收到 `.cache/v0.34-headless-preflight/`；真实 `-ExecuteInstall` 因缺真实 Erlang/RabbitMQ/Canal 离线包和 SHA256 暂阻塞。
+- V0.35 已生成交给测试 AI 的无 GUI 安装测试包：`build/NodeBridge-headless-installer-test-v0.35.0.zip`；默认预检不安装组件，`-ExecuteInstall` 可验证 Erlang/RabbitMQ 安装和 RabbitMQ bootstrap，提供 WinSW 后可验证 Canal Service，`-VerifyOnly` / `-Uninstall` 用于闭环验证。
+- V0.35 headless installer 版本验证已在 `NodeBridge-V034-InstallerLab-G1` 通过：package summary 和 managed manifest 均为 `0.35.0`；`-VerifyOnly` 在未安装状态下正确失败并记录 `NodeBridgeRabbitMQ` 缺失，证据在 `.cache/v0.35-headless-version-verify/`。
+- AI 协作身份模型已扩展为 `frontend-ai`、`backend-ai`、`test-ai`、`review-ai`，操作前必须声明身份并通过根级 `AI_BOARD.md` Active Board 交流。
+- 后端已新增只读 `GetNodeOptions()` Wails 契约，Rules 页 ACTIVE Edge 候选列表的后端阻塞已关闭，前端接入任务登记为 `FB-017`。
+- V0.36 headless installer 包已生成：`build/NodeBridge-headless-installer-test-v0.36.0.zip`；新增真实离线包 catalog 生成脚本、RabbitMQ/Canal service 幂等支撑和 Canal 解压验证证据。
+- V0.36 headless installer 已由 test-ai 在 `NodeBridge-V034-InstallerLab-G1` 验证默认预检、catalog 生成脚本、未安装 `-VerifyOnly` 失败和空环境双次 `-Uninstall`；真实 `-ExecuteInstall` 仍等待 Erlang/RabbitMQ/Canal/可选 WinSW 离线包。
+- V0.36 官方离线包已下载到 `.cache/offline-assets/`，并生成带真实资产和 SHA256 catalog 的测试包 `build/NodeBridge-headless-installer-test-v0.36.0-with-assets.zip`，下一步交给 test-ai 在隔离 VM 内执行真实安装、验证、幂等和卸载闭环。
+- V0.36 真实资产安装测试已在隔离 VM `NodeBridge-V034-InstallerLab-G1` 执行到 Erlang/RabbitMQ 阶段，但被 RabbitMQ 服务隔离和 CLI cookie 问题阻塞：VM 内运行的是默认 `RabbitMQ` 服务而非 `NodeBridgeRabbitMQ`，`rabbitmqctl` 认证失败，证据在 `.cache/v0.36-real-install-failure/`；宿主机 Erlang/RabbitMQ/Canal 未触碰。
+- V0.37 已修复安装器真实 RabbitMQ 闭环：不删除未知或客户已有 `RabbitMQ` 服务，优先复用现有 broker；无 RabbitMQ 服务时才创建 `NodeBridgeRabbitMQ`；安装/验证前同步 Erlang cookie；VerifyOnly 改为校验 NodeBridge vhost/user/queue。
+- V0.37 真实资产安装测试已在隔离 VM 继续执行，确认既有 `RabbitMQ` 复用、Erlang cookie 同步和真实 summary 修复生效；当前新阻塞为 `rabbitmq-bootstrap` 连接 `/nodebridge-edge` vhost 返回 403 no access，证据在 `.cache/v0.37-real-install-failure/`。
+- 按用户要求补测无 RabbitMQ 干净系统完整安装路径：VM 已恢复到 `Before-V036-Real-Install` 并确认无 RabbitMQ/NodeBridge/Canal 服务；V0.37 完整安装 28 分钟后中断检查发现仅安装出默认 `RabbitMQ` 服务，未写 summary、未进入 V0.37 cookie/bootstrap 阶段，证据在 `.cache/v0.37-clean-install-interrupted/`。
+- V0.38 已按看板和用户要求恢复 `Clean-Windows-Installed` 干净快照验证完整安装路径；确认无 Erlang/RabbitMQ/NodeBridge 目录和服务后执行 `-ExecuteInstall`，当前阻塞在 `install-erlang`：Erlang 安装进程未超时但 ExitCode 为 null，被脚本判为失败，证据在 `.cache/v0.38-clean-install-failure/`。
+- V0.38.1 已在干净 VM 执行：Erlang/RabbitMQ installer ExitCode null 修复生效并记录 `exit_code_missing_but_detected=true`；首次安装仍因 RabbitMQ ready 90s 超时失败，二次安装可完成 RabbitMQ bootstrap，但 Canal WinSW 服务 StartPending 后停止且 ExitCode=1067，证据在 `.cache/v0.38.1-clean-install-failure/` 和 `.cache/v0.38.1-clean-rerun-canal-failure/`。
+- V0.38.2 已按 test-ai 反馈修复安装器：RabbitMQ CLI 调用前注入 Erlang PATH 并延长 ready 等待；Canal Service 注册前检查 Java，缺 Java 默认跳过并写证据，强验时明确失败；已生成基础包和 with-assets 测试包交回 test-ai。
+- V0.38.2 已在干净 VM 复测：第一轮 `-ExecuteInstall`、`-VerifyOnly` 和 `-Uninstall` 通过，缺 Java 场景正确跳过 Canal Service；二次 `-ExecuteInstall` 仍在 `rabbitmq-bootstrap` 幂等路径失败且 message 仅 `Error:`，证据在 `.cache/v0.38.2-clean-second-install-failure/` 和 `.cache/v0.38.2-clean-validation/`。
+- V0.38.3 已按 test-ai 二次安装反馈修复安装器：每次运行清理旧 runtime 证据，RabbitMQ bootstrap 改为先查 vhost/user 再创建，避免重复创建错误文本导致幂等失败；已生成新基础包和 with-assets 测试包。
+- V0.38.3 已在 `Clean-Windows-Installed` 干净 VM 跑通安装器闭环：第一轮 `-ExecuteInstall`、`-VerifyOnly`、二次 `-ExecuteInstall`、`-Uninstall` 均通过，卸载后无 RabbitMQ/NodeBridge/Canal 服务，证据在 `.cache/v0.38.3-clean-validation/`。
+- V0.39.0 已在安装器中加入可选 Java/JRE 离线资产支持：catalog 可声明 `component=java`，脚本支持 MSI 安装与 Java 探测；当前 with-assets 包未包含 Java 文件，强验 Canal Service 需后续补 Java MSI。
+- V0.40.0 已下载 Windows x64 JRE MSI 到离线资产缓存，新增 `package-headless-installer-with-assets.ps1`，并生成包含 Erlang/RabbitMQ/Canal/WinSW/Java 的 with-assets 测试包，可交给 test-ai 强验 `NodeBridgeCanal` Windows Service。
+- V0.40.0 Canal Service 强验已由 test-ai 在 `Clean-Windows-Installed` 干净 VM 执行到第一轮 `-ExecuteInstall -RequireCanalService`，Erlang/RabbitMQ/bootstrap/Canal 解压通过，但 Java MSI 前置安装未产生 exit code 且 `java.exe` 未安装，导致 `canal-service` 失败；证据在 `.cache/v0.40.0-clean-validation/`，已移交 backend-ai 修复。
+- V0.40.1 已修复 Java MSI 安装检测逻辑：扩大 `java.exe` 搜索范围到 `Program Files\Eclipse Adoptium` / `Program Files\Java` / Microsoft JRE，MSI 参数加入 `/norestart ADDLOCAL=FeatureMain,FeatureEnvironment`，缺 exit code 时 probe 重试 90 秒，并输出 `msi-java.log` / `java-search.json`；已生成新的 with-assets 包交回 test-ai。
+- V0.40.1 Canal Service 强验已由 test-ai 在 `Clean-Windows-Installed` 干净 VM 复测，第一轮 `-ExecuteInstall -RequireCanalService` 仍阻塞在 Java MSI 前置安装：`msi-java.log` 返回 1620 且有 2203/-2147286960，`java.exe` 未安装；Erlang/RabbitMQ/bootstrap/Canal 解压通过，证据在 `.cache/v0.40.1-clean-validation/`，已移交 backend-ai 继续修复。
+- V0.40.2 已将 Java 资产切换为解压式 JRE zip：`packages/OpenJDK-jre.zip` 解压到 `%ProgramData%\NodeBridge\java`，安装器直接从该目录探测 `java.exe`，不再依赖 `msiexec`；已生成新的 with-assets 包交回 test-ai。
+- V0.40.2 Canal Service 强验已由 test-ai 在 `Clean-Windows-Installed` 干净 VM 复测，Java zip 解压和 `java.exe` 探测通过，Erlang/RabbitMQ/bootstrap/Canal 解压通过；当前阻塞为 `NodeBridgeCanal` 启动后停止，Win32 ExitCode=1067，日志显示 JRE 17 不识别 `PermSize=128m`，证据在 `.cache/v0.40.2-clean-validation/`，已移交 backend-ai 继续修复。
+- V0.40.3 已确认 V0.40.2 Canal Service 阻塞根因：Canal 1.1.8 `startup.bat/startup.sh` 带 Java 17 已删除的 `PermSize/MaxPermSize` 参数；安装器现会在 Canal 解压后清洗这些旧 JVM 参数并写出 `runtime/canal-startup-patch.json`，已生成 `build/NodeBridge-headless-installer-test-v0.40.3-with-assets.zip` 交给 test-ai 复测。
+- V0.40.3 Canal Service 强验已由 test-ai 在 `Clean-Windows-Installed` 干净 VM 复测：第一轮 `-ExecuteInstall -RequireCanalService` 通过，`VerifyOnly` 通过，说明 Java 17 参数清洗和 Canal 服务启动已生效；二次 `-ExecuteInstall -RequireCanalService` 阻塞在 `canal-asset-extract`，运行中的 `lib/canal.server-1.1.8.jar` 无法 unlink 覆盖，证据在 `.cache/v0.40.3-clean-validation/`，已移交 backend-ai 修复 Canal 解压幂等。
+- V0.40.4 已修复 Canal 二次安装热覆盖：当 `NodeBridgeCanal` 已 Running 且 Canal 目录完整时，安装器跳过重解压，复用现有目录并写出 `runtime/canal-asset-extract.json`；已生成 `build/NodeBridge-headless-installer-test-v0.40.4-with-assets.zip` 交给 test-ai 复测完整安装/验证/二次安装/卸载闭环。
+- V0.40.4 Canal Service 强验已由 test-ai 在 `Clean-Windows-Installed` 干净 VM 复测：第一轮 `-ExecuteInstall -RequireCanalService`、`VerifyOnly`、二次 `-ExecuteInstall -RequireCanalService`、二次 `VerifyOnly` 均通过；`-Uninstall` 阻塞在 `verify-uninstall`，message 为 `NodeBridgeCanal still exists`，延迟 10 秒后服务消失，证据在 `.cache/v0.40.4-clean-validation/`，已移交 backend-ai 修复卸载等待/确认逻辑。
+- V0.40.5 已修复卸载服务删除确认延迟：`Uninstall` 和 `verify-uninstall` 会等待 NodeBridge 自有服务从 SCM 消失，并输出 `NodeBridgeCanal-delete-wait.json` / `NodeBridgeRabbitMQ-delete-wait.json`；已生成 `build/NodeBridge-headless-installer-test-v0.40.5-with-assets.zip` 交给 test-ai 复测完整闭环。
+- V0.40.5 Canal Service 强验已由 test-ai 在 `Clean-Windows-Installed` 干净 VM 通过完整闭环：第一轮 `-ExecuteInstall -RequireCanalService`、首次 `VerifyOnly`、二次 `-ExecuteInstall -RequireCanalService`、二次 `VerifyOnly`、首次 `Uninstall`、二次 `Uninstall` 均通过；卸载后无 RabbitMQ/NodeBridge/Canal 服务，证据在 `.cache/v0.40.5-clean-validation/`，`FB-024` 已关闭。
+- NSIS beta 安装器制作已委托给 backend-ai，活跃任务为 `AI_BOARD.md` 的 `FB-032`：复用 V0.40.5 headless with-assets 链路，真实系统组件安装继续只在隔离 VM 验证；本机仅允许在不冲突时用 Docker MySQL/RabbitMQ 做非破坏 smoke。
+- 2026-06-03 12:01 backend-ai 已按实机反馈修复 NSIS beta 后续问题：快捷方式显式使用 `NodeBridge.ico`，MySQL/RabbitMQ/CDC/同步参数保存后提示需重启同步进程，RabbitMQ 连通性拆分本地与远端探测，Config 页新增 RabbitMQ 队列初始化入口；新包 `build/NodeBridge-beta-v0.45.0-20260603.exe` SHA256 `60AB33C6B71F14ABC985129FAB0D0A0072B03F1E0E418E3EEF55E0FF0A9FEAFA`。
+- 2026-06-03 14:06 backend-ai 已修复实机安装和 RabbitMQ 403 根因：NSIS 安装遇到安全草稿/不完整 `%ProgramData%\NodeBridge\config.yaml` 时备份并写入完整默认配置；默认 RabbitMQ URL 改为 `nb-edge-001-local:nodebridge_test@127.0.0.1:5672/%2Fnodebridge-edge`，匹配安装器创建的账号和 vhost；NSIS 打包强制使用仓库示例配置。新包 `build/NodeBridge-beta-v0.45.0-20260603.exe` SHA256 `83362DFC51E56A21A56383F8639FB37E586DE7745FD6CBE037700B97C20B9CEB`。
+- 2026-06-03 14:20 backend-ai 已修复 NSIS 安装 `system-components` 1 秒失败 exit code `-196608`：headless component 调用不再用 `Start-Process -ArgumentList` 传递带空格脚本路径，改为 PowerShell 参数数组直接执行并记录 stdout/stderr。新包 `build/NodeBridge-beta-v0.45.0-20260603.exe` SHA256 `947599EA3F2F2620EE0164A6F20E5918EFBD1661FB16176E05B38B5E2972ADD7`。
+- NSIS beta 安装器源码、staging 和最终 exe 已生成：已通过 winget 安装 NSIS 3.12，管理端 exe 已从旧 `DataSync.exe` 修正为 `NodeBridge.exe`，且发布脚本改为 `wails build` 正式构建，修复测试机 Wails build tags 弹窗；NSIS 默认不再强制 `-RequireCanalService`，避免普通测试机因 Canal Service 强验失败直接中断 UI 安装；当前包 `build/NodeBridge-beta-v0.45.0-20260603.exe` SHA256 `C6A0A106C4EFA449E16869F2DB9B3AB76B2C3E009735D37100194C6DC9D90F17`，真实系统组件安装仍未在宿主机执行。
+- 已新增并验证 90 天等价长测 harness：单机 Docker 模拟 Edge/Server，真实 MySQL binlog + Canal CDC，6 张采集表 x 42 点位字段，脚本入口 `scripts/longtest-90d.ps1`，文档 `docs/longtest-90d.md`；`prepare`、`smoke -RowsPerTable 2`、轻量 `query` 和 `archive` 已通过，证据在 `.cache/longtest-90d/smoke-001/`。
+- 90 天等价长测 harness 已按用户要求改为默认 `time-interleaved` 写入：按 `collected_at` 时间窗口推进，每个窗口轮转 6 表，单表内时间顺序递增，并输出 `insert-plan.json`、`ordering-check.json`、`arrival-shape.json`；已删除旧 longtest Docker 容器和 volume 后重建干净环境，`clean-interleaved-smoke-001` 通过 18/18 同步，证据在 `.cache/longtest-90d/clean-interleaved-smoke-001/`。
+- 90 天等价长测第一轮 1 天等价 `day1-interleaved-001` 已执行并判为性能阻塞：Edge 6 表写满 172,800 行，顺序/形态检查通过，Edge 队列清空，失败 ACK 0；Server Apply 停止时 151,951/172,800，`server.cdc.ingress.q` 剩 20,850，后段吞吐约 17 行/s，不满足 1 天恢复追平验收；证据在 `.cache/longtest-90d/day1-interleaved-001/`，看板 `FB-025` 已标记 blocked，需 backend-ai 优化 Apply/ACK 批处理后再跑 7d/90d。
+- V0.41 已完成 Server Apply 保序批处理修复：RabbitMQ batch 改为数据库提交后 ACK，SQL `ApplyBatch` 使用单事务、savepoint 和成功前缀提交，`EDGE_TO_SERVER + dispatch_target=NONE` 成功日志跳过大 `event_payload`；同时修复 longtest smoke/seed/realtime/recovery 未重新 build `SyncAgent.exe` 的测试夹具问题。
+- V0.41 已用当前二进制跑通真实 CDC 6,000 行 smoke：`v041-current-binary-6k` 中 6 张表 Edge/Server 均为 1,000 行，队列清空、失败 ACK 0、顺序违规 0，Server `sync_event_log.event_payload` 全部为 NULL；下一步交 test-ai 重跑 1 天等价、7 天和 90 天长测。
+- V0.41 30 天等价长测 `month30-v041-001` 已由 test-ai 执行并阻塞：Edge 6 表总计 5,184,000 行生成成功，`time-interleaved` 顺序/形态检查通过；Edge SyncAgent 首次运行出现 Canal ACK panic（`batchId:4 is not exist`），受控重启后队列清空但 Server 仅 5,780 行，`sync_apply_log`/`sync_event_log` 对 `collect_data_01` 记录 28,900 条且业务表仅 `collect_data_01=5,780`、其余 5 表为 0；证据在 `.cache/longtest-90d/month30-v041-001/`，看板 `FB-025` 已重新标记 blocked，需 backend-ai 修复 Canal ACK/offset 恢复和 apply log 与业务写入一致性。
+- V0.42 已针对 `month30-v041-001` 修复 CDC 恢复一致性：CDC `event_id` 改为稳定 ID，Canal ACK 成功后才保存 offset，`batchId:* is not exist` 不再导致 agent 崩溃，Server CLI 消费默认失败重投，longtest Canal 配置改为显式挂载并校验；`v042-fix-smoke-600` 和 `v042-fix-smoke-6000` 真实 CDC smoke 已通过。
+- V0.42 长测复测由 test-ai 执行：`day1-v042-001` 1 天等价通过，Edge/Server 6 表总计均为 172,800 行，顺序检查 0 违规，队列清空，查询性能达标；证据在 `.cache/longtest-90d/day1-v042-001/`。
+- V0.42 30 天等价 `month30-v042-001` 仍阻塞：Edge 6 表总计 5,184,000 行完整写入，但 Server 最终仅 69,360 行；`sync_apply_log`/`sync_event_log` 均为 69,360，失败 ACK 为 0，最终 Edge/Server RabbitMQ 队列均为 0，未复现 V0.41 的 ACK panic。判定为大批量 CDC 抓取或 Canal offset 完整性问题，证据与分析在 `.cache/longtest-90d/month30-v042-001/analysis-results.json`，看板 `FB-025` 已转交 backend-ai blocked。
+- V0.43 已修复 V0.42 30 天阻塞的高概率根因：Canal `GetWithoutAck` 返回带 batchId 但无 ROWDATA 的 batch 时，runtime 现在也会 ACK 并推进 offset；`ConvertWithlinMessage` 会从非 ROWDATA entry 保留 binlog offset；已通过 `v043-empty-batch-smoke-6000` 真实 CDC smoke。
+- V0.43 30 天等价 `month30-v043-001` 已由 test-ai 复测并仍阻塞：Edge 6 表总计 5,184,000 行完整写入，顺序检查 0 违规，arrival shape 0 坏窗口；Server 最终仅 46,240 行，`sync_apply_log`/`sync_event_log` 均为 46,240，失败 ACK 为 0，最终 Edge/Server RabbitMQ 队列均为 0。Canal offset 停在 `mysql-bin.000003:18740991`，已回收 Canal server `logs/conf/meta` 到 `.cache/longtest-90d/month30-v043-001/canal-internal/`，分析在 `.cache/longtest-90d/month30-v043-001/analysis-results.json`；`FB-025` 继续 blocked 并转回 backend-ai。
+- V0.44 已定位 V0.43 30 天阻塞根因：Canal server 在长测中按 idle timeout 关闭 TCP client 后，SyncAgent Canal runtime 没有重建 connector，且大 batch 发布期间 Canal client 60s idle timeout 过短；现已在 fetch/commit 错误后 reset Source，下次 worker tick 重新 Connect/Subscribe，并把 Canal client net idle timeout 提到 1h；最终通过 `v044-reconnect-idle-smoke-6000` 真实 CDC 6,000 行 smoke。
+- V0.44 已由 test-ai 执行零/冒烟级 30 天等价回归 `month30-v044-001`：Edge 6 表总计 5,184,000 行完整写入，Server 从 0 增至 116,908 行，越过 V0.43 的 46,240 和 V0.42 的 69,360 旧失败点，失败 ACK 为 0，说明重连/idle-timeout 修复方向有效；本轮为节省时间主动停止，停止时 Edge 队列 61,859、Server 队列 198，不能作为 30d 全量通过，证据在 `.cache/longtest-90d/month30-v044-001/analysis-results.json`。
+- V0.44 分层长测已由 test-ai 开始实施并持续留证：阶段 0 `staged-v044-p0-smoke-001` 通过，12/12 同步、失败 ACK 0、队列清空；阶段 1 `staged-v044-p1-day1-001` 通过，Edge=Server=172,800、失败 ACK 0、队列清空，查询性能达标，证据目录内均有 `test-report.json`。
+- V0.44 阶段 2 7 天全量 `staged-v044-p2-day7-001` 已启动但未验收：Edge 1,209,600 行完整写入，采样期间 Server 从 0 增至 57,066，失败 ACK 为 0，队列仍活跃，未观察到正确性失败；因未跑到 Edge=Server=1,209,600 且队列清空，阶段 2 状态为 paused/not accepted，需无人值守跑满后才能进入 30d。
+- 90 天等价长测 harness 已新增 `DrainMode=agents`：使用常驻 Edge/Server `SyncAgent.exe run` 进行 Canal CDC、Edge upload forward 和 Server apply，替代 30 天复测里的反复 one-shot CLI drain；`scripts/test-coverage-core.ps1` 固化核心包覆盖率门禁，当前核心覆盖率 74.9% >= 70%，全仓库原始覆盖率 53.8% 留证于 `.cache/coverage-summary.txt`；优化后 smoke `smoke-agents-coverage-001` 通过 12/12、重复 event_id=0、失败 ACK=0；30 天积压复测 `staged-v044-month30-agents-001` 已后台启动，PID=33244，证据目录 `.cache/longtest-90d/staged-v044-month30-agents-001/`。
+- V0.44 backend-ai 已针对 30 天积压释放瓶颈优化 Edge 上传：RabbitMQ publisher 新增 `PublishBatch`，Edge upload batch 在保持单队列顺序的前提下先顺序发布整批，再等待整批 publisher confirm，成功后 ACK 源队列，失败时整批 requeue；验证已通过 `go test ./internal/rabbitmq ./internal/syncruntime`、`go test ./...`、`go vet ./...`、核心覆盖率 75.1% >= 70%，并重建 `build/bin/SyncAgent.exe`。当前 `staged-v044-month30-agents-001` 后台长测仍是旧进程，需新跑或重启 agents 才能观察优化收益。
+- 已在 `staged-v044-month30-agents-001` 同一 30 天积压现场切换到批量 confirm 新 SyncAgent：旧 agents PID=29060/17272 停止，新 agents PID=37132/7072 使用 `.cache/longtest-90d/bin/SyncAgent.exe` 继续释放同一批积压；短窗 Server apply 从约 30.9 rows/s 提升到约 141.0 rows/s，Server 收到/落库综合速率约 188.0 msg/s，提升约 4.56x-6.08x。新证据在 `.cache/longtest-90d/staged-v044-month30-agents-001/batchconfirm-samples.csv` 和 `batchconfirm-analysis.json`；当前瓶颈转向 Server MySQL apply。
+- 已为批量 confirm 后的 30 天量级测试启动无人值守完成监控：`scripts/watch-longtest-batchconfirm.ps1` 以 PID=18336 后台运行，每 60 秒采样 Edge/Server 行数、Edge/Server RabbitMQ 队列和 agent 存活状态，直到 Server=5,184,000 且队列清空或 agent 退出；证据写入 `.cache/longtest-90d/staged-v044-month30-agents-001/batchconfirm-watch.csv`，完成摘要写入 `batchconfirm-watch-summary.json`。监控脚本已修复 Windows PowerShell/Docker stderr 和路径空格兼容问题；最新首条采样 Server=1,431,885/5,184,000、Edge 队列=583,111、agents 37132/7072 存活。
+- 2026-05-31 01:58 巡检确认批量 confirm 后 30 天现场仍在推进：agents 37132/7072 存活，Server=1,451,885/5,184,000，Edge 队列约 565,874，Server ingress=10,000；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-015740.json`。无人值守监控脚本仍受 Windows PowerShell native stderr 行为影响，当前以直接 Docker/MySQL/RabbitMQ 快照作为权威进度证据。
+- 2026-05-31 02:00 巡检确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 存活，Server=1,471,885/5,184,000，Edge 队列约 565,792，Server ingress=0，错误日志为空；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-020008.json`。
+- 2026-05-31 02:01 巡检确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 存活，Server=1,481,885/5,184,000，Edge 队列约 552,103，Server ingress=10,000，错误日志为空；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-020139.json`。
+- 2026-05-31 02:03 巡检确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 存活，Server=1,491,885/5,184,000，Edge 队列约 548,734，Server ingress=10,000，错误日志为空；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-020319.json`。
+- 2026-05-31 02:04 巡检确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 存活，Server=1,501,885/5,184,000，Edge 队列约 544,434，Server ingress=10,000，错误日志为空；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-020444.json`。
+- 2026-05-31 02:06 巡检确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 存活，Server=1,511,885/5,184,000，Edge 队列约 540,182，Server ingress=10,000，错误日志为空；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-020609.json`。
+- 2026-05-31 02:08 巡检确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 存活，Server=1,531,885/5,184,000，Edge 队列约 536,888，Server ingress=0，错误日志为空；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-020753.json`。
+- 2026-05-31 02:09 巡检确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 存活，Server=1,541,885/5,184,000，Edge 队列约 533,249，Server ingress=0，错误日志为空；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-020922.json`。
+- 2026-05-31 02:10 巡检确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 存活，Server=1,551,885/5,184,000，Edge 队列约 528,780，Server ingress=0，错误日志为空；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-021043.json`。
+- 2026-05-31 02:12 巡检确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 存活，Server=1,561,885/5,184,000，Edge 队列约 524,971，Server ingress=0，错误日志为空；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-021215.json`。
+- 2026-05-31 02:14 巡检确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 存活，Server=1,571,885/5,184,000，Edge 队列约 511,860，Server ingress=10,000，错误日志为空；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-021355.json`。
+- 2026-05-31 02:15 巡检确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 存活，Server=1,581,885/5,184,000，Edge 队列约 507,649，Server ingress=10,000，错误日志为空；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-021519.json`。
+- 2026-05-31 02:23 巡检确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 存活，Server=1,641,885/5,184,000，Edge 队列约 480,817，Server ingress=10,000；新增并验证可靠 watchdog `scripts/longtest-30d-watchdog.ps1`，后台 PID=11172，每 5 分钟写 `.cache/longtest-90d/staged-v044-month30-agents-001/watchdog-progress.csv` 和 `watchdog-summary.json`。
+- 2026-05-31 02:25 巡检确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,661,885/5,184,000，Edge 队列约 479,094，Server ingress=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-022540.json`。
+- 2026-05-31 02:28 watchdog 正常采样批量 confirm 后 30 天现场：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,681,885/5,184,000，Edge 队列约 461,409，Server ingress=10,000；`watchdog-progress.csv` 和 `watchdog-summary.json` 已更新。
+- 2026-05-31 02:30 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,701,885/5,184,000，Edge 队列约 459,304，Server ingress=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-023039.json`。
+- 2026-05-31 02:32 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,711,885/5,184,000，Edge 队列约 456,368，Server ingress=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-023218.json`。
+- 2026-05-31 02:33 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,721,885/5,184,000，Edge 队列约 442,512，Server ingress=10,000；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-023349.json`。
+- 2026-05-31 02:35 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,731,885/5,184,000，Edge 队列约 438,674，Server ingress=10,000；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-023522.json`。
+- 2026-05-31 02:38 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,751,885/5,184,000，Edge 队列约 430,289，Server ingress=10,000；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-023814.json`。
+- 2026-05-31 02:39 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,771,885/5,184,000，Edge 队列约 426,667，Server ingress=10,000；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-023953.json`。
+- 2026-05-31 02:43 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,791,885/5,184,000，Edge 队列约 420,100，Server ingress=10,000，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-024303.json`。
+- 2026-05-31 02:45 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,811,885/5,184,000，Edge 队列约 408,274，Server ingress=10,000，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-024510.json`。
+- 2026-05-31 02:46 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,821,885/5,184,000，Edge 队列约 405,220，Server ingress=0，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-024649.json`。
+- 2026-05-31 02:48 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,831,885/5,184,000，Edge 队列约 401,939，Server ingress=10,000，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-024825.json`。
+- 2026-05-31 02:50 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,841,885/5,184,000，Edge 队列约 389,840，Server ingress=10,000，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-025023.json`。
+- 2026-05-31 02:52 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,861,885/5,184,000，Edge 队列约 386,137，Server ingress=0，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-025200.json`。
+- 2026-05-31 02:53 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,871,885/5,184,000，Edge 队列约 383,369，Server ingress=3,711，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-025340.json`。
+- 2026-05-31 02:55 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,881,885/5,184,000，Edge 队列约 369,886，Server ingress=10,000，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-025516.json`。
+- 2026-05-31 02:56 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,891,885/5,184,000，Edge 队列约 366,224，Server ingress=10,000，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-025651.json`。
+- 2026-05-31 02:58 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,911,885/5,184,000，Edge 队列约 363,437，Server ingress=0，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-025837.json`。
+- 2026-05-31 03:00 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,921,885/5,184,000，Edge 队列约 350,704，Server ingress=10,000，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-030017.json`。
+- 2026-05-31 03:01 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,928,874/5,184,000，Edge 队列约 347,334，Server ingress=10,000，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-030154.json`。
+- 2026-05-31 03:03 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,947,751/5,184,000，Edge 队列约 343,964，Server ingress=10,000，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-030333.json`。
+- 2026-05-31 03:05 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,957,751/5,184,000，Edge 队列约 340,999，Server ingress=0，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-030514.json`。
+- 2026-05-31 03:06 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,967,751/5,184,000，Edge 队列约 328,529，Server ingress=10,000，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-030659.json`。
+- 2026-05-31 03:08 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,977,751/5,184,000，Edge 队列约 325,152，Server ingress=10,000，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-030839.json`。
+- 2026-05-31 03:10 直连快照确认批量 confirm 后 30 天现场继续推进：agents 37132/7072 与 watchdog PID=11172 存活，Server=1,997,751/5,184,000，Edge 队列约 321,853，Server ingress=0，dead/retry=0；手动快照写入 `.cache/longtest-90d/staged-v044-month30-agents-001/manual-snapshot-20260531-031018.json`。
+- 2026-05-31 03:24 已新增按表 `sync_mode` 同步语义：默认 `crud_ordered` 保持原增删改保序路径，`append_only` 用于历史倾倒/采集流水表，只接受 INSERT，并在 Server Apply 中使用多行批量插入与批量 apply log；`configs/longtest/sync-rules.yaml` 的 6 张采集表已切到 `append_only`。
+- 2026-05-31 03:24 `append_only` 优化验证通过：`go test ./internal/rules ./internal/mapper ./internal/apply`、`go test ./...`、`go vet ./...`、核心覆盖率 75.1% >= 70%、`npm run build` 均通过；`appendonly-smoke-001` 18/18 同步通过，新的 30 天量级后台复测 `appendonly-month30-001` 已启动，PID=8536，证据目录 `.cache/longtest-90d/appendonly-month30-001/`，早期快照 Edge=1,040,000/5,184,000、Server=0，仍在 seed 阶段。
+- 2026-05-31 04:09 继续拆解后确认 Edge 端 Canal->RabbitMQ 仍是逐条 publish confirm，已将 `CanalUploadRuntime` 改为优先 `PublishBatch`，整批成功后才提交 Canal offset；同时 Server append-only apply 对 time-interleaved 批次按目标表分组多行插入。验证：`go test ./...`、`go vet ./...`、核心覆盖率 74.7% >= 70%。`appendonly-month30-003` 因 Edge RabbitMQ Docker cookie 权限异常在 prepare 阶段失败并清理；最终后台复测为 `appendonly-month30-004`，PID=41432，证据目录 `.cache/longtest-90d/appendonly-month30-004/`，04:09 早期快照 Edge=290,000/5,184,000、Server=0，仍在 seed 阶段。
+- 已新增项目技能 `.ai/skills/installer-vm-test/SKILL.md` 和详细命令 runbook `docs/installer-vm-test-runbook.md`，固化隔离 VM 安装器测试闭环、干净快照恢复、证据回收和看板回写规则，方便后续 test-ai 接手。
+- MCP Service 开关已改为持久开关：默认关闭，启用后写入 YAML，NodeBridge 重启后保持启用，只能由用户手动关闭；stdio MCP 仍不占端口，且只开放只读诊断工具。
+- 管理解锁默认有效期已从 10 分钟调整为 1 天；前端继续显示 `GetAuthState().expires_at`，手动锁定仍可立即回到只读模式。
+- Rules 页已接入 `GetNodeOptions()`，`SELECTED_EDGES` 可勾选 ACTIVE Edge 候选并保留手填节点 ID 兜底，`FB-017` 已关闭。
+- 已新增并补强 `docs/frontend-wails-dev.md`，记录可直接复制执行的完整 Wails dev 启动命令、vfox/项目内工具路径、前端门禁和 Wails/native smoke 检查点。
+- 测试凭据已集中到 `docs/test-credentials.md`：Docker lab、longtest、headless installer 和隔离 VM 密码只作为测试值记录；旧 VM 文档和测试技能改为引用该清单，避免说明文中散落明文。
+- 已生成本机解压试用包 `build/v0.45-local-trial-20260603.zip`，内含 `DataSync.exe`、`SyncAgent.exe`、默认配置、规则和试用文档；包内 `SyncAgent.exe` 和 `DataSync.exe` smoke 通过，不执行系统安装。
+- Settings 页已恢复为独立分区布局：外观与语言、窗口与启动、集成、受管组件、安全与关于不再混在同一个自适应网格里。
+- 已完成前端 16:9 多分辨率视觉审阅，截图证据保存在 `.cache/frontend-visual-review-16x9/`，报告见 `docs/frontend-visual-review-16x9.md`。
+- 已将用户提供的 NodeBridge 图处理为透明背景图标，接入 Wails app icon、前端 favicon 和 Windows 托盘 HICON。
+- 已按 Wails 默认 `1100x720` 尺寸完成全页面视觉复查，确认设计语言可保留但默认尺寸布局需优先优化 Rules、空状态和 Settings 错误区。
+- 已按 `1100x720` 复查结果迭代前端：Rules 默认宽度取消横向溢出，Queues/Failures/Logs 空状态改为操作型面板，Settings 错误提示降权，Config 默认宽度分栏更均衡。
+- 已补充 Settings 安全区密码说明：无初始密码、首次设置管理密码、退出密码可为空、忘记密码无法找回原文且需管理员重置配置；同时修复 Wails `build/windows/icon.ico` 仍为默认 W 图标导致窗口/任务栏图标不生效的问题。
+- 已将 Overview 首屏的配置路径、规则路径、Agent 可执行文件和日志路径下沉到 Settings 诊断位置；说明书和空配置提示已区分“软件首次必设管理密码”和“启动同步所需同步配置”。
+- Settings MCP Service 已按后端 V0.37 语义改为本次会话 stdio 临时开关；未加载配置文件时禁用开关并提示先保存同步配置。说明书新增忘记密码恢复章节，写明 `%ProgramData%\NodeBridge\config.yaml` 与 `security.admin_password` / `security.exit_password` 重置位置。
+- 用户可见产品名已统一为英文 `NodeBridge`：说明书、设置文案、HTML title、Wails 应用名和输出文件名不再使用 `DataSync` 或中文名。
+- 忘记密码恢复已按产品决策闭合为用户手动备份并清空配置文件 security 加密字段；后端不提供自动找回或重置 CLI。
+- 首次只设置管理密码不落盘的问题已修复：`SaveConfig` 允许仅含 `security` 的首次安全草稿写入 `%ProgramData%\NodeBridge\config.yaml`，完整同步配置校验不放松。
+- MCP 实际 `%ProgramData%` 安全草稿配置阻塞已在后端收口：`GetMCPServerStatus` / `SetMCPServerEnabled` 在配置不完整、当前用户无法解密或 `mcp-stdio` 严格加载失败时返回 `unsupported` 并拒绝启用。
+- V0.38 已修复 RabbitMQ 安装器闭环：AMQP vhost 使用 `%2Fnodebridge-*` 编码，安装步骤即时写 summary，installer 增加超时证据，干净安装会写 RabbitMQ ownership marker，客户已有 RabbitMQ 仍不删除。
+- 前端已配合首次安全草稿约定：Settings 在未填写同步配置时只向 `SaveConfig` 发送最小 `security` DTO，避免默认端口和批量参数让后端误判为部分同步配置；稳定契约文档中的用户可见名称同步为 `NodeBridge`。
+- 前端已移除顶部管理锁定横幅，将只读/解锁状态收敛到底部右侧指示器，避免占用主工作区上方位置。
+- 前端已将解锁入口集中到右下角胶囊：锁定时点击胶囊弹出管理密码；Config、Rules、Settings 不再显示页面内解锁按钮。
+- 右下角权限控件已从“可点击状态胶囊”改为分段控件：左侧只显示只读/编辑状态，右侧明确显示解锁/锁定动作。
+- MCP Server 持久启用需求已完成前端配合：Settings 和说明书已改为“启用后写入本机配置、重启保持启用、只由用户手动关闭”，并在 unsupported 状态提示同步配置未完成或当前用户无法解密配置。
+- AI 工程化初始化提示词已收敛为一段完整可复制提示词，覆盖根级协作文件、`.ai/` 母本、身份模型、深度审阅和编辑器适配。
 
 ## 已完成事项
 
@@ -128,6 +276,7 @@ Last updated: 2026-05-22 13:45 Asia/Shanghai
 - 已补强双线协作纪律：开工前查 open 项、解决后追加回复、阻塞时追加 blocker、交付时汇报协作项。
 - 已进一步约束后端：每次后端对话也必须读取协作日志，并主动记录需要前端处理的问题、DTO 变化和阻塞。
 - 已将前后端交流收敛为 Active Board：不再新增前端/后端分散看板，稳定接口只维护 contract。
+- 已将活跃 AI 看板迁移到根级 `AI_BOARD.md`，旧 `.ai/docs/ai-collaboration-log.md` 仅保留迁移提示，避免 docs 目录与根级状态发生冲突。
 - 已新增 `internal/uiapi`，定义 Wails UI DTO、脱敏规则、空状态和操作结果结构。
 - 已扩展 `cmd/datasync-ui.App` 的稳定 Wails 方法，覆盖 Overview、Config、Rules、Queues、Failures、Logs 和 Agent control。
 - 已为 Wails UI 后端补充测试，覆盖配置脱敏、配置校验、规则读写和空状态。
@@ -198,6 +347,7 @@ Last updated: 2026-05-22 13:45 Asia/Shanghai
 - 已实现 V0.31 后端 alpha：`managed-plan/apply/repair/uninstall`、Wails 安装计划接口、诊断包安装摘要、只读 `mcp-stdio`。
 - 已接入 Settings 受管安装计划 UI：读取 `GetManagedInstallPlan`，执行 `ApplyManagedInstall` 前要求管理解锁，并展示 alpha 资源边界。
 - 已完成前端可用性优化：同步配置分组编辑、布尔项滑动开关、关键数字字段单位提示、失败批量重试确认、Agent 停止/重启确认和受管组件表格横向滚动。
+- 已完成 Rules ACTIVE Edge 候选接入：读取 `GetNodeOptions()`，展示候选勾选、状态消息和 empty/error 提示，同时保留 `dispatch_node_ids` 手填兜底。
 - 已实现 V0.32 11 节点长测入口：`lab-11-soak-e2e.ps1` 和 `lab-11-disconnect-e2e.ps1`，并将汇总文件纳入诊断包候选。
 - 已实现 V0.33 安装器安全预检：离线包 catalog 模型、SHA256 校验、命令计划 CLI 和 fake asset 单元测试。
 
@@ -258,11 +408,14 @@ Last updated: 2026-05-22 13:45 Asia/Shanghai
 - [x] V0.31 Installer/MCP alpha：受管组件执行器 alpha、只读 stdio MCP
 - [x] V0.32 11-node soak：循环 stress、Server broker 恢复、Edge local broker 重启恢复
 - [x] V0.33 Installer preflight：离线包 catalog、SHA256 校验、命令计划，不触碰本机服务
+- [x] V0.34 Headless installer test bundle：WinServer2022 Core 测试包、默认预检脚本、真实安装显式开关
+- [x] V0.35 Installer closure beta：headless 包支持安装、验证、卸载三入口，等待真实离线包做 VM 侧执行
+- [x] V0.36 Installer real-closure prep：真实 catalog 生成、幂等安装/卸载支撑、默认预检通过
 
 ## 后续建议
 
 - 使用正确 `NODEBRIDGE_RABBITMQ_URL` 和 `NODEBRIDGE_SERVER_MYSQL_DSN` 跑 `docs/v0.3-smoke.md`。
-- 下一步继续 V0.34：在隔离 Windows VM 中执行 Erlang/OTP 与 RabbitMQ 静默安装、服务检测和卸载验证。
+- 下一步由 test-ai 使用真实离线包在隔离 VM 中执行 V0.36 `-ExecuteInstall`、`-VerifyOnly`、二次 `-ExecuteInstall`、二次 `-Uninstall`。
 - 前端待办：使用 `GetOverview` 新字段替代配置状态猜测，并用打包 exe 验收 Overview、Rules、Logs。
 - 后端未完成清单见 `docs/backend-completion-plan.md`。
 - 对接真实 MySQL 容器：设置 `NODEBRIDGE_APPLY_MYSQL_DSN` 后运行集成测试。
@@ -270,7 +423,7 @@ Last updated: 2026-05-22 13:45 Asia/Shanghai
 
 ## 待确认
 
-- 项目最终名称是 `NodeBridge` 还是面向用户的 `DataSync`。
+- 项目最终用户可见名称统一为 `NodeBridge`。
 - Canal Go client 当前使用 `github.com/withlin/canal-go`，后续可替换，依赖已隔离。
 - V0.21 不做 Windows Service；后续如需无人登录运行，再单独评估服务化版本。
 - vfox Node/npm 已可用；Go/Node shell 仍建议显式注入 vfox cache PATH 后执行自动化命令。
@@ -280,6 +433,14 @@ Last updated: 2026-05-22 13:45 Asia/Shanghai
 - 交付节奏：当前已具备后端技术试点基础；补齐 V0.20 前端构建/绑定、Windows Service 和最小管理端后可做客户试用，V1.0 才是产品交付。
 
 ## 改动记录
+
+- 2026-09-07 16:50 | GPT-5 / backend-ai | FB-037：新增一主多边缘部署与 Windows/Mac SSH/MCP 授权手册，统一 v0.46.2 对外版本并完成最终安装包门禁，准备 GitHub 发行。
+
+- 2026-09-07 15:30 | GPT-5 / backend-ai | FB-036：修复安装后 config.yaml 原子替换 Access denied，远程完成目标 ACL/LocalSubnet 防火墙和 Windows Codex MCP 注册，继续发布 v0.46.2。
+
+- 2026-09-07 14:58 | GPT-6 / backend-ai | FB-035：修复 NSIS x86/x64 组件检测、安装退出码/参数转义与持久失败日志，生成 v0.46.1 安装修复版；32/64 位回归和 Go/MCP/资产校验通过，异机重装待 FB-034。
+
+- 2026-09-07 14:26 | GPT-6 | review-ai 实现 MCP v0.46 全配置实验室模式、26 个真实管理工具和 SSH 客户端生成器，修复协议/空规则/日志 limit/跨会话覆盖/重复进程问题，增加原子文件替换和回归测试；全量测试、vet、linter、Wails 构建和包内 EXE smoke 通过，异机安装及 SSH 留待现场验证。
 
 - 2026-05-21 08:43 | gpt-5 | 初始化 AI 协作文档体系和编辑器适配入口。
 - 2026-05-21 09:05 | gpt-5 | 将 AGENTS.md 和技能说明调整为中英日三语。
@@ -376,3 +537,229 @@ Last updated: 2026-05-22 13:45 Asia/Shanghai
 - 2026-05-22 13:31 | gpt-5 | 完成 V0.32 11 节点 soak 和断网恢复验证入口。
 - 2026-05-22 13:45 | gpt-5 | 完成 V0.33 安装器离线包预检和命令计划。
 - 2026-05-22 12:28 | gpt-5 | 前端接入 SyncAgent 真实进程状态、Failures 批量重试和死信只读预览。
+- 2026-05-22 14:32 | gpt-5 | 准备 V0.34 Hyper-V 私有隔离 VM 环境，VM 保持关机且未触碰宿主机 Erlang/RabbitMQ/Canal。
+- 2026-05-22 15:14 | gpt-5 | 新增 V0.34 安装器 VM lab 记录，写入隔离 VM 管理员测试密码、Gen1 VM 和快照计划。
+- 2026-05-22 16:28 | gpt-5 | 验证可通过 PowerShell Direct 操作 V0.34 VM，并创建 `Clean-Windows-Installed` 快照。
+- 2026-05-22 16:34 | gpt-5 | 强化 AI 身份约束，新增 test-ai 和 review-ai 并要求操作前声明身份、统一走 Active Board。
+- 2026-05-22 16:43 | gpt-5 | 生成 WinServer2022 Core 用 headless installer test bundle 并登记测试 AI 任务。
+- 2026-05-22 16:50 | gpt-5 | 以 test-ai 身份完成 V0.34 headless installer 默认预检，真实安装因缺离线包暂阻塞。
+- 2026-05-22 16:54 | gpt-5 | 增强 V0.35 headless installer test bundle，加入安装、验证和卸载闭环入口。
+- 2026-05-22 16:56 | gpt-5 | 将活跃 AI 协作看板迁移到根级 AI_BOARD.md，并更新 AGENTS、workflow 和身份 prompt 路引。
+- 2026-05-22 17:06 | gpt-5 | 以 test-ai 身份完成 V0.35 headless installer 版本查看与 `-VerifyOnly` 未安装失败验证。
+- 2026-05-22 17:17 | gpt-5 | 新增 `GetNodeOptions` Wails 契约并关闭 FB-011 后端阻塞。
+- 2026-05-22 17:29 | gpt-5 | 完成 V0.36 headless installer 幂等闭环准备并生成测试包。
+- 2026-05-22 17:26 | gpt-5 | 以 frontend-ai 身份接入 Rules ACTIVE Edge 候选多选并关闭 FB-017。
+- 2026-05-22 17:45 | gpt-5 | 以 test-ai 身份完成 V0.36 headless installer VM 侧默认预检、catalog 脚本和未安装清理验证。
+- 2026-05-22 17:55 | gpt-5 | 以 frontend-ai 身份新增 Wails 前端启动与测试文档。
+- 2026-05-23 09:10 | gpt-5 | 以 backend-ai 身份修复 V0.37 RabbitMQ 复用、cookie 同步和真实安装 summary。
+- 2026-05-22 17:57 | gpt-5 | 以 backend-ai 身份下载官方离线包并生成 V0.36 真实资产测试包。
+- 2026-05-22 18:00 | gpt-5 | 补强 Wails 前端启动文档，加入完整可复制命令、逐行说明和快速工具检查。
+- 2026-05-22 18:17 | gpt-5 | 以 frontend-ai 身份恢复 Settings 页分区布局并完成前端门禁验证。
+- 2026-05-22 18:31 | gpt-5 | 以 frontend-ai 身份完成 16:9 多分辨率全页面视觉审阅并输出报告。
+- 2026-05-22 18:48 | gpt-5 | 以 frontend-ai 身份根据 16:9 审阅报告优化 Config 长值、空状态、Overview 操作区、Rules 只读节奏、Manual 宽屏阅读和 Settings 退出按钮权重。
+- 2026-05-22 23:36 | gpt-5 | 以 test-ai 身份执行 V0.36 真实资产安装测试，记录 RabbitMQ 服务隔离和 Erlang cookie 阻塞证据。
+- 2026-05-23 09:20 | gpt-5 | 以 test-ai 身份执行 V0.37 真实资产安装测试，记录 RabbitMQ vhost 403 新阻塞证据。
+- 2026-05-23 00:39 | gpt-5 | 以 test-ai 身份补测 V0.37 无 RabbitMQ 干净系统完整安装路径，记录安装中断态证据。
+- 2026-05-23 01:21 | gpt-5 | 以 test-ai 身份恢复 Clean-Windows-Installed 干净快照测试 V0.38 完整安装，记录 Erlang 安装 ExitCode null 阻塞。
+- 2026-05-23 10:10 | gpt-5 | 以 test-ai 身份复测 FB-021 实际 ProgramData MCP 配置，记录 DPAPI 解密失败和本机 Go SDK 缺标准库阻塞。
+- 2026-05-25 08:41 | gpt-5 | 以 test-ai 身份验证 V0.38.1 干净 VM 安装，记录 RabbitMQ ready 超时和 Canal WinSW 1067 阻塞。
+- 2026-05-25 08:59 | gpt-5 | 以 backend-ai 身份修复 V0.38.2 RabbitMQ ready PATH 和 Canal Service Java/证据逻辑。
+- 2026-05-25 10:02 | gpt-5 | 以 test-ai 身份验证 V0.38.2 干净 VM 安装闭环，记录二次安装 RabbitMQ bootstrap 幂等阻塞。
+- 2026-05-25 10:11 | gpt-5 | 以 backend-ai 身份修复 V0.38.3 RabbitMQ bootstrap 二次安装幂等和 runtime 证据清理。
+- 2026-05-25 10:28 | gpt-5 | 以 test-ai 身份验证 V0.38.3 干净 VM 安装器完整闭环并关闭 FB-016。
+- 2026-05-25 10:35 | gpt-5 | 以 backend-ai 身份实现 V0.39.0 可选 Java/JRE 离线资产支持并生成测试包。
+- 2026-05-25 11:27 | gpt-5 | 以 backend-ai 身份实现 V0.40.0 带 Java 离线资产打包并移交 Canal Service 强验。
+- 2026-05-25 11:35 | gpt-5 | 新增安装器隔离 VM 测试项目技能和命令 runbook，固化后续 test-ai 接手流程。
+- 2026-05-26 10:32 | gpt-5 | 以 test-ai 身份执行 V0.40.0 Canal Service 强验，记录 Java MSI 安装检测阻塞并移交 backend-ai。
+- 2026-05-26 11:19 | gpt-5 | 以 backend-ai 身份修复 V0.40.1 Java MSI 探测与日志并重新移交 Canal Service 强验包。
+- 2026-05-26 14:44 | gpt-5 | 以 test-ai 身份复测 V0.40.1 Canal Service 强验，记录 Java MSI 1620/2203 阻塞并移交 backend-ai。
+- 2026-05-26 15:02 | gpt-5 | 以 backend-ai 身份将 Java 离线资产改为 zip 解压式并生成 V0.40.2 强验包。
+- 2026-05-26 15:10 | gpt-5 | 以 test-ai 身份新增 90 天等价长测 Docker/Canal harness，并跑通 prepare、smoke、query 和 archive 轻量验证。
+- 2026-05-26 15:28 | gpt-5 | 以 test-ai 身份复测 V0.40.2 Canal Service 强验，记录 JRE 17 不兼容 `PermSize=128m` 阻塞并移交 backend-ai。
+- 2026-05-26 15:47 | gpt-5 | 以 backend-ai 身份修复 V0.40.3 Canal startup 旧 JVM 参数并重新移交强验包。
+- 2026-05-26 16:04 | gpt-5 | 以 test-ai 身份复测 V0.40.3 Canal Service 强验，记录二次安装 Canal 解压覆盖幂等阻塞并移交 backend-ai。
+- 2026-05-26 16:23 | gpt-5 | 以 backend-ai 身份修复 V0.40.4 Canal 运行中二次安装热覆盖并移交测试包。
+- 2026-05-26 16:42 | gpt-5 | 以 test-ai 身份复测 V0.40.4 Canal Service 强验，记录卸载 `NodeBridgeCanal` 删除确认延迟阻塞并移交 backend-ai。
+- 2026-05-26 16:47 | gpt-5 | 以 backend-ai 身份修复 V0.40.5 卸载服务删除等待并移交测试包。
+- 2026-05-26 17:39 | gpt-5 | 以 test-ai 身份复测 V0.40.5 Canal Service 强验并关闭 FB-024，完整安装/验证/二次安装/二次验证/卸载/二次卸载闭环通过。
+- 2026-05-23 10:36 | gpt-5 | 以 frontend-ai 身份完成 FB-023，Settings 与说明书 MCP 文案切换为持久启用和 unsupported 配置阻塞语义。
+- 2026-05-23 09:24 | gpt-5 | 以 backend-ai 身份补强 stdio MCP 并将 MCP Service 开关改为重启自动关闭。
+- 2026-05-23 09:33 | gpt-5 | 以 backend-ai 身份闭合忘记密码决策并修复首次安全草稿配置落盘。
+- 2026-05-23 00:53 | gpt-5 | 以 backend-ai 身份完成 V0.38 RabbitMQ 安装器闭环修复并移交测试包。
+- 2026-05-23 00:14 | gpt-5 | 以 frontend-ai 身份下沉 Overview 路径诊断信息，并补清密码忘记后的加密字段重置说明。
+- 2026-05-23 00:21 | gpt-5 | 以 frontend-ai 身份修正 MCP 会话开关文案和未配置禁用态，并在说明书增加忘记密码恢复流程。
+- 2026-05-23 00:41 | gpt-5 | 以 frontend-ai 身份统一用户可见产品名为 `NodeBridge`，同步 Wails 应用名、输出文件名和相关测试引用。
+- 2026-05-23 01:14 | gpt-5 | 以 frontend-ai 身份配合后端首次安全草稿约定，Settings 改为发送最小 security DTO，并同步契约文档产品名。
+- 2026-05-23 01:28 | gpt-5 | 以 frontend-ai 身份移除顶部管理锁定横幅，将只读/解锁状态改为底部右侧指示器。
+- 2026-05-23 10:12 | gpt-5 | 以 frontend-ai 身份将解锁入口集中到右下角胶囊，并把 MCP 仅手动关闭需求登记给后端。
+- 2026-05-23 10:28 | gpt-5 | 以 backend-ai 身份修复安装器 ExitCode 兜底探测并持久化 MCP 开关。
+- 2026-05-23 10:24 | gpt-5 | 以 frontend-ai 身份将右下角权限胶囊改为状态/动作分段控件，避免状态标签承担点击动作。
+- 2026-05-23 10:26 | gpt-5 | 以 review-ai 身份将管理解锁默认有效期从 10 分钟调整为 1 天，并补充后端测试断言。
+- 2026-05-26 16:14 | gpt-5 | 以 review-ai 身份升级 AI 工程化初始化提示词为三段式。
+- 2026-05-26 16:21 | gpt-5 | 以 review-ai 身份将 AI 初始化提示词收敛为单段完整版本。
+- 2026-05-26 22:16 | gpt-5 | 以 backend-ai 身份完成 V0.41 保序批处理和长测夹具修复。
+- 2026-05-27 01:35 | gpt-5 | 以 backend-ai 身份修复 Canal ACK 恢复和 CDC 重放幂等。
+- 2026-05-27 08:18 | gpt-5 | 以 test-ai 身份复测 V0.42 长测：1 天等价通过，30 天等价因 CDC/offset 未完整抓取阻塞。
+- 2026-05-27 09:06 | gpt-5 | 以 backend-ai 身份修复 Canal 空 batch 提交与 offset 推进。
+- 2026-05-27 09:18 | gpt-5 | 以 test-ai 身份复测 V0.43 30 天等价，确认队列清空但 Server 仅 46,240/5,184,000 行，回收 Canal 内部日志后继续阻塞。
+- 2026-05-27 09:40 | gpt-5 | 以 backend-ai 身份修复 Canal 长测断连不重连和 idle timeout 过短。
+- 2026-05-27 10:26 | gpt-5 | 以 test-ai 身份执行 V0.44 零/冒烟级长测回归，确认 Server 越过旧失败点到 116,908 行但未跑满 30d 全量。
+- 2026-05-27 11:29 | gpt-5 | 以 test-ai 身份执行 V0.44 分层长测：阶段 0/1 通过，阶段 2 已采样但未跑满 7d 全量。
+- 2026-05-28 08:52 | gpt-5 | 以 test-ai 身份记录 FB-025 `staged-v044-month30-001` 30 天等价长测阻塞：Edge=5,184,000，Server=294,780 后超过 10 小时不增长，RabbitMQ 仍有 `edge.upload.cdc.q=4725`、`server.cdc.ingress.q=1056`，失败 ACK 0；已更新 Active Board 转 backend-ai 分析，现场未清理。
+- 2026-05-28 09:34 | gpt-5 | 以 test-ai 身份按 backend-ai 诊断优化 30 天长测 harness：补 runner stdout/stderr/exit 证据、SyncAgent 命令日志、drain 未追平 fail-fast、失败 summary 和证据回收；已从干净 Docker volume 启动 `staged-v044-month30-rerun-002`，PID=40072，证据目录 `.cache/longtest-90d/staged-v044-month30-rerun-002/`。
+- 2026-05-30 16:50 | gpt-5 | 以 test-ai 身份确认 `staged-v044-month30-rerun-002` 30 天等价 seed 已在用户重启前完成并通过：Edge/Server 六表均为 864,000 行，总计 5,184,000/5,184,000，队列清空，`drain-final.completed=true`，runner summary passed，耗时约 36.99 小时；下一步继续查询性能、归档和 1h/1d/7d 恢复测试。
+- 2026-05-30 17:07 | gpt-5 | 以 test-ai 身份优化 90 天等价长测 drain 为常驻 SyncAgent agents 模式，新增核心覆盖率门禁脚本并通过 74.9% >= 70%，优化后 smoke 通过，已后台启动 30 天积压复测 `staged-v044-month30-agents-001`。
+- 2026-05-31 01:30 | gpt-5 | 以 backend-ai 身份优化 Edge 上传积压释放：新增 RabbitMQ 批量 publisher confirm 和 Edge upload 批量发布路径，保留顺序与整批失败重投语义；全量测试、vet、核心覆盖率 75.1% 和 `SyncAgent.exe` 构建通过。
+- 2026-05-31 01:42 | gpt-5 | 在同一 30d 积压现场热切到批量 confirm 新 SyncAgent，短窗观测 Server apply 提升约 4.56x，Server 收到/落库综合速率提升约 6.08x；瓶颈由 Edge RabbitMQ 上传释放转向 Server MySQL apply。
+- 2026-05-31 01:54 | gpt-5 | 修复并重启批量 confirm 优化后的 30d 无人值守完成监控 PID=18336，采样文件 `batchconfirm-watch.csv`，摘要文件 `batchconfirm-watch-summary.json`，等待 Server 追平 5,184,000 行和队列清空。
+- 2026-05-31 01:58 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,451,885/5,184,000，Edge 队列约 565,874，Server ingress=10,000；写入手动快照并更新看板，测试尚未完成。
+- 2026-05-31 02:00 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,471,885/5,184,000，Edge 队列约 565,792，Server ingress=0；写入手动快照并更新看板，测试尚未完成。
+- 2026-05-31 02:01 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,481,885/5,184,000，Edge 队列约 552,103，Server ingress=10,000；写入手动快照并更新看板，测试尚未完成。
+- 2026-05-31 02:03 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,491,885/5,184,000，Edge 队列约 548,734，Server ingress=10,000；写入手动快照并更新看板，测试尚未完成。
+- 2026-05-31 02:04 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,501,885/5,184,000，Edge 队列约 544,434，Server ingress=10,000；写入手动快照并更新看板，测试尚未完成。
+- 2026-05-31 02:06 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,511,885/5,184,000，Edge 队列约 540,182，Server ingress=10,000；写入手动快照并更新看板，测试尚未完成。
+- 2026-05-31 02:08 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,531,885/5,184,000，Edge 队列约 536,888，Server ingress=0；写入手动快照并更新看板，测试尚未完成。
+- 2026-05-31 02:09 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,541,885/5,184,000，Edge 队列约 533,249，Server ingress=0；写入手动快照并更新看板，测试尚未完成。
+- 2026-05-31 02:10 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,551,885/5,184,000，Edge 队列约 528,780，Server ingress=0；写入手动快照并更新看板，测试尚未完成。
+- 2026-05-31 02:12 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,561,885/5,184,000，Edge 队列约 524,971，Server ingress=0；写入手动快照并更新看板，测试尚未完成。
+- 2026-05-31 02:14 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,571,885/5,184,000，Edge 队列约 511,860，Server ingress=10,000；写入手动快照并更新看板，测试尚未完成。
+- 2026-05-31 02:15 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,581,885/5,184,000，Edge 队列约 507,649，Server ingress=10,000；写入手动快照并更新看板，测试尚未完成。
+- 2026-05-31 02:23 | gpt-5 | 新增并启动 30d 长测 watchdog，确认 Server=1,641,885/5,184,000 且继续推进；后台 PID=11172，每 5 分钟写进度与摘要。
+- 2026-05-31 02:25 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,661,885/5,184,000，Edge 队列约 479,094，watchdog 与 agents 存活；写入手动快照并更新看板。
+- 2026-05-31 02:28 | gpt-5 | 确认 30d watchdog 正常连续采样，Server=1,681,885/5,184,000，Edge 队列约 461,409；更新看板和记忆，测试继续跑。
+- 2026-05-31 02:30 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,701,885/5,184,000，Edge 队列约 459,304；写入手动快照并更新看板。
+- 2026-05-31 02:32 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,711,885/5,184,000，Edge 队列约 456,368；写入手动快照并更新看板。
+- 2026-05-31 02:33 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,721,885/5,184,000，Edge 队列约 442,512；写入手动快照并更新看板。
+- 2026-05-31 02:35 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,731,885/5,184,000，Edge 队列约 438,674；写入手动快照并更新看板。
+- 2026-05-31 02:38 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,751,885/5,184,000，Edge 队列约 430,289；写入手动快照并更新看板。
+- 2026-05-31 02:39 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,771,885/5,184,000，Edge 队列约 426,667；写入手动快照并更新看板。
+- 2026-05-31 02:43 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,791,885/5,184,000，Edge 队列约 420,100，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 02:45 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,811,885/5,184,000，Edge 队列约 408,274，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 02:46 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,821,885/5,184,000，Edge 队列约 405,220，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 02:48 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,831,885/5,184,000，Edge 队列约 401,939，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 02:50 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,841,885/5,184,000，Edge 队列约 389,840，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 02:52 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,861,885/5,184,000，Edge 队列约 386,137，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 02:53 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,871,885/5,184,000，Edge 队列约 383,369，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 02:55 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,881,885/5,184,000，Edge 队列约 369,886，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 02:56 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,891,885/5,184,000，Edge 队列约 366,224，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 02:58 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,911,885/5,184,000，Edge 队列约 363,437，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 03:00 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,921,885/5,184,000，Edge 队列约 350,704，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 03:01 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,928,874/5,184,000，Edge 队列约 347,334，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 03:03 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,947,751/5,184,000，Edge 队列约 343,964，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 03:05 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,957,751/5,184,000，Edge 队列约 340,999，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 03:06 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,967,751/5,184,000，Edge 队列约 328,529，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 03:08 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,977,751/5,184,000，Edge 队列约 325,152，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 03:10 | gpt-5 | 巡检 30d 测试仍在推进，Server=1,997,751/5,184,000，Edge 队列约 321,853，dead/retry=0；写入手动快照并更新看板。
+- 2026-05-31 04:32 | gpt-5 | 以 backend-ai 身份将按表 `sync_mode` 补到 Rules 页面和 Manual：`crud_ordered` 用于增删改保序表，`append_only` 用于历史倾倒/采集流水表；相关 Go 包测试和前端构建通过。当前 30d 复测 `appendonly-month30-004` 未通过，Edge=5,184,000 但 Server=0，需继续定位 Server batch apply 卡点。
+- 2026-05-31 04:34 | gpt-5 | 停止无效 30d 复测 `appendonly-month30-004` 的 runner/agents，保留 Docker 现场和 `.cache/longtest-90d/appendonly-month30-004/` 证据；该轮不计通过，下一步先补 Server batch apply 可观测性和批次限流再重测。
+- 2026-05-31 04:40 | gpt-5 | 修复 append-only 批量 SQL 超过 MySQL prepared statement 占位符上限的问题：多行 INSERT 和 `sync_apply_log` 批量写入按 60000 占位符自动切片；旧失败现场验证 `max-batch=10000` 可 applied，耗时约 11.98s。完整 Go/vet/覆盖率/前端构建门禁通过，已启动新 30d 复测 `appendonly-month30-005` PID=17136。
+- 2026-05-31 04:42 | gpt-5 | 巡检新 30d 复测 `appendonly-month30-005`：runner PID=17136 存活，seed 阶段 Edge=1,030,000/5,184,000，Server=0，队列为空，尚未进入 agents drain。
+- 2026-05-31 04:58 | gpt-5 | `appendonly-month30-005` 已完成 seed 并进入 agents drain；Edge=5,184,000，Server=90,000，Edge/Server agents 存活且 Server stderr 为空。已启动 watchdog PID=40084，每 5 分钟记录进度到该 run 证据目录。
+- 2026-05-31 05:05 | gpt-5 | `appendonly-month30-005` drain 持续推进：实时 Server=290,000/5,184,000，watchdog 05:03 样本 Server=250,000、Edge upload=2,905,880、Server ingress=10,000、agent_count=2、status=running；dead/retry 队列为 0。
+- 2026-05-31 05:10 | gpt-5 | `appendonly-month30-005` drain 继续推进：实时 Server=480,000/5,184,000，watchdog 05:08 样本 Server=410,000、Edge upload=4,709,923、Server ingress=0、agent_count=2、status=running；当前 dead/retry 仍为 0。
+- 2026-05-31 05:12 | gpt-5 | 以 test-ai 身份确认按表 `sync_mode` 是当前正确产品方向：历史倾倒/采集流水表使用 `append_only` 批量加速，低频增删改查表继续用默认 `crud_ordered` 保序；`appendonly-month30-005` 实时快照 Edge=5,184,000、Server=560,000、dead/retry=0，测试仍在后台推进。
+- 2026-05-31 05:13 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：runner/watchdog/Edge agent/Server agent 均存活，实时 Edge=5,184,000、Server=610,000，Edge upload=4,374,000、Server ingress=200,000，dead/retry=0，agent stderr 为空；30 天量级复测未完成，继续后台 drain。
+- 2026-05-31 05:19 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=850,000，Edge upload=3,884,000、Server ingress=460,000，dead/retry=0；watchdog 05:18 样本 Server=790,000、agent_count=2、status=running，30 天量级复测继续推进但尚未完成。
+- 2026-05-31 05:21 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：runner/watchdog/agents 存活，实时 Edge=5,184,000、Server=890,000，Edge upload=3,784,000、Server ingress=510,000，dead/retry=0；仍未达到完成审计条件。
+- 2026-05-31 05:32 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,260,000，Edge upload=2,914,000、Server ingress=1,010,000，dead/retry=0；watchdog 05:28 样本 Server=1,140,000、agent_count=2、status=running，30 天量级复测继续推进但尚未完成。
+- 2026-05-31 05:33 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：runner/watchdog/agents 存活且 agent stderr 为空，实时 Edge=5,184,000、Server=1,290,000，Edge upload=2,834,000、Server ingress=1,060,000，dead/retry=0；仍未达到完成审计条件。
+- 2026-05-31 05:34 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,320,000，Edge upload=2,754,000、Server ingress=1,110,000，dead/retry=0；watchdog 05:33 样本 Server=1,300,000、agent_count=2、status=running，仍未达到完成审计条件。
+- 2026-05-31 05:35 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,350,000，Edge upload=2,674,000、Server ingress=1,160,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:36 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,380,000，Edge upload=2,604,000、Server ingress=1,210,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:37 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,400,000，Edge upload=2,534,000、Server ingress=1,260,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:38 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,430,000，Edge upload=2,454,000、Server ingress=1,300,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:39 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,460,000，Edge upload=2,384,000、Server ingress=1,353,201，dead/retry=0；watchdog 05:38 样本 Server=1,450,000、agent_count=2、status=running，仍未达到完成审计条件。
+- 2026-05-31 05:39 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,480,000，Edge upload=2,324,000、Server ingress=1,390,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:40 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,510,000，Edge upload=2,244,000、Server ingress=1,440,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:41 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,530,000，Edge upload=2,174,000、Server ingress=1,490,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:42 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,560,000，Edge upload=2,094,000、Server ingress=1,530,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:43 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,590,000，Edge upload=2,014,000、Server ingress=1,590,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:44 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,610,000，Edge upload=1,934,000、Server ingress=1,640,000，dead/retry=0；watchdog 05:43 样本 Server=1,590,000、agent_count=2、status=running，仍未达到完成审计条件。
+- 2026-05-31 05:45 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,640,000，Edge upload=1,859,986、Server ingress=1,700,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:46 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,660,000，Edge upload=1,784,000、Server ingress=1,740,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:47 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,690,000，Edge upload=1,694,000、Server ingress=1,800,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:48 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,720,000，Edge upload=1,614,000、Server ingress=1,850,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:49 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,750,000，Edge upload=1,514,000、Server ingress=1,920,000，dead/retry=0；watchdog 05:48 样本 Server=1,720,000、agent_count=2、status=running，仍未达到完成审计条件。
+- 2026-05-31 05:51 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,780,000，Edge upload=1,444,000、Server ingress=1,960,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:51 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,800,000，Edge upload=1,374,000、Server ingress=2,010,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:52 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,820,000，Edge upload=1,314,000、Server ingress=2,050,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:53 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,850,000，Edge upload=1,234,000、Server ingress=2,110,000，dead/retry=0；watchdog 05:53 样本 Server=1,850,000、agent_count=2、status=running，仍未达到完成审计条件。
+- 2026-05-31 05:54 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,880,000，Edge upload=1,154,000、Server ingress=2,160,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:55 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,900,000，Edge upload=1,074,000、Server ingress=2,210,000，dead/retry=0；确认按表 `sync_mode` 适合区分历史倾倒表和增删改查表，测试仍未达到完成审计条件。
+- 2026-05-31 05:57 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,950,000，Edge upload=934,000、Server ingress=2,300,988，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 05:58 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=1,970,000，Edge upload=864,000、Server ingress=2,350,000，dead/retry=0；agents CPU 仍增长但 watchdog 文件暂无新采样，仍未达到完成审计条件。
+- 2026-05-31 05:59 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,000,000，Edge upload=784,000、Server ingress=2,400,834，dead/retry=0；watchdog 已恢复采样，runner/watchdog/agents 存活，仍未达到完成审计条件。
+- 2026-05-31 06:00 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,030,000，Edge upload=704,000、Server ingress=2,460,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 06:01 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,050,000，Edge upload=634,000、Server ingress=2,500,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 06:02 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,070,000，Edge upload=564,000、Server ingress=2,550,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 06:03 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,090,000，Edge upload=494,000、Server ingress=2,600,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 06:04 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,120,000，Edge upload=424,000、Server ingress=2,644,320，dead/retry=0；watchdog 06:03 样本 Server=2,110,000、agent_count=2、status=running，仍未达到完成审计条件。
+- 2026-05-31 06:05 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,140,000，Edge upload=344,000、Server ingress=2,700,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 06:05 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,170,000，Edge upload=274,000、Server ingress=2,750,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 06:06 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,190,000，Edge upload=204,000、Server ingress=2,790,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 06:07 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,210,000，Edge upload=134,000、Server ingress=2,840,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 06:08 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,240,000，Edge upload=54,000、Server ingress=2,900,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 06:09 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,260,000，Edge upload=0、Server ingress=2,934,000，dead/retry=0；Edge upload 已清空，进入 Server ingress 单独 drain 阶段，仍未达到完成审计条件。
+- 2026-05-31 06:10 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,280,000，Edge upload=0、Server ingress=2,904,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:11 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,310,000，Edge upload=0、Server ingress=2,874,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:12 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,340,000，Edge upload=0、Server ingress=2,854,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:13 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,360,000，Edge upload=0、Server ingress=2,824,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:14 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,380,000，Edge upload=0、Server ingress=2,804,000，dead/retry=0；watchdog 06:14 样本正常，仍未达到完成审计条件。
+- 2026-05-31 06:15 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,410,000，Edge upload=0、Server ingress=2,774,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:16 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,430,000，Edge upload=0、Server ingress=2,754,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:17 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,460,000，Edge upload=0、Server ingress=2,724,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:18 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,490,000，Edge upload=0、Server ingress=2,701,368，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:19 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,510,000，Edge upload=0、Server ingress=2,674,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:20 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,540,000，Edge upload=0、Server ingress=2,654,000，dead/retry=0；watchdog 06:19 样本正常，仍未达到完成审计条件。
+- 2026-05-31 06:20 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,560,000，Edge upload=0、Server ingress=2,624,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:21 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,590,000，Edge upload=0、Server ingress=2,604,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:22 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,610,000，Edge upload=0、Server ingress=2,574,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:23 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,640,000，Edge upload=0、Server ingress=2,554,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:24 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,660,000，Edge upload=0、Server ingress=2,524,000，dead/retry=0；watchdog 06:24 样本正常，仍未达到完成审计条件。
+- 2026-05-31 06:25 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,690,000，Edge upload=0、Server ingress=2,494,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:28 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,780,000，Edge upload=0、Server ingress=2,414,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:30 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,800,000，Edge upload=0、Server ingress=2,384,000，dead/retry=0；watchdog 06:29 样本正常，仍未达到完成审计条件。
+- 2026-05-31 06:31 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,840,000，Edge upload=0、Server ingress=2,354,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:32 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,870,000，Edge upload=0、Server ingress=2,324,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:33 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,900,000，Edge upload=0、Server ingress=2,294,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:35 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,960,000，Edge upload=0、Server ingress=2,234,000，dead/retry=0；watchdog 06:34 样本正常，仍未达到完成审计条件。
+- 2026-05-31 06:37 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=2,980,000，Edge upload=0、Server ingress=2,204,000，dead/retry=0；Server ingress 单独 drain 持续推进，仍未达到完成审计条件。
+- 2026-05-31 06:39 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=3,030,000，Edge upload=0、Server ingress=2,154,000，dead/retry=0；继续验证按表 `sync_mode` 区分历史倾倒表 `append_only` 与 CRUD 保序表 `crud_ordered`，仍未达到完成审计条件。
+- 2026-05-31 06:40 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=3,060,000，Edge upload=0、Server ingress=2,124,000，dead/retry=0；runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 06:45 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=3,210,000，Edge upload=0、Server ingress=1,984,000，dead/retry=0；近 5.6 分钟增加约 150,000 行，约 26,800 行/分钟，仍未达到完成审计条件。
+- 2026-05-31 06:56 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=3,480,000，Edge upload=0、Server ingress=1,714,000，dead/retry=0；近 10.7 分钟增加约 270,000 行，约 25,300 行/分钟，agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 07:12 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=3,870,000，Edge upload=0、Server ingress=1,314,000，dead/retry=0；近 15.6 分钟增加约 390,000 行，约 25,000 行/分钟，runner/watchdog/agents 存活且 agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 07:27 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=4,250,000，Edge upload=0、Server ingress=934,000，dead/retry=0；近 15.5 分钟增加约 380,000 行，约 24,500 行/分钟，agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 07:43 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=4,640,000，Edge upload=0、Server ingress=554,000，dead/retry=0；近 15.6 分钟增加约 390,000 行，约 25,000 行/分钟，进入最后 55 万后改为 5 分钟采样，仍未达到完成审计条件。
+- 2026-05-31 07:48 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=4,770,000，Edge upload=0、Server ingress=414,000，dead/retry=0；近 5.5 分钟增加约 130,000 行，约 23,500 行/分钟，agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 07:54 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=4,910,000，Edge upload=0、Server ingress=274,000，dead/retry=0；近 5.6 分钟增加约 140,000 行，约 25,000 行/分钟，agent stderr 为空，仍未达到完成审计条件。
+- 2026-05-31 08:00 | gpt-5 | 以 test-ai 身份巡检 `appendonly-month30-005`：实时 Edge=5,184,000、Server=5,040,000，Edge upload=0、Server ingress=144,000，dead/retry=0；进入最后 3% 后改为 2 分钟短轮询，仍未达到完成审计条件。
+- 2026-05-31 08:07 | gpt-5 | 以 test-ai 身份完成 `appendonly-month30-005` 30 天量级复测审计：runner-summary `passed`，drain-final `completed=true`；Edge/Server 总数均 5,184,000，6 张表各 864,000；Edge upload/retry/dead/downlink 与 Server ingress/dead/downlink 队列全 0；`sync_apply_log=5,184,000`、`sync_event_log=5,184,000` 且 payload 全 NULL、`sync_ack_log=0`，agent stderr 与错误关键字扫描为空；已停止残留 watchdog。
+- 2026-05-31 08:43 | gpt-5 | 用户要求暂停 5 张保序标签表 + 12 张 append-only 倾倒表的 15 天断网压测；已停止 `mixed-smoke-001` 残留脚本进程。已在 `AI_BOARD.md` 登记 FB-026 交给 frontend-ai 联调 `sync_mode` 规则选项：默认 `crud_ordered`，历史倾倒表可选 `append_only`，需确认保存/读取闭环、危险提示和三语文案。
+- 2026-06-01 09:04 | gpt-5 | 以 test-ai 身份启动 15 天混合断网压力测：有效 run `mixed-15d-offline-002`，runner PID=41444、Edge agent PID=29348，证据目录 `.cache/longtest-90d/mixed-15d-offline-002/`；测试覆盖 5 张 `tag_state_*` 保序 CRUD 更新表和 12 张 `collect_data_*` append-only 倾倒表，预期业务行 5,189,000、预期事件 7,349,000。无效首轮 `mixed-15d-offline-001` 已停止并修正 harness 断网顺序；启动确认 Server RabbitMQ 已停止模拟断网，Edge agent 存活且 stderr 为空，Edge append_rows=80,000、tag_rows=5,000。按用户要求不持续盯进度。
+- 2026-06-01 09:10 | gpt-5 | 以 test-ai 身份巡检 `mixed-15d-offline-002`：runner PID=41444、Edge agent PID=29348 均存活；Server RabbitMQ 仍停止，符合断网模拟；Edge append_rows 从 120,000 增至 240,000、tag_rows=5,000，Edge upload 队列从 169,604 增至 299,264，retry/dead=0；runner/agent 日志关键字扫描未见 panic/fatal/Error 1390/FAILED，当前为正常积压生成阶段。
+- 2026-06-01 10:31 | gpt-5 | 以 test-ai 身份巡检 `mixed-15d-offline-002`：runner PID=41444、Edge agent PID=29348 均存活；Server RabbitMQ 仍停止，符合断网模拟；Edge append_rows=1,560,000/5,184,000，tag_rows=5,000，Server 业务行仍 0，Edge upload 队列=2,199,994、retry/dead=0；runner.err 仅 MySQL password warning，edge.err 为空，关键字扫描未见 panic/fatal/Error 1390/Error 1062/FAILED，当前仍在断网积压生成阶段。
+- 2026-06-01 14:05 | gpt-5 | 以 test-ai 身份巡检 `mixed-15d-offline-002`：runner PID=41444、Edge agent PID=29348 均存活；Server RabbitMQ 仍停止，符合断网模拟；Edge append_rows=3,480,000/5,184,000，tag_rows=5,000，Server 业务行仍 0，Edge upload 队列=4,904,324、retry/dead=0；runner.out 最新进度 `rows_each_append=200000/432000`，日志关键字扫描未见 panic/fatal/Error 1390/Error 1062/FAILED，仍在断网积压生成阶段。
+- 2026-06-01 15:54 | gpt-5 | 以 test-ai 身份巡检 `mixed-15d-offline-002`：runner PID=41444、Edge agent PID=29348 均存活；Server RabbitMQ 仍停止，符合断网模拟；Edge append_rows=4,320,000/5,184,000，tag_rows=5,000，Server 业务行仍 0；Edge upload 队列=6,081,325/预期事件 7,349,000，retry/dead=0；runner.err 仍为 MySQL password warning，edge.err 为空，关键字扫描未见 panic/fatal/Error 1390/Error 1062/FAILED，仍在断网积压生成阶段。
+- 2026-06-01 17:04 | gpt-5 | 用户要求 `mixed-15d-offline-002` “灌完数据先停，明天再测恢复”：当前仍在断网灌数，runner PID=41444、Edge agent PID=29348 均存活；Edge append_rows=4,800,000/5,184,000，tag_rows=5,000，Edge upload 队列约 6,793,892/7,349,000，tag 版本约 389k-400k/432k。已启动 pause monitor PID=37368，每 10 秒检查；达到 append_rows=5,184,000 且 edge_upload>=7,349,000 后会自动停止 runner 和 Edge agent，并保持 Server RabbitMQ stopped，写 `.cache/longtest-90d/mixed-15d-offline-002/pause-after-seed.json`。
+- 2026-06-01 17:18 | gpt-5 | 以 test-ai 身份巡检 `mixed-15d-offline-002` 暂停前状态：runner PID=41444、Edge agent PID=29348、pause monitor PID=37368 均存活；Server RabbitMQ 仍停止，符合断网模拟；Edge append_rows=4,920,000/5,184,000，还差 264,000；Edge upload 队列=6,959,575/7,349,000，还差 389,425；pause marker 尚未生成，monitor 正常采样；retry/dead=0，关键字扫描未见 panic/fatal/Error 1390/Error 1062/FAILED。
+- 2026-06-01 17:59 | gpt-5 | `mixed-15d-offline-002` 已按用户要求停在“离线积压已灌完、尚未恢复同步”状态：`pause-after-seed.json` 17:55:42 生成，append_rows=5,184,000、edge_upload_depth=7,349,000，target reached 后已停止 runner PID=41444 和 Edge agent PID=29348；Server RabbitMQ 仍 stopped，Edge upload.cdc.q=7,349,000 ready / 0 unacked，retry/dead=0，Server 业务行仍 0。明天可从该现场启动 Server RabbitMQ 和 agents 做恢复 drain。
+- 2026-06-02 14:12 | gpt-5 | 以 test-ai 身份复核 `mixed-15d-offline-002` 重启后的恢复测试前置条件：先只拉起 Edge/Server MySQL、Edge RabbitMQ、Edge Canal，保持 Server RabbitMQ stopped；Edge RabbitMQ 用约 107 秒完成 7,349,000 条持久消息索引重建，edge.upload.cdc.q=7,349,000 ready / 0 unacked / 0 consumers，retry/dead=0；Edge append_rows=5,184,000、tag_rows=5,000，Server 业务行仍 0；无残留 runner/agent/pause monitor，日志关键字扫描未见 panic/fatal/Error 1390/Error 1062/FAILED。可以从该现场启动 Server RabbitMQ 和 agents 做恢复 drain，不需要重灌数据。
+- 2026-06-02 14:23 | gpt-5 | 以 test-ai 身份启动 `mixed-15d-offline-002` 恢复 drain：第一次控制器因 Server RabbitMQ 未实际启动导致 init 拓扑失败，未启动 agents、未消费积压；随后手动启动 Server RabbitMQ、初始化 Server 拓扑成功，并启动修正后的恢复控制器 PID=22524、Edge/Server SyncAgent PID=23644/4228。14:23 样本显示恢复已运行：ServerRows=70,000、ApplyLog=70,000、Edge upload=7,177,118、Server ingress=97,092，当前 controller-2/edge/server stderr 均为空；日志在 `.cache/longtest-90d/mixed-15d-offline-002/agents-recovery/`，进度在 `recovery-progress.csv` / `recovery-summary.json`。
+- 2026-06-02 16:20 | gpt-5 | 以 review-ai 身份把 Server Apply 成倍性能优化计划写入 `AI_BOARD.md` 的 FB-028，移交 backend-ai 实施：当前性能瓶颈明确在 Server apply，计划按 P0-P5 推进，优先分流 `append_only` 与 `crud_ordered`，append-only 独立高速 worker/队列并批量业务 INSERT + 批量 `sync_apply_log`，CRUD 按 `target_table + pk` hash lane 并行且 lane 内保序，后续评估 `crud_ordered_compact` 合并同主键连续 UPDATE 和 append-only `LOAD DATA`/staging table。硬约束：ACK 仍在业务写和系统日志提交后，SyncEvent 映射、回环抑制、幂等、失败重试/死信不变量不破坏；目标 append-only >=1,500 rows/s、mixed apply >=1,000 events/s。
+- 2026-06-02 17:39 | gpt-5 | 以 test-ai 身份巡检 `mixed-15d-offline-002` 恢复 drain：Edge upload 已清空，Server ingress=3,599,000，ServerRows=2,650,000/5,189,000，ApplyLog=3,750,000/7,349,000；恢复控制器 PID=22524、Edge/Server SyncAgent PID=23644/4228 均存活，controller-2/edge/server stderr 为空，retry/dead=0。最近约 20 分钟 apply 约 285 events/s，剩余约 3.6M apply events，预计还需约 3.5 小时；继续后台运行，不持续盯进度。
+- 2026-06-02 16:25 | gpt-5 | 以 backend-ai 身份完成 FB-028 P1a：mixed batch 连续 append-only 段按目标表批量写入，CRUD 边界不跨越；全量 Go 测试和 vet 通过，`golangci-lint` 未安装跳过，已重建 `build/bin/SyncAgent.exe` 并移交 test-ai 复测吞吐。
+- 2026-06-02 16:45 | gpt-5 | 以 backend-ai 身份完成 FB-028 P2/P3/P4 后端：新增 `sync.apply_lanes`、`sync.enable_crud_compact` 和 `crud_ordered_compact` 双门槛；全量 Go 测试和 vet 通过，重建 `build/bin/SyncAgent.exe`，新增 FB-029 交前端补 Settings 开关和单规则选项。
+- 2026-06-02 16:54 | gpt-5 | 以 backend-ai 身份登记 MCP 远程 AI 受控改配置目标，新增 FB-030/FB-031 交前后端分工。
+- 2026-06-02 17:07 | gpt-5 | 以 backend-ai 身份完成 MCP 白名单写配置、规则保存和启用门禁，测试通过并重建 SyncAgent。
+- 2026-06-02 17:28 | gpt-5 | 以 backend-ai 身份安装 golangci-lint 2.12.2，增强 MCP dry-run/schema/拒绝审计，Go test/vet/lint 通过并重建 SyncAgent。
+- 2026-06-03 08:45 | gpt-5 | 以 backend-ai 身份完成 MCP 真实 stdio smoke，补禁用态 stderr 诊断，Go test/vet/lint 通过并重建 SyncAgent。
+- 2026-06-03 09:05 | gpt-5 | 以 backend-ai 身份集中测试凭据文档，清理旧 VM 文档散落密码引用。
+- 2026-06-03 10:19 | gpt-5 | 以 backend-ai 身份生成本机解压试用包，包内 SyncAgent/DataSync smoke 通过。
+- 2026-06-03 10:31 | gpt-5 | 以 review-ai 身份新增 FB-032，委托 backend-ai 制作 NSIS beta 安装器并明确本机 Docker 非破坏 smoke 边界。
+- 2026-06-03 10:42 | gpt-5 | 以 backend-ai 身份完成 NSIS beta 安装器源码、安装/卸载包装脚本和 staging 打包验证；最终 exe 编译待 `makensis.exe`。
+- 2026-06-03 10:52 | gpt-5 | 以 backend-ai 身份安装 NSIS 3.12 并生成 `NodeBridge-beta-v0.45.0-20260603.exe`，未执行安装器本身或真实系统组件安装。
+- 2026-06-03 11:02 | gpt-5 | 以 backend-ai 身份将管理端交付 exe 从旧 `DataSync.exe` 修正为 `NodeBridge.exe`，重新生成 NSIS beta 包并更新试用手册。
+- 2026-06-03 11:24 | gpt-5 | 以 backend-ai 身份根据测试截图修复管理端 Wails 构建方式和 NSIS 默认强验策略，重新生成 beta 安装包。
+- 2026-06-03 14:06 | gpt-5 | 以 backend-ai 身份修复 NSIS beta 安全草稿配置导致安装尾段失败、默认 RabbitMQ URL 与 bootstrap 账号/vhost 不一致导致 403 的问题，并重新生成安装包。
+- 2026-06-03 14:20 | gpt-5 | 以 backend-ai 身份修复 NSIS beta 调用 headless 安装脚本时 `Program Files` 路径空格导致 exit code -196608 的问题，并重新生成安装包。

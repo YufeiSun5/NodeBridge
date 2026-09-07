@@ -20,7 +20,16 @@ export function ErrorState({ title, detail }: PageStateProps) {
   return (
     <div className="empty-state error-state">
       <strong>{title}</strong>
-      {detail ? <span>{detail}</span> : null}
+      {detail && detail !== title ? <span>{detail}</span> : null}
+    </div>
+  );
+}
+
+export function InlineErrorState({ title, detail }: PageStateProps) {
+  return (
+    <div className="inline-error-state">
+      <strong>{title}</strong>
+      {detail && detail !== title ? <span>{detail}</span> : null}
     </div>
   );
 }

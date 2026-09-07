@@ -69,6 +69,7 @@ type EventLogRecord struct {
 	AppliedAt          time.Time
 	ErrorMessage       string
 	Payload            []byte
+	SkipPayload        bool
 }
 
 type ReplayEvent struct {
@@ -246,44 +247,16 @@ func (s *Store) UpsertEventLog(ctx context.Context, record EventLogRecord) error
 	if s.DB == nil {
 		return fmt.Errorf("sync store db is required")
 	}
-	if record.Event.EventID == "" || record.Event.DatabaseName == "" || record.Event.TableName == "" {
-		return fmt.Errorf("event_id, database_name and table_name are required")
+	if err := validateEventLogRecord(record); err != nil {
+		return err
 	}
-	if record.Status == "" {
-		return fmt.Errorf("event status is required")
-	}
-	payload := record.Payload
-	if len(payload) == 0 {
-		encoded, err := json.Marshal(record.Event)
-		if err != nil {
-			return fmt.Errorf("encode event payload: %w", err)
-		}
-		payload = encoded
-	}
-	receivedAt := record.ReceivedAt
-	if receivedAt.IsZero() {
-		receivedAt = s.now()
-	}
-	eventTime := record.Event.EventTime
-	if eventTime.IsZero() {
-		eventTime = receivedAt
+	payload, receivedAt, eventTime, err := s.prepareEventLog(record)
+	if err != nil {
+		return err
 	}
 
-	_, err := s.DB.ExecContext(ctx, `
-INSERT INTO sync_event_log (
-  event_id, origin_node_id, source_node_id, database_name, table_name,
-  target_database_name, target_table_name, pk_value, op_type, direction,
-  status, event_time, received_at, applied_at, error_message, event_payload
-)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON DUPLICATE KEY UPDATE
-  target_database_name = VALUES(target_database_name),
-  target_table_name = VALUES(target_table_name),
-  status = VALUES(status),
-  applied_at = VALUES(applied_at),
-  error_message = VALUES(error_message),
-  event_payload = VALUES(event_payload)
-`, record.Event.EventID,
+	_, err = s.DB.ExecContext(ctx, eventLogUpsertSQL(),
+		record.Event.EventID,
 		record.Event.OriginNodeID,
 		record.Event.SourceNodeID,
 		record.Event.DatabaseName,
@@ -298,12 +271,123 @@ ON DUPLICATE KEY UPDATE
 		receivedAt,
 		nullableTime(record.AppliedAt),
 		nullableString(record.ErrorMessage),
-		string(payload),
+		payload,
 	)
 	if err != nil {
 		return fmt.Errorf("upsert event log: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) UpsertEventLogs(ctx context.Context, records []EventLogRecord) error {
+	if s.DB == nil {
+		return fmt.Errorf("sync store db is required")
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin event log batch tx: %w", err)
+	}
+	defer tx.Rollback()
+	stmt, err := tx.PrepareContext(ctx, eventLogUpsertSQL())
+	if err != nil {
+		return fmt.Errorf("prepare event log batch: %w", err)
+	}
+	defer stmt.Close()
+	for _, record := range records {
+		if err := validateEventLogRecord(record); err != nil {
+			return err
+		}
+		payload, receivedAt, eventTime, err := s.prepareEventLog(record)
+		if err != nil {
+			return err
+		}
+		if _, err := stmt.ExecContext(ctx,
+			record.Event.EventID,
+			record.Event.OriginNodeID,
+			record.Event.SourceNodeID,
+			record.Event.DatabaseName,
+			record.Event.TableName,
+			nullableString(record.TargetDatabaseName),
+			nullableString(record.TargetTableName),
+			record.PKValue,
+			record.Event.EventType,
+			record.Direction,
+			record.Status,
+			eventTime,
+			receivedAt,
+			nullableTime(record.AppliedAt),
+			nullableString(record.ErrorMessage),
+			payload,
+		); err != nil {
+			return fmt.Errorf("upsert event log batch item %s: %w", record.Event.EventID, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit event log batch tx: %w", err)
+	}
+	return nil
+}
+
+func validateEventLogRecord(record EventLogRecord) error {
+	if record.Event.EventID == "" || record.Event.DatabaseName == "" || record.Event.TableName == "" {
+		return fmt.Errorf("event_id, database_name and table_name are required")
+	}
+	if record.Status == "" {
+		return fmt.Errorf("event status is required")
+	}
+	return nil
+}
+
+func (s *Store) prepareEventLog(record EventLogRecord) (any, time.Time, time.Time, error) {
+	if record.SkipPayload {
+		receivedAt := record.ReceivedAt
+		if receivedAt.IsZero() {
+			receivedAt = s.now()
+		}
+		eventTime := record.Event.EventTime
+		if eventTime.IsZero() {
+			eventTime = receivedAt
+		}
+		return nil, receivedAt, eventTime, nil
+	}
+	payload := record.Payload
+	if len(payload) == 0 {
+		encoded, err := json.Marshal(record.Event)
+		if err != nil {
+			return nil, time.Time{}, time.Time{}, fmt.Errorf("encode event payload: %w", err)
+		}
+		payload = encoded
+	}
+	receivedAt := record.ReceivedAt
+	if receivedAt.IsZero() {
+		receivedAt = s.now()
+	}
+	eventTime := record.Event.EventTime
+	if eventTime.IsZero() {
+		eventTime = receivedAt
+	}
+	return string(payload), receivedAt, eventTime, nil
+}
+
+func eventLogUpsertSQL() string {
+	return `
+INSERT INTO sync_event_log (
+  event_id, origin_node_id, source_node_id, database_name, table_name,
+  target_database_name, target_table_name, pk_value, op_type, direction,
+  status, event_time, received_at, applied_at, error_message, event_payload
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE
+  target_database_name = VALUES(target_database_name),
+  target_table_name = VALUES(target_table_name),
+  status = VALUES(status),
+  applied_at = VALUES(applied_at),
+  error_message = VALUES(error_message),
+  event_payload = VALUES(event_payload)
+`
 }
 
 func (s *Store) UpsertAck(ctx context.Context, record AckRecord) error {

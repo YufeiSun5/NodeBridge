@@ -4,15 +4,19 @@ import (
 	"archive/zip"
 	"context"
 	"encoding/base64"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
+	"github.com/YufeiSun5/NodeBridge/internal/rabbitmq"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
 	"github.com/YufeiSun5/NodeBridge/internal/status"
+	"github.com/YufeiSun5/NodeBridge/internal/syncstore"
 	"github.com/YufeiSun5/NodeBridge/internal/uiapi"
 )
 
@@ -75,6 +79,100 @@ func TestSaveConfigRequiresAdminPassword(t *testing.T) {
 	_, err := app.SaveConfig(uiapi.SaveConfigRequest{Config: uiapi.ConfigFromApp(cfg)})
 	if err == nil || !strings.Contains(err.Error(), "security.admin_password") {
 		t.Fatalf("expected admin password validation error, got %v", err)
+	}
+}
+
+func TestSaveConfigPersistsSecurityDraft(t *testing.T) {
+	app, configPath, _ := newTempApp(t)
+	if result := app.UnlockAdmin(uiapi.UnlockAdminRequest{}); !result.OK {
+		t.Fatalf("unlock first-run admin: %+v", result)
+	}
+	saved, err := app.SaveConfig(uiapi.SaveConfigRequest{Config: uiapi.ConfigDTO{
+		Security: appconfig.SecurityConfig{AdminPassword: "first-admin", ExitPassword: "first-exit"},
+	}})
+	if err != nil {
+		t.Fatalf("SaveConfig returned error: %v", err)
+	}
+	if saved.Security.AdminPassword != appconfig.RedactedSecret || saved.Security.ExitPassword != appconfig.RedactedSecret {
+		t.Fatalf("expected redacted security draft, got %+v", saved.Security)
+	}
+	if _, err := os.Stat(configPath); err != nil {
+		t.Fatalf("expected config file: %v", err)
+	}
+	if app.config == nil || app.config.Security.AdminPassword != "first-admin" || app.config.Security.ExitPassword != "first-exit" {
+		t.Fatalf("expected in-memory security draft, got %+v", app.config)
+	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if strings.Contains(string(data), "first-admin") || strings.Contains(string(data), "first-exit") {
+		t.Fatalf("security draft contains plaintext secret:\n%s", string(data))
+	}
+	if _, err := appconfig.LoadFile(configPath); err == nil {
+		t.Fatal("expected strict config load to reject security draft")
+	}
+	loaded, err := appconfig.LoadFileAllowIncompleteWithProtector(configPath, fakeProtector{})
+	if err != nil {
+		t.Fatalf("load security draft: %v", err)
+	}
+	if loaded.Security.AdminPassword != "first-admin" || loaded.Security.ExitPassword != "first-exit" {
+		t.Fatalf("expected decrypted security draft, got %+v", loaded.Security)
+	}
+}
+
+func TestSaveConfigDoesNotDraftPartialSyncConfig(t *testing.T) {
+	app, _, _ := newTempApp(t)
+	if result := app.UnlockAdmin(uiapi.UnlockAdminRequest{}); !result.OK {
+		t.Fatalf("unlock first-run admin: %+v", result)
+	}
+	_, err := app.SaveConfig(uiapi.SaveConfigRequest{Config: uiapi.ConfigDTO{
+		Mode:     appconfig.ModeEdge,
+		Security: appconfig.SecurityConfig{AdminPassword: "first-admin"},
+	}})
+	if err == nil || !strings.Contains(err.Error(), "node.id") {
+		t.Fatalf("expected full config validation error, got %v", err)
+	}
+}
+
+func TestConnectionTestsPreserveRedactedSecrets(t *testing.T) {
+	app, _, _ := newTempApp(t)
+	cfg := validConfig()
+	app.config = &cfg
+
+	redacted := app.GetConfig()
+	mysql := app.resolveMySQLTestConfig(redacted.MySQL)
+	if mysql.Password != cfg.MySQL.Password {
+		t.Fatalf("expected saved mysql password, got %q", mysql.Password)
+	}
+
+	rabbit := app.resolveRabbitMQTestConfig(redacted.RabbitMQ)
+	if rabbit.Password != cfg.RabbitMQ.Password || rabbit.LocalURL != cfg.RabbitMQ.LocalURL || rabbit.ServerURL != cfg.RabbitMQ.ServerURL {
+		t.Fatalf("expected saved rabbitmq secrets, got %+v", rabbit)
+	}
+}
+
+func TestTestRabbitMQSplitsLocalAndServer(t *testing.T) {
+	app, _, _ := newTempApp(t)
+	oldDial := dialRabbitMQ
+	dialRabbitMQ = func(url string) (*rabbitmq.Connection, error) {
+		if strings.Contains(url, "server") {
+			return nil, errors.New("server offline")
+		}
+		return &rabbitmq.Connection{}, nil
+	}
+	t.Cleanup(func() { dialRabbitMQ = oldDial })
+
+	result := app.TestRabbitMQ(appconfig.RabbitMQConfig{
+		LocalURL:  "amqp://local",
+		ServerURL: "amqp://server",
+	})
+	if !result.OK || result.Status != uiapi.StateConfigured {
+		t.Fatalf("expected partial success, got %+v", result)
+	}
+	if !strings.Contains(result.Message, "local rabbitmq reachable") ||
+		!strings.Contains(result.Message, "server rabbitmq unreachable") {
+		t.Fatalf("expected split message, got %q", result.Message)
 	}
 }
 
@@ -147,6 +245,46 @@ func TestSaveSyncRulesRejectsInvalidMapping(t *testing.T) {
 	}})
 	if err == nil {
 		t.Fatal("expected invalid rule error")
+	}
+}
+
+func TestGetNodeOptionsReturnsActiveEdgesOnly(t *testing.T) {
+	app, _, _ := newTempApp(t)
+	now := time.Date(2026, 5, 22, 10, 0, 0, 0, time.UTC)
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	app.openStore = func() (*syncstore.Store, func(), error) {
+		return syncstore.New(db), func() { _ = db.Close() }, nil
+	}
+	mock.ExpectQuery("SELECT node_id, node_name, node_type").
+		WillReturnRows(sqlmock.NewRows([]string{"node_id", "node_name", "node_type", "location", "status", "last_heartbeat_at", "version", "created_at", "updated_at"}).
+			AddRow("edge-001", "Edge 1", "edge", "line-a", syncstore.StatusActive, now, "0.35.0", now, now).
+			AddRow("edge-002", "Edge 2", "edge", "", syncstore.StatusOffline, now, "0.35.0", now, now).
+			AddRow("server-001", "Server", "server", "", syncstore.StatusActive, now, "0.35.0", now, now))
+
+	got := app.GetNodeOptions()
+	if got.Status != status.AgentRunning || len(got.Items) != 1 {
+		t.Fatalf("expected one active edge option, got %+v", got)
+	}
+	if got.Items[0].NodeID != "edge-001" || got.Items[0].NodeName != "Edge 1" || got.Items[0].Location != "line-a" {
+		t.Fatalf("unexpected node option %+v", got.Items[0])
+	}
+	if got.Items[0].LastHeartbeatAt == "" {
+		t.Fatalf("expected heartbeat time, got %+v", got.Items[0])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("sql expectations: %v", err)
+	}
+}
+
+func TestGetNodeOptionsHandlesMissingConfig(t *testing.T) {
+	app, _, _ := newTempApp(t)
+	app.config = nil
+	got := app.GetNodeOptions()
+	if got.Status != uiapi.StateUnknown || len(got.Items) != 0 {
+		t.Fatalf("expected unknown empty node options, got %+v", got)
 	}
 }
 
@@ -339,6 +477,8 @@ func TestAdminUnlockRequiredForSensitiveMethods(t *testing.T) {
 	}
 	if state := app.GetAuthState(); !state.Unlocked {
 		t.Fatalf("expected unlocked auth state, got %+v", state)
+	} else if state.TimeoutSeconds != int((24 * time.Hour).Seconds()) {
+		t.Fatalf("expected one-day admin timeout, got %+v", state)
 	}
 	if result := app.LockAdmin(); !result.OK {
 		t.Fatalf("expected lock success, got %+v", result)
@@ -380,28 +520,70 @@ func TestManagedInstallPlanAndApply(t *testing.T) {
 	}
 }
 
-func TestMCPServerSwitchDefaultsOffAndPersists(t *testing.T) {
+func TestMCPServiceSwitchPersistsUntilUserDisables(t *testing.T) {
 	app, configPath, _ := newTempApp(t)
 	cfg := validConfig()
 	app.config = &cfg
-	if current := app.GetMCPServerStatus(); current.Enabled || current.Status != status.AgentStopped {
-		t.Fatalf("expected mcp server disabled by default, got %+v", current)
-	}
 	unlockTestAdmin(t, app)
+	if _, err := app.SaveConfig(uiapi.SaveConfigRequest{Config: uiapi.ConfigFromApp(cfg)}); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	if current := app.GetMCPServerStatus(); current.Enabled || current.Status != status.AgentStopped || current.Ephemeral || current.RestartResets {
+		t.Fatalf("expected persistent mcp server disabled by default, got %+v", current)
+	}
 	enabled := app.SetMCPServerEnabled(uiapi.SetMCPServerEnabledRequest{Enabled: true})
-	if !enabled.Enabled || enabled.Status != uiapi.StateConfigured {
+	if !enabled.Enabled || enabled.Status != uiapi.StateConfigured || enabled.RestartResets || enabled.Ephemeral {
 		t.Fatalf("expected mcp server configured status, got %+v", enabled)
 	}
-	data, err := os.ReadFile(configPath)
+	restarted := newAppForTest(configPath, filepath.Join(filepath.Dir(configPath), "sync-rules.yaml"), fakeProtector{}, newFakeAutoStart())
+	loaded, err := appconfig.LoadFileWithProtector(configPath, fakeProtector{})
 	if err != nil {
-		t.Fatalf("read config: %v", err)
+		t.Fatalf("load config: %v", err)
 	}
-	if !strings.Contains(string(data), "mcp_server:") || !strings.Contains(string(data), "enable: true") {
-		t.Fatalf("expected mcp server switch to persist, got:\n%s", string(data))
+	restarted.config = loaded
+	if current := restarted.GetMCPServerStatus(); !current.Enabled || current.Status != uiapi.StateConfigured {
+		t.Fatalf("expected mcp service to stay enabled after restart, got %+v", current)
 	}
 	disabled := app.SetMCPServerEnabled(uiapi.SetMCPServerEnabledRequest{Enabled: false})
 	if disabled.Enabled || disabled.Status != status.AgentStopped {
 		t.Fatalf("expected mcp server disabled status, got %+v", disabled)
+	}
+}
+
+func TestMCPServiceRejectsIncompleteConfig(t *testing.T) {
+	app, _, _ := newTempApp(t)
+	if result := app.UnlockAdmin(uiapi.UnlockAdminRequest{}); !result.OK {
+		t.Fatalf("unlock first-run admin: %+v", result)
+	}
+	if _, err := app.SaveConfig(uiapi.SaveConfigRequest{Config: uiapi.ConfigDTO{
+		Security: appconfig.SecurityConfig{AdminPassword: "first-admin"},
+	}}); err != nil {
+		t.Fatalf("save security draft: %v", err)
+	}
+	statusResult := app.GetMCPServerStatus()
+	if statusResult.Status != uiapi.StateUnsupported {
+		t.Fatalf("expected unsupported mcp status for security draft, got %+v", statusResult)
+	}
+	enabled := app.SetMCPServerEnabled(uiapi.SetMCPServerEnabledRequest{Enabled: true})
+	if enabled.Enabled || enabled.Status != uiapi.StateUnsupported || !strings.Contains(enabled.Message, "mode is required") {
+		t.Fatalf("expected mcp enable rejection for incomplete config, got %+v", enabled)
+	}
+}
+
+func TestMCPServiceReportsConfigLoadError(t *testing.T) {
+	app, _, _ := newTempApp(t)
+	app.config = nil
+	app.configLoadError = "decrypt admin password: Key not valid for use in specified state"
+	statusResult := app.GetMCPServerStatus()
+	if statusResult.Status != uiapi.StateUnsupported || !strings.Contains(statusResult.Message, "decrypt admin password") {
+		t.Fatalf("expected mcp load error status, got %+v", statusResult)
+	}
+	if result := app.UnlockAdmin(uiapi.UnlockAdminRequest{}); !result.OK {
+		t.Fatalf("unlock first-run admin: %+v", result)
+	}
+	enabled := app.SetMCPServerEnabled(uiapi.SetMCPServerEnabledRequest{Enabled: true})
+	if enabled.Status != uiapi.StateUnsupported || enabled.Enabled {
+		t.Fatalf("expected mcp enable to reject load error, got %+v", enabled)
 	}
 }
 
@@ -454,7 +636,7 @@ func TestInitialConfigPathFallsBackToExeDirectory(t *testing.T) {
 	oldExecutablePath := executablePath
 	t.Setenv("NODEBRIDGE_CONFIG_PATH", "")
 	executablePath = func() (string, error) {
-		return filepath.Join(exeDir, "DataSync.exe"), nil
+		return filepath.Join(exeDir, "NodeBridge.exe"), nil
 	}
 	t.Cleanup(func() { executablePath = oldExecutablePath })
 
@@ -499,7 +681,7 @@ func TestAgentExecutableResolverChecksExeDirectory(t *testing.T) {
 	oldExecutablePath := executablePath
 	t.Setenv("NODEBRIDGE_SYNC_AGENT_PATH", "")
 	executablePath = func() (string, error) {
-		return filepath.Join(dir, "DataSync.exe"), nil
+		return filepath.Join(dir, "NodeBridge.exe"), nil
 	}
 	t.Cleanup(func() { executablePath = oldExecutablePath })
 

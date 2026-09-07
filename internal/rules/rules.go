@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/YufeiSun5/NodeBridge/internal/atomicfile"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,6 +25,10 @@ const (
 	ConflictNone         = "NONE"
 	ConflictServerWin    = "SERVER_WIN"
 	ConflictLastWriteWin = "LAST_WRITE_WIN"
+
+	SyncModeOrderedCRUD = "crud_ordered"
+	SyncModeAppendOnly  = "append_only"
+	SyncModeCRUDCompact = "crud_ordered_compact"
 )
 
 type SyncRule struct {
@@ -36,6 +41,7 @@ type SyncRule struct {
 	Direction          string          `json:"direction" yaml:"direction"`
 	DispatchTarget     string          `json:"dispatch_target,omitempty" yaml:"dispatch_target,omitempty"`
 	DispatchNodeIDs    []string        `json:"dispatch_node_ids,omitempty" yaml:"dispatch_node_ids,omitempty"`
+	SyncMode           string          `json:"sync_mode,omitempty" yaml:"sync_mode,omitempty"`
 	ConflictPolicy     string          `json:"conflict_policy" yaml:"conflict_policy"`
 	Enable             bool            `json:"enable" yaml:"enable"`
 	PrimaryKeys        []string        `json:"primary_keys" yaml:"primary_keys"`
@@ -192,7 +198,7 @@ func SaveFile(path string, set RuleSet) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create rules directory: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err := atomicfile.Write(path, data, 0o600); err != nil {
 		return fmt.Errorf("write rules %q: %w", path, err)
 	}
 	return nil
@@ -257,6 +263,11 @@ func (s RuleSet) Validate() error {
 		case "", DispatchAuto, DispatchNone, DispatchActiveEdges, DispatchSelectedEdges:
 		default:
 			return fmt.Errorf("invalid dispatch_target %q for %s", rule.DispatchTarget, baseKey)
+		}
+		switch rule.SyncMode {
+		case "", SyncModeOrderedCRUD, SyncModeAppendOnly, SyncModeCRUDCompact:
+		default:
+			return fmt.Errorf("invalid sync_mode %q for %s", rule.SyncMode, baseKey)
 		}
 		if rule.DispatchTarget == DispatchSelectedEdges && len(rule.DispatchNodeIDs) == 0 {
 			return fmt.Errorf("dispatch_node_ids are required for selected dispatch on %s", baseKey)

@@ -2,6 +2,7 @@ package canal
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
@@ -34,6 +35,51 @@ func TestConvertWithlinMessage(t *testing.T) {
 	}
 	if offset.BatchID != 99 || offset.BinlogFile != "mysql-bin.000001" || offset.BinlogPos != 128 || offset.GTID != "gtid-001" {
 		t.Fatalf("unexpected offset %+v", offset)
+	}
+}
+
+func TestConvertWithlinMessageKeepsOffsetForNonRowBatch(t *testing.T) {
+	msg := &withlinprotocol.Message{
+		Id: 101,
+		Entries: []withlinentry.Entry{
+			{
+				Header: &withlinentry.Header{
+					LogfileName:   "mysql-bin.000002",
+					LogfileOffset: 2048,
+					Gtid:          "gtid-002",
+				},
+				EntryTypePresent: &withlinentry.Entry_EntryType{EntryType: withlinentry.EntryType_TRANSACTIONBEGIN},
+			},
+		},
+	}
+
+	rows, offset, err := ConvertWithlinMessage(msg)
+	if err != nil {
+		t.Fatalf("ConvertWithlinMessage returned error: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("expected no rows, got %+v", rows)
+	}
+	if offset.BatchID != 101 || offset.BinlogFile != "mysql-bin.000002" || offset.BinlogPos != 2048 || offset.GTID != "gtid-002" {
+		t.Fatalf("unexpected offset %+v", offset)
+	}
+}
+
+func TestWithlinClientAckSkipsNonPositiveBatchID(t *testing.T) {
+	connector := &fakeWithlinConnector{}
+	client, err := NewWithlinClientWithConnector(Config{
+		ReaderName:  "edge-001",
+		Address:     "127.0.0.1:11111",
+		Destination: "edge-001",
+	}, connector)
+	if err != nil {
+		t.Fatalf("NewWithlinClientWithConnector returned error: %v", err)
+	}
+	if err := client.Ack(context.Background(), cdc.Offset{BatchID: -1}); err != nil {
+		t.Fatalf("Ack returned error: %v", err)
+	}
+	if connector.acked != 0 {
+		t.Fatalf("unexpected acked batch %d", connector.acked)
 	}
 }
 
@@ -88,6 +134,15 @@ func TestSplitAddress(t *testing.T) {
 	}
 	if _, _, err := splitAddress("127.0.0.1"); err == nil {
 		t.Fatal("expected invalid address error")
+	}
+}
+
+func TestIsBatchNotExistError(t *testing.T) {
+	if !IsBatchNotExistError(errors.New("batchId:4 is not exist")) {
+		t.Fatal("expected batch missing error to match")
+	}
+	if IsBatchNotExistError(errors.New("permission denied")) {
+		t.Fatal("unexpected match")
 	}
 }
 

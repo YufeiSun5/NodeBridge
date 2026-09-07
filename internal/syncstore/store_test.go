@@ -132,6 +132,69 @@ func TestStoreUpsertEventLog(t *testing.T) {
 	assertExpectations(t, mock)
 }
 
+func TestStoreUpsertEventLogsUsesOneTransaction(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	store := New(db)
+	store.Clock = fixedTime
+	first := sampleSyncEvent()
+	second := sampleSyncEvent()
+	second.EventID = "evt-002"
+
+	mock.ExpectBegin()
+	mock.ExpectPrepare("INSERT INTO sync_event_log").
+		ExpectExec().
+		WithArgs("evt-001", "edge-001", "edge-001", "scada_edge", "device_config", "scada_center", "device_settings", "id=1", "UPDATE", "EDGE_TO_SERVER", StatusSuccess, first.EventTime, fixedTime(), nil, nil, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("INSERT INTO sync_event_log").
+		WithArgs("evt-002", "edge-001", "edge-001", "scada_edge", "device_config", "scada_center", "device_settings", "id=2", "UPDATE", "EDGE_TO_SERVER", StatusSuccess, second.EventTime, fixedTime(), nil, nil, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	err = store.UpsertEventLogs(context.Background(), []EventLogRecord{
+		{Event: first, TargetDatabaseName: "scada_center", TargetTableName: "device_settings", PKValue: "id=1", Direction: "EDGE_TO_SERVER", Status: StatusSuccess},
+		{Event: second, TargetDatabaseName: "scada_center", TargetTableName: "device_settings", PKValue: "id=2", Direction: "EDGE_TO_SERVER", Status: StatusSuccess},
+	})
+	if err != nil {
+		t.Fatalf("UpsertEventLogs returned error: %v", err)
+	}
+	assertExpectations(t, mock)
+}
+
+func TestStoreUpsertEventLogCanSkipPayload(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	store := New(db)
+	store.Clock = fixedTime
+	evt := sampleSyncEvent()
+
+	mock.ExpectExec("INSERT INTO sync_event_log").
+		WithArgs("evt-001", "edge-001", "edge-001", "scada_edge", "device_config", "scada_center", "device_settings", "id=1", "UPDATE", "EDGE_TO_SERVER", StatusSuccess, evt.EventTime, fixedTime(), nil, nil, nil).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = store.UpsertEventLog(context.Background(), EventLogRecord{
+		Event:              evt,
+		TargetDatabaseName: "scada_center",
+		TargetTableName:    "device_settings",
+		PKValue:            "id=1",
+		Direction:          "EDGE_TO_SERVER",
+		Status:             StatusSuccess,
+		SkipPayload:        true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertEventLog returned error: %v", err)
+	}
+	assertExpectations(t, mock)
+}
+
 func TestStoreListFailedEvents(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

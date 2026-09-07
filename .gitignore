@@ -10,7 +10,12 @@ coverage.out
 # Node/Wails
 node_modules/
 dist/
-build/
+build/*
+!build/appicon.png
+!build/appicon.ico
+!build/windows/
+build/windows/*
+!build/windows/icon.ico
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
 frontend/package.json.md5
@@ -20,4 +25,5 @@ frontend/package.json.md5
 .env
 .env.*
 .cache/
+runtime/
 configs/lab11/

@@ -54,10 +54,26 @@ export function QueuesPage() {
       </div>
 
       {!loading && queues.length === 0 ? (
-        <EmptyState
-          title={configMissing ? t('configMissing') : t('noQueueStatus')}
-          detail={configMissing ? t('queuesConfigMissing') : t('noQueueRows')}
-        />
+        <section className="operational-empty">
+          <EmptyState
+            title={configMissing ? t('configMissing') : t('noQueueStatus')}
+            detail={configMissing ? t('queuesConfigMissing') : t('noQueueRows')}
+          />
+          <div className="operational-empty-grid">
+            <div className="readonly-item">
+              <span>{t('status')}</span>
+              <strong>{configMissing ? t('notConfigured') : t('noQueueStatus')}</strong>
+            </div>
+            <div className="readonly-item">
+              <span>{t('nextAction')}</span>
+              <strong>{configMissing ? t('saveConfig') : t('refresh')}</strong>
+            </div>
+            <div className="readonly-item">
+              <span>{t('scope')}</span>
+              <strong>RabbitMQ</strong>
+            </div>
+          </div>
+        </section>
       ) : null}
 
       {queues.length > 0 ? (

@@ -3,8 +3,8 @@ import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { SectionHeader } from '../components/SectionHeader';
 import { SwitchControl } from '../components/SwitchControl';
 import { useAuth } from '../auth';
-import { useI18n } from '../i18n';
-import { getSyncRules, saveSyncRules, type SyncRule } from '../services/wails';
+import { translateStatus, useI18n } from '../i18n';
+import { getConfig, getNodeOptions, getSyncRules, saveSyncRules, type NodeOptionsResponse, type SyncRule } from '../services/wails';
 
 function listValue(values?: string[]) {
   return values && values.length > 0 ? values.join(', ') : '-';
@@ -32,6 +32,12 @@ function mappingDisplayValue(rule: SyncRule, t: (key: string) => string) {
   return mappingValue(rule) === '-' ? t('sameNameMapping') : mappingValue(rule);
 }
 
+function syncModeHint(syncMode: string | undefined, t: (key: string) => string) {
+  if (syncMode === 'append_only') return `${t('syncModeAppendOnlyHint')} ${t('syncModeAppendOnlyWarning')}`;
+  if (syncMode === 'crud_ordered_compact') return `${t('syncModeCompactHint')} ${t('syncModeCompactWarning')}`;
+  return t('syncModeOrderedCRUDHint');
+}
+
 function hasWhitespace(value?: string) {
   return /\s/.test(value || '');
 }
@@ -55,6 +61,11 @@ function parseMappings(value: string) {
     .filter((item) => item.source_column);
 }
 
+function optionLabel(option: { node_id: string; node_name?: string; location?: string }) {
+  const detail = [option.node_name, option.location].filter(Boolean).join(' / ');
+  return detail ? `${option.node_id} (${detail})` : option.node_id;
+}
+
 function Field({
   label,
   children,
@@ -75,8 +86,8 @@ function Field({
   );
 }
 
-function DefaultHint({ children }: { children: ReactNode }) {
-  return <small className="rule-default-hint">{children}</small>;
+function DefaultHint({ children, tone = 'info' }: { children: ReactNode; tone?: 'info' | 'warn' }) {
+  return <small className={tone === 'warn' ? 'rule-default-hint rule-danger-hint' : 'rule-default-hint'}>{children}</small>;
 }
 
 function ReadOnlyRuleItem({ label, value, hint }: { label: string; value: ReactNode; hint?: ReactNode }) {
@@ -99,7 +110,7 @@ function RulesReadOnly({ rules, t }: { rules: SyncRule[]; t: (key: string) => st
               <span className="rule-card-kicker">{t('ruleIdentity')}</span>
               <strong>{rule.id || '-'}</strong>
             </div>
-            <span className={rule.enable ? 'status-chip status-ok' : 'status-chip status-unknown'}>
+            <span className={rule.enable ? 'status-chip status-ok rule-readonly-state' : 'status-chip status-unknown rule-readonly-state'}>
               {rule.enable ? t('enabled') : t('no')}
             </span>
           </div>
@@ -127,6 +138,11 @@ function RulesReadOnly({ rules, t }: { rules: SyncRule[]; t: (key: string) => st
               <h3>{t('routing')}</h3>
               <div className="rule-readonly-items three-col">
                 <ReadOnlyRuleItem label={t('direction')} value={rule.direction || '-'} />
+                <ReadOnlyRuleItem
+                  label={t('syncMode')}
+                  value={rule.sync_mode || 'crud_ordered'}
+                  hint={syncModeHint(rule.sync_mode || 'crud_ordered', t)}
+                />
                 <ReadOnlyRuleItem
                   label={t('dispatch')}
                   value={rule.dispatch_target || 'AUTO'}
@@ -179,6 +195,8 @@ export function RulesPage() {
   const { t } = useI18n();
   const { authState, ensureUnlocked } = useAuth();
   const [rules, setRules] = useState<SyncRule[]>([]);
+  const [nodeOptions, setNodeOptions] = useState<NodeOptionsResponse>({ items: [], status: 'unknown' });
+  const [crudCompactEnabled, setCrudCompactEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -187,7 +205,10 @@ export function RulesPage() {
     setLoading(true);
     setError('');
     try {
-      setRules(await getSyncRules());
+      const [nextRules, nextNodeOptions, nextConfig] = await Promise.all([getSyncRules(), getNodeOptions(), getConfig()]);
+      setRules(nextRules);
+      setNodeOptions(nextNodeOptions);
+      setCrudCompactEnabled(Boolean(nextConfig.sync?.enable_crud_compact));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('rulesError'));
     } finally {
@@ -213,6 +234,12 @@ export function RulesPage() {
     setRules((current) => current.map((rule, ruleIndex) => (ruleIndex === index ? { ...rule, ...patch } : rule)));
   }
 
+  function toggleDispatchNode(index: number, nodeId: string, checked: boolean) {
+    const current = rules[index]?.dispatch_node_ids || [];
+    const next = checked ? Array.from(new Set([...current, nodeId])) : current.filter((item) => item !== nodeId);
+    updateRule(index, { dispatch_node_ids: next });
+  }
+
   async function addRule() {
     if (!(await ensureUnlocked())) {
       return;
@@ -226,6 +253,7 @@ export function RulesPage() {
         target_database_name: '',
         target_table_name: '',
         direction: 'BIDIRECTIONAL',
+        sync_mode: 'crud_ordered',
         dispatch_target: 'AUTO',
         dispatch_node_ids: [],
         conflict_policy: 'LAST_WRITE_WIN',
@@ -263,17 +291,7 @@ export function RulesPage() {
         </div>
       ) : null}
 
-      {!authState.unlocked ? (
-        <div className="readonly-banner">
-          <div>
-            <strong>{t('readOnlyLockedTitle')}</strong>
-            <span>{t('rulesReadOnlyDetail')}</span>
-          </div>
-          <button className="button-primary compact" type="button" onClick={() => void ensureUnlocked()}>
-            {t('unlock')}
-          </button>
-        </div>
-      ) : (
+      {authState.unlocked ? (
         <div className="toolbar-row">
           <button className="button-primary" type="button" onClick={() => void save()}>
             {t('saveRules')}
@@ -285,7 +303,7 @@ export function RulesPage() {
             {t('refresh')}
           </button>
         </div>
-      )}
+      ) : null}
 
       {!loading && rules.length === 0 ? <EmptyState title={t('noSyncRules')} detail={t('emptyRuleSet')} /> : null}
 
@@ -359,6 +377,27 @@ export function RulesPage() {
                         <option value="IGNORE">IGNORE</option>
                       </select>
                     </Field>
+                    <Field label={t('syncMode')}>
+                      <select
+                        value={rule.sync_mode || 'crud_ordered'}
+                        onChange={(event) => updateRule(index, { sync_mode: event.target.value })}
+                      >
+                        <option value="crud_ordered">{t('syncModeOrderedCRUD')}</option>
+                        <option value="append_only">{t('syncModeAppendOnly')}</option>
+                        <option value="crud_ordered_compact" disabled={!crudCompactEnabled && rule.sync_mode !== 'crud_ordered_compact'}>
+                          {t('syncModeCompact')}
+                        </option>
+                      </select>
+                      <DefaultHint>{syncModeHint(rule.sync_mode || 'crud_ordered', t)}</DefaultHint>
+                      {(rule.sync_mode || 'crud_ordered') === 'append_only' ? (
+                        <DefaultHint tone="warn">{t('syncModeAppendOnlyWarning')}</DefaultHint>
+                      ) : null}
+                      {(rule.sync_mode || 'crud_ordered') === 'crud_ordered_compact' ? (
+                        <DefaultHint tone="warn">
+                          {crudCompactEnabled ? t('syncModeCompactWarning') : t('syncModeCompactGlobalRequired')}
+                        </DefaultHint>
+                      ) : null}
+                    </Field>
                     <Field label={t('dispatch')}>
                       <select
                         value={rule.dispatch_target || 'AUTO'}
@@ -393,6 +432,31 @@ export function RulesPage() {
                       <DefaultHint>{t('sourceNodesDefaultHint')}</DefaultHint>
                     </Field>
                     <Field label={t('selectedTargetNodes')} className="wide-field">
+                      {(rule.dispatch_target || 'AUTO') === 'SELECTED_EDGES' ? (
+                        <div className="node-option-panel">
+                          <div className="node-option-head">
+                            <span>{t('activeEdgeCandidates')}</span>
+                            <strong>{translateStatus(t, nodeOptions.status)}</strong>
+                          </div>
+                          {nodeOptions.message ? <small className="node-option-message">{nodeOptions.message}</small> : null}
+                          {nodeOptions.items.length > 0 ? (
+                            <div className="node-option-list">
+                              {nodeOptions.items.map((option) => (
+                                <div className="node-option-item" key={option.node_id}>
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(rule.dispatch_node_ids?.includes(option.node_id))}
+                                    onChange={(event) => toggleDispatchNode(index, option.node_id, event.target.checked)}
+                                  />
+                                  <span>{optionLabel(option)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <small className="node-option-empty">{t('noNodeOptions')}</small>
+                          )}
+                        </div>
+                      ) : null}
                       <input
                         value={listValue(rule.dispatch_node_ids) === '-' ? '' : listValue(rule.dispatch_node_ids)}
                         onChange={(event) => updateRule(index, { dispatch_node_ids: parseList(event.target.value) })}

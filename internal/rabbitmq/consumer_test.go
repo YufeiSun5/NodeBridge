@@ -102,6 +102,51 @@ func TestConsumerHandleBatchNacksFailureAndRest(t *testing.T) {
 	}
 }
 
+func TestConsumerHandleBatchCommitAcksCommittedPrefix(t *testing.T) {
+	messages := []*fakeIncomingMessage{{body: []byte("1")}, {body: []byte("2")}, {body: []byte("3")}}
+	consumer := rabbitmq.Consumer{RequeueOnError: true}
+
+	err := consumer.HandleBatchCommit(context.Background(), incoming(messages), func(ctx context.Context, bodies [][]byte) (int, error) {
+		if len(bodies) != 3 || string(bodies[2]) != "3" {
+			t.Fatalf("unexpected bodies %q", bodies)
+		}
+		return 2, errors.New("third failed")
+	})
+	if err == nil {
+		t.Fatal("expected batch commit failure")
+	}
+	for i := 0; i < 2; i++ {
+		if !messages[i].acked || messages[i].nacked {
+			t.Fatalf("message %d should be acked, got %+v", i, messages[i])
+		}
+	}
+	if messages[2].acked || !messages[2].nacked || !messages[2].requeue {
+		t.Fatalf("third message should be requeue nacked, got %+v", messages[2])
+	}
+}
+
+func TestConsumerHandleBatchCommitAcksOnlyAfterHandlerSuccess(t *testing.T) {
+	messages := []*fakeIncomingMessage{{body: []byte("1")}, {body: []byte("2")}}
+	consumer := rabbitmq.Consumer{}
+
+	err := consumer.HandleBatchCommit(context.Background(), incoming(messages), func(ctx context.Context, bodies [][]byte) (int, error) {
+		for i, msg := range messages {
+			if msg.acked || msg.nacked {
+				t.Fatalf("message %d was settled before handler returned", i)
+			}
+		}
+		return len(bodies), nil
+	})
+	if err != nil {
+		t.Fatalf("HandleBatchCommit returned error: %v", err)
+	}
+	for i, msg := range messages {
+		if !msg.acked || msg.nacked {
+			t.Fatalf("message %d should be acked after success, got %+v", i, msg)
+		}
+	}
+}
+
 type fakeIncomingMessage struct {
 	body    []byte
 	acked   bool

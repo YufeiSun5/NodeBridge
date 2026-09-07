@@ -26,3 +26,14 @@ func TestRedactConfig(t *testing.T) {
 		t.Fatalf("unexpected redacted url %q", cfg.RabbitMQ.LocalURL)
 	}
 }
+
+func TestConfigDTOPreservesMCPEnable(t *testing.T) {
+	dto := uiapi.ConfigFromApp(appconfig.Config{MCP: appconfig.MCPServerConfig{Enable: true}})
+	if !dto.MCP.Enable {
+		t.Fatalf("expected MCP enable to round trip into DTO")
+	}
+	cfg := dto.ToAppConfig()
+	if !cfg.MCP.Enable {
+		t.Fatalf("expected MCP enable to round trip into app config")
+	}
+}

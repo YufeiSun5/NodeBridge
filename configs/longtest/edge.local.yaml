@@ -1,0 +1,54 @@
+mode: edge
+
+node:
+  id: edge-longtest-001
+  name: Longtest Edge
+  location: single-pc-longtest
+
+mysql:
+  host: 127.0.0.1
+  port: 3341
+  username: sync_user
+  password: sync_password
+  database: scada_edge_longtest
+
+rabbitmq:
+  mode: external
+  install: false
+  local_url: amqp://sync:sync_password@127.0.0.1:5701/edge-longtest-sync
+  server_url: amqp://sync:sync_password@127.0.0.1:5702/server-longtest-sync
+  management_url: http://127.0.0.1:15701
+  username: sync
+  password: sync_password
+  vhost: edge-longtest-sync
+
+cdc:
+  type: canal
+  reader_name: edge-longtest-001
+  canal_addr: 127.0.0.1:11121
+  destination: edge-longtest-001
+  username: ""
+  password: ""
+  filter: scada_edge_longtest\.(collect_data_.*|tag_state_.*)
+  batch_size: 10000
+  use_gtid: false
+
+sync:
+  upload_batch_size: 10000
+  dispatch_batch_size: 10000
+  flush_interval_millis: 500
+  retry_interval_seconds: 2
+  heartbeat_interval_seconds: 15
+
+log_web:
+  enable: false
+  bind: 127.0.0.1
+  port: 18281
+  token: longtest_token
+
+mcp_server:
+  enable: false
+
+security:
+  admin_password: admin-pass
+  exit_password: exit-pass

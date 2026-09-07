@@ -7,6 +7,7 @@ rules:
     target_database_name: scada_center
     direction: EDGE_TO_SERVER
     dispatch_target: NONE
+    sync_mode: append_only
     conflict_policy: NONE
     enable: true
     primary_keys:

@@ -16,6 +16,10 @@ type Offset struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+func (o Offset) HasCanalBatch() bool {
+	return o.BatchID > 0
+}
+
 func (o Offset) Validate() error {
 	if o.ReaderName == "" {
 		return fmt.Errorf("reader name is required")

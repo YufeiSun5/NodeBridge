@@ -14,13 +14,16 @@ import (
 
 const (
 	ComponentErlang   = "erlang"
+	ComponentJava     = "java"
 	ComponentRabbitMQ = "rabbitmq"
 	ComponentCanal    = "canal"
+	ComponentWinSW    = "winsw"
 
 	StatusOK           = "ok"
 	StatusMissing      = "missing"
 	StatusHashMismatch = "hash_mismatch"
 	StatusInvalid      = "invalid"
+	StatusSkipped      = "skipped"
 )
 
 type Catalog struct {
@@ -35,6 +38,7 @@ type AssetSpec struct {
 	Version     string   `json:"version,omitempty"`
 	SHA256      string   `json:"sha256"`
 	InstallArgs []string `json:"install_args,omitempty"`
+	Optional    bool     `json:"optional,omitempty"`
 }
 
 type ValidationResult struct {
@@ -99,6 +103,12 @@ func ValidateAsset(asset AssetSpec) ValidationResult {
 	actual, size, err := fileSHA256(asset.Path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			if asset.Optional {
+				result.Status = StatusSkipped
+				result.OK = true
+				result.Message = "optional asset file not found"
+				return result
+			}
 			result.Status = StatusMissing
 			result.Message = "asset file not found"
 			return result
@@ -147,6 +157,30 @@ func BuildCommandPlan(catalog Catalog) []CommandStep {
 				RequiresAdmin: true,
 				Status:        "planned",
 			})
+		case ComponentJava:
+			args := defaultArgs(asset.InstallArgs, []string{"/quiet"})
+			if isArchive(asset.Path) {
+				steps = append(steps, CommandStep{
+					Component:     component,
+					Action:        "extract",
+					Path:          asset.Path,
+					Args:          defaultArgs(asset.InstallArgs, []string{"-Destination", `%ProgramData%\NodeBridge\java`}),
+					CommandLine:   archiveExtractCommandLine(asset.Path, defaultArgs(asset.InstallArgs, []string{"-Destination", `%ProgramData%\NodeBridge\java`})),
+					RequiresAdmin: true,
+					Status:        "planned",
+				})
+				continue
+			}
+			path, commandArgs := installerExecutable(asset.Path, args)
+			steps = append(steps, CommandStep{
+				Component:     component,
+				Action:        "install",
+				Path:          path,
+				Args:          commandArgs,
+				CommandLine:   commandLine(path, commandArgs),
+				RequiresAdmin: true,
+				Status:        "planned",
+			})
 		case ComponentRabbitMQ:
 			args := defaultArgs(asset.InstallArgs, []string{"/S"})
 			steps = append(steps, CommandStep{
@@ -166,7 +200,16 @@ func BuildCommandPlan(catalog Catalog) []CommandStep {
 				Action:        "extract",
 				Path:          asset.Path,
 				Args:          args,
-				CommandLine:   commandLine("Expand-Archive", append([]string{quote(asset.Path)}, args...)),
+				CommandLine:   archiveExtractCommandLine(asset.Path, args),
+				RequiresAdmin: true,
+				Status:        "planned",
+			})
+		case ComponentWinSW:
+			steps = append(steps, CommandStep{
+				Component:     component,
+				Action:        "copy-service-wrapper",
+				Path:          asset.Path,
+				CommandLine:   commandLine("Copy-Item", []string{quote(asset.Path), quote(`%ProgramData%\NodeBridge\canal\NodeBridgeCanal.exe`)}),
 				RequiresAdmin: true,
 				Status:        "planned",
 			})
@@ -181,6 +224,21 @@ func BuildCommandPlan(catalog Catalog) []CommandStep {
 		}
 	}
 	return steps
+}
+
+func installerExecutable(path string, args []string) (string, []string) {
+	if strings.EqualFold(filepath.Ext(path), ".msi") {
+		commandArgs := append([]string{"/i", path}, args...)
+		return "msiexec.exe", commandArgs
+	}
+	return path, args
+}
+
+func isArchive(path string) bool {
+	lower := strings.ToLower(path)
+	return strings.HasSuffix(lower, ".zip") ||
+		strings.HasSuffix(lower, ".tar.gz") ||
+		strings.HasSuffix(lower, ".tgz")
 }
 
 func fileSHA256(path string) (string, int64, error) {
@@ -244,6 +302,21 @@ func commandLine(executable string, args []string) string {
 		parts = append(parts, quote(arg))
 	}
 	return strings.Join(parts, " ")
+}
+
+func archiveExtractCommandLine(path string, args []string) string {
+	lower := strings.ToLower(path)
+	destination := `%ProgramData%\NodeBridge\canal`
+	for i := 0; i < len(args)-1; i++ {
+		if strings.EqualFold(args[i], "-Destination") {
+			destination = args[i+1]
+			break
+		}
+	}
+	if strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz") {
+		return commandLine("tar.exe", []string{"-xzf", path, "-C", destination})
+	}
+	return commandLine("Expand-Archive", append([]string{quote(path)}, args...))
 }
 
 func quote(value string) string {

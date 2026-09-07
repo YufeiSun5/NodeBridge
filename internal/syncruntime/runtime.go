@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/YufeiSun5/NodeBridge/internal/apply"
@@ -25,12 +27,20 @@ type EventPublisher interface {
 	Publish(ctx context.Context, req rabbitmq.PublishRequest) error
 }
 
+type BatchEventPublisher interface {
+	PublishBatch(ctx context.Context, reqs []rabbitmq.PublishRequest) error
+}
+
 type DownlinkDispatcher interface {
 	Dispatch(ctx context.Context, evt event.SyncEvent, targetNodeID string) error
 }
 
 type EventLogStore interface {
 	UpsertEventLog(ctx context.Context, record syncstore.EventLogRecord) error
+}
+
+type EventLogBatchStore interface {
+	UpsertEventLogs(ctx context.Context, records []syncstore.EventLogRecord) error
 }
 
 type NodeConfigStore interface {
@@ -128,6 +138,32 @@ func (r EdgeUploadBatchRuntime) RunOnce(ctx context.Context) (StepResult, error)
 	}
 
 	var lastEventID string
+	if batchPublisher, ok := r.Publisher.(BatchEventPublisher); ok {
+		err = r.Consumer.HandleBatchCommit(ctx, messages, func(ctx context.Context, bodies [][]byte) (int, error) {
+			requests := make([]rabbitmq.PublishRequest, 0, len(bodies))
+			for _, body := range bodies {
+				eventID, err := eventIDFromBody(body)
+				if err != nil {
+					return 0, err
+				}
+				lastEventID = eventID
+				requests = append(requests, rabbitmq.PublishRequest{
+					Exchange:   r.Exchange,
+					RoutingKey: r.RoutingKey,
+					Body:       body,
+				})
+			}
+			if err := batchPublisher.PublishBatch(ctx, requests); err != nil {
+				return 0, fmt.Errorf("forward upload batch: %w", err)
+			}
+			return len(bodies), nil
+		})
+		if err != nil {
+			return StepResult{Processed: true, EventID: lastEventID, Action: "failed", Count: len(messages)}, err
+		}
+		return StepResult{Processed: true, EventID: lastEventID, Action: "forwarded", Count: len(messages)}, nil
+	}
+
 	err = r.Consumer.HandleBatch(ctx, messages, func(ctx context.Context, body []byte) error {
 		eventID, err := eventIDFromBody(body)
 		if err != nil {
@@ -150,27 +186,30 @@ func (r EdgeUploadBatchRuntime) RunOnce(ctx context.Context) (StepResult, error)
 }
 
 type ServerIngressRuntime struct {
-	Source     MessageSource
-	Consumer   rabbitmq.Consumer
-	Rules      *rules.RuleSet
-	Worker     apply.Worker
-	EventStore EventLogStore
-	Dispatcher DownlinkDispatcher
-	EdgeNodes  []string
-	NodeStore  ActiveNodeStore
+	Source           MessageSource
+	Consumer         rabbitmq.Consumer
+	Rules            *rules.RuleSet
+	Worker           apply.Worker
+	EventStore       EventLogStore
+	Dispatcher       DownlinkDispatcher
+	EdgeNodes        []string
+	NodeStore        ActiveNodeStore
+	AllowCRUDCompact bool
 }
 
 type ServerIngressBatchRuntime struct {
-	Source        BatchMessageSource
-	Consumer      rabbitmq.Consumer
-	Rules         *rules.RuleSet
-	Worker        apply.Worker
-	EventStore    EventLogStore
-	Dispatcher    DownlinkDispatcher
-	EdgeNodes     []string
-	NodeStore     ActiveNodeStore
-	MaxBatch      int
-	FlushInterval time.Duration
+	Source           BatchMessageSource
+	Consumer         rabbitmq.Consumer
+	Rules            *rules.RuleSet
+	Worker           apply.Worker
+	EventStore       EventLogStore
+	Dispatcher       DownlinkDispatcher
+	EdgeNodes        []string
+	NodeStore        ActiveNodeStore
+	MaxBatch         int
+	FlushInterval    time.Duration
+	ApplyLanes       int
+	AllowCRUDCompact bool
 }
 
 type EdgeDownlinkRuntime struct {
@@ -180,6 +219,7 @@ type EdgeDownlinkRuntime struct {
 	Worker                 apply.Worker
 	TargetDatabaseOverride string
 	ConfigStore            NodeConfigStore
+	AllowCRUDCompact       bool
 }
 
 type EdgeDownlinkBatchRuntime struct {
@@ -191,6 +231,7 @@ type EdgeDownlinkBatchRuntime struct {
 	ConfigStore            NodeConfigStore
 	MaxBatch               int
 	FlushInterval          time.Duration
+	AllowCRUDCompact       bool
 }
 
 func (r EdgeDownlinkRuntime) RunOnce(ctx context.Context) (StepResult, error) {
@@ -228,6 +269,9 @@ func (r EdgeDownlinkRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 		}
 		evt, mapped, err := mapSyncEvent(body, r.Rules)
 		if err != nil {
+			return err
+		}
+		if err := ensureSyncModeAllowed(mapped, r.AllowCRUDCompact); err != nil {
 			return err
 		}
 		eventID = evt.EventID
@@ -310,6 +354,9 @@ func (r ServerIngressRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 		if err != nil {
 			return err
 		}
+		if err := ensureSyncModeAllowed(mapped, r.AllowCRUDCompact); err != nil {
+			return err
+		}
 		eventID = evt.EventID
 		rule := findRuleForEvent(r.Rules, evt)
 		if !rule.Enable || rule.Direction == rules.DirectionIgnore {
@@ -381,19 +428,115 @@ func (r ServerIngressBatchRuntime) RunOnce(ctx context.Context) (StepResult, err
 
 	var lastEventID string
 	dispatchTotal := 0
-	err = r.Consumer.HandleBatch(ctx, messages, func(ctx context.Context, body []byte) error {
-		eventID, dispatchCount, err := r.applyIngressBody(ctx, body)
-		if err != nil {
-			return err
+	err = r.Consumer.HandleBatchCommit(ctx, messages, func(ctx context.Context, bodies [][]byte) (int, error) {
+		successCount, eventID, dispatchCount, err := r.applyIngressBatchBodies(ctx, bodies)
+		if eventID != "" {
+			lastEventID = eventID
 		}
-		lastEventID = eventID
+		if err != nil {
+			return successCount, err
+		}
 		dispatchTotal += dispatchCount
-		return nil
+		return successCount, nil
 	})
 	if err != nil {
 		return StepResult{Processed: true, EventID: lastEventID, Action: "failed", DispatchCount: dispatchTotal, Count: len(messages)}, err
 	}
 	return StepResult{Processed: true, EventID: lastEventID, Action: "applied", DispatchCount: dispatchTotal, Count: len(messages)}, nil
+}
+
+type ingressBatchEntry struct {
+	body      []byte
+	evt       event.SyncEvent
+	mapped    mapper.MappedEvent
+	rule      *rules.SyncRule
+	applyable bool
+}
+
+func (r ServerIngressBatchRuntime) applyIngressBatchBodies(ctx context.Context, bodies [][]byte) (int, string, int, error) {
+	entries := make([]ingressBatchEntry, 0, len(bodies))
+	applyEvents := make([]mapper.MappedEvent, 0, len(bodies))
+	for _, body := range bodies {
+		evt, mapped, err := mapSyncEvent(body, r.Rules)
+		if err != nil {
+			return 0, "", 0, err
+		}
+		rule := findRuleForEvent(r.Rules, evt)
+		entry := ingressBatchEntry{body: body, evt: evt, mapped: mapped, rule: rule}
+		if rule != nil && rule.Enable && rule.Direction != rules.DirectionIgnore {
+			if err := ensureSyncModeAllowed(mapped, r.AllowCRUDCompact); err != nil {
+				return 0, evt.EventID, 0, err
+			}
+			entry.applyable = true
+			applyEvents = append(applyEvents, mapped)
+		}
+		entries = append(entries, entry)
+	}
+	lastEventID := ""
+	if len(entries) > 0 {
+		lastEventID = entries[len(entries)-1].evt.EventID
+	}
+
+	if len(applyEvents) > 0 {
+		result, err := applyBatchWithLanes(ctx, r.Worker, applyEvents, r.ApplyLanes)
+		if err != nil {
+			successCount := messageSuccessCountForApplyResults(entries, len(result.Results))
+			if successCount > 0 && r.EventStore != nil {
+				if logErr := r.persistAppliedEntries(ctx, entries[:successCount]); logErr != nil {
+					return 0, lastEventID, 0, fmt.Errorf("%w; persist applied prefix failed: %v", err, logErr)
+				}
+			}
+			if len(result.Results) < len(applyEvents) {
+				lastEventID = eventIDForApplyIndex(entries, len(result.Results))
+			}
+			return successCount, lastEventID, 0, fmt.Errorf("apply ingress batch: %w", err)
+		}
+	}
+
+	if r.EventStore != nil {
+		if err := r.persistAppliedEntries(ctx, entries); err != nil {
+			return 0, lastEventID, 0, fmt.Errorf("persist applied batch events: %w", err)
+		}
+	}
+
+	dispatchTotal := 0
+	for index, entry := range entries {
+		if !entry.applyable || !shouldDispatch(*entry.rule) {
+			continue
+		}
+		count, err := (ServerIngressRuntime{
+			Dispatcher: r.Dispatcher,
+			EdgeNodes:  r.EdgeNodes,
+			NodeStore:  r.NodeStore,
+		}).dispatch(ctx, entry.evt, *entry.rule)
+		if err != nil {
+			return index, entry.evt.EventID, dispatchTotal + count, err
+		}
+		dispatchTotal += count
+	}
+	return len(entries), lastEventID, dispatchTotal, nil
+}
+
+func (r ServerIngressBatchRuntime) persistAppliedEntries(ctx context.Context, entries []ingressBatchEntry) error {
+	records := make([]syncstore.EventLogRecord, 0, len(entries))
+	now := time.Now()
+	for _, entry := range entries {
+		if !entry.applyable {
+			continue
+		}
+		records = append(records, syncstore.EventLogRecord{
+			Event:              entry.evt,
+			TargetDatabaseName: entry.mapped.TargetDatabase,
+			TargetTableName:    entry.mapped.TargetTable,
+			PKValue:            pkValue(entry.evt.PrimaryKey),
+			Direction:          entry.rule.Direction,
+			Status:             syncstore.StatusSuccess,
+			AppliedAt:          now,
+			Payload:            entry.body,
+			SkipPayload:        !shouldDispatch(*entry.rule),
+		})
+	}
+	return upsertEventLogs(ctx, r.EventStore, records)
 }
 
 func (r EdgeDownlinkRuntime) applyDownlinkBody(ctx context.Context, body []byte) (string, error) {
@@ -432,68 +575,186 @@ func (r EdgeDownlinkBatchRuntime) applyDownlinkBody(ctx context.Context, body []
 		Worker:                 r.Worker,
 		TargetDatabaseOverride: r.TargetDatabaseOverride,
 		ConfigStore:            r.ConfigStore,
+		AllowCRUDCompact:       r.AllowCRUDCompact,
 	}).applyDownlinkBody(ctx, body)
 }
 
-func (r ServerIngressRuntime) applyIngressBody(ctx context.Context, body []byte) (string, int, error) {
-	evt, mapped, err := mapSyncEvent(body, r.Rules)
-	if err != nil {
-		return "", 0, err
+func ensureSyncModeAllowed(mapped mapper.MappedEvent, allowCRUDCompact bool) error {
+	if mapped.SyncMode == rules.SyncModeCRUDCompact && !allowCRUDCompact {
+		return fmt.Errorf("sync_mode %s requires sync.enable_crud_compact", rules.SyncModeCRUDCompact)
 	}
-	rule := findRuleForEvent(r.Rules, evt)
-	if !rule.Enable || rule.Direction == rules.DirectionIgnore {
-		return evt.EventID, 0, nil
-	}
-	if r.EventStore != nil {
-		// Persist first. / 先落库。 / 先に保存。
-		if err := r.EventStore.UpsertEventLog(ctx, syncstore.EventLogRecord{
-			Event:              evt,
-			TargetDatabaseName: mapped.TargetDatabase,
-			TargetTableName:    mapped.TargetTable,
-			PKValue:            pkValue(evt.PrimaryKey),
-			Direction:          rule.Direction,
-			Status:             syncstore.StatusPending,
-			Payload:            body,
-		}); err != nil {
-			return evt.EventID, 0, fmt.Errorf("persist ingress event: %w", err)
-		}
-	}
-	if _, err := r.Worker.Apply(ctx, mapped); err != nil {
-		return evt.EventID, 0, fmt.Errorf("apply ingress event: %w", err)
-	}
-	if r.EventStore != nil {
-		if err := r.EventStore.UpsertEventLog(ctx, syncstore.EventLogRecord{
-			Event:              evt,
-			TargetDatabaseName: mapped.TargetDatabase,
-			TargetTableName:    mapped.TargetTable,
-			PKValue:            pkValue(evt.PrimaryKey),
-			Direction:          rule.Direction,
-			Status:             syncstore.StatusSuccess,
-			AppliedAt:          time.Now(),
-			Payload:            body,
-		}); err != nil {
-			return evt.EventID, 0, fmt.Errorf("persist applied event: %w", err)
-		}
-	}
-	if shouldDispatch(*rule) {
-		count, err := r.dispatch(ctx, evt, *rule)
-		if err != nil {
-			return evt.EventID, count, err
-		}
-		return evt.EventID, count, nil
-	}
-	return evt.EventID, 0, nil
+	return nil
 }
 
-func (r ServerIngressBatchRuntime) applyIngressBody(ctx context.Context, body []byte) (string, int, error) {
-	return (ServerIngressRuntime{
-		Rules:      r.Rules,
-		Worker:     r.Worker,
-		EventStore: r.EventStore,
-		Dispatcher: r.Dispatcher,
-		EdgeNodes:  r.EdgeNodes,
-		NodeStore:  r.NodeStore,
-	}).applyIngressBody(ctx, body)
+func applyBatch(ctx context.Context, worker apply.Worker, events []mapper.MappedEvent) (apply.BatchResult, error) {
+	if batchWorker, ok := worker.(apply.BatchWorker); ok {
+		return batchWorker.ApplyBatch(ctx, events)
+	}
+	results := make([]apply.Result, 0, len(events))
+	for _, evt := range events {
+		result, err := worker.Apply(ctx, evt)
+		if err != nil {
+			return apply.BatchResult{Results: results}, err
+		}
+		results = append(results, result)
+	}
+	return apply.BatchResult{Results: results}, nil
+}
+
+type laneItem struct {
+	index int
+	event mapper.MappedEvent
+}
+
+type laneResult struct {
+	results []apply.Result
+	indices []int
+	err     error
+}
+
+func applyBatchWithLanes(ctx context.Context, worker apply.Worker, events []mapper.MappedEvent, lanes int) (apply.BatchResult, error) {
+	if lanes <= 1 || len(events) <= 1 || containsCompactMode(events) {
+		return applyBatch(ctx, worker, events)
+	}
+	laneCount := lanes
+	if laneCount > len(events) {
+		laneCount = len(events)
+	}
+	laneEvents := make([][]laneItem, laneCount)
+	for index, evt := range events {
+		lane := int(stableHash(applyLaneKey(evt)) % uint32(laneCount))
+		laneEvents[lane] = append(laneEvents[lane], laneItem{index: index, event: evt})
+	}
+
+	out := make(chan laneResult, laneCount)
+	var wg sync.WaitGroup
+	for _, items := range laneEvents {
+		if len(items) == 0 {
+			continue
+		}
+		wg.Add(1)
+		go func(items []laneItem) {
+			defer wg.Done()
+			batch := make([]mapper.MappedEvent, 0, len(items))
+			indices := make([]int, 0, len(items))
+			for _, item := range items {
+				batch = append(batch, item.event)
+				indices = append(indices, item.index)
+			}
+			result, err := applyBatch(ctx, worker, batch)
+			out <- laneResult{results: result.Results, indices: indices, err: err}
+		}(items)
+	}
+	wg.Wait()
+	close(out)
+
+	committed := make([]bool, len(events))
+	byIndex := make([]apply.Result, len(events))
+	var firstErr error
+	firstFailedIndex := len(events)
+	for result := range out {
+		for i, applied := range result.results {
+			if i >= len(result.indices) {
+				break
+			}
+			index := result.indices[i]
+			committed[index] = true
+			byIndex[index] = applied
+		}
+		if result.err != nil {
+			failedIndex := len(events)
+			if len(result.results) < len(result.indices) {
+				failedIndex = result.indices[len(result.results)]
+			}
+			if failedIndex < firstFailedIndex {
+				firstFailedIndex = failedIndex
+				firstErr = result.err
+			}
+		}
+	}
+
+	results := make([]apply.Result, 0, len(events))
+	for index := 0; index < len(events); index++ {
+		if !committed[index] {
+			break
+		}
+		results = append(results, byIndex[index])
+	}
+	if firstErr != nil {
+		return apply.BatchResult{Results: results}, firstErr
+	}
+	if len(results) != len(events) {
+		return apply.BatchResult{Results: results}, fmt.Errorf("parallel apply committed non-prefix events only")
+	}
+	return apply.BatchResult{Results: results}, nil
+}
+
+func containsCompactMode(events []mapper.MappedEvent) bool {
+	for _, evt := range events {
+		if evt.SyncMode == rules.SyncModeCRUDCompact {
+			return true
+		}
+	}
+	return false
+}
+
+func applyLaneKey(evt mapper.MappedEvent) string {
+	if evt.SyncMode == rules.SyncModeAppendOnly {
+		return "append|" + evt.TargetDatabase + "." + evt.TargetTable
+	}
+	return "crud|" + evt.TargetDatabase + "." + evt.TargetTable + "|" + pkValue(evt.TargetPrimaryKey)
+}
+
+func stableHash(value string) uint32 {
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(value))
+	return hash.Sum32()
+}
+
+func upsertEventLogs(ctx context.Context, store EventLogStore, records []syncstore.EventLogRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+	if batchStore, ok := store.(EventLogBatchStore); ok {
+		return batchStore.UpsertEventLogs(ctx, records)
+	}
+	for _, record := range records {
+		if err := store.UpsertEventLog(ctx, record); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func messageSuccessCountForApplyResults(entries []ingressBatchEntry, appliedCount int) int {
+	seen := 0
+	for index, entry := range entries {
+		if !entry.applyable {
+			continue
+		}
+		if seen == appliedCount {
+			return index
+		}
+		seen++
+	}
+	return len(entries)
+}
+
+func eventIDForApplyIndex(entries []ingressBatchEntry, applyIndex int) string {
+	seen := 0
+	for _, entry := range entries {
+		if !entry.applyable {
+			continue
+		}
+		if seen == applyIndex {
+			return entry.evt.EventID
+		}
+		seen++
+	}
+	if len(entries) == 0 {
+		return ""
+	}
+	return entries[len(entries)-1].evt.EventID
 }
 
 func (r ServerIngressRuntime) dispatch(ctx context.Context, evt event.SyncEvent, rule rules.SyncRule) (int, error) {

@@ -171,10 +171,12 @@ func (a *Adapter) FetchChangesOnce(ctx context.Context) ([]cdc.ChangeEvent, cdc.
 
 func (a *Adapter) Commit(ctx context.Context, offset cdc.Offset) error {
 	offset.ReaderName = a.Config.ReaderName
-	if err := a.Store.Save(ctx, offset); err != nil {
-		return err
-	}
 	if err := a.Client.Ack(ctx, offset); err != nil {
+		if !IsBatchNotExistError(err) {
+			return err
+		}
+	}
+	if err := a.Store.Save(ctx, offset); err != nil {
 		return err
 	}
 	return nil

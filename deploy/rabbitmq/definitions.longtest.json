@@ -1,0 +1,29 @@
+{
+  "users": [
+    {
+      "name": "sync",
+      "password": "sync_password",
+      "tags": "management"
+    }
+  ],
+  "vhosts": [
+    { "name": "edge-longtest-sync" },
+    { "name": "server-longtest-sync" }
+  ],
+  "permissions": [
+    {
+      "user": "sync",
+      "vhost": "edge-longtest-sync",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    },
+    {
+      "user": "sync",
+      "vhost": "server-longtest-sync",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ]
+}

@@ -41,6 +41,7 @@ func TestApplyWritesManifestAndCanalConfig(t *testing.T) {
 		t.Fatal("rabbitmq init must be skipped when url is empty")
 		return nil
 	}
+	exec.EnsureRabbitMQ = func(context.Context, appconfig.Config) error { return nil }
 
 	result, err := exec.Apply(context.Background(), executor.Request{
 		Config:       cfg,
@@ -72,6 +73,7 @@ func TestApplyStopsOnRabbitMQInitError(t *testing.T) {
 	cfg.CDC.Mode = manifest.ModeExternal
 	exec := executor.New()
 	exec.SaveManifest = func(string, manifest.Manifest) error { return nil }
+	exec.EnsureRabbitMQ = func(context.Context, appconfig.Config) error { return nil }
 	exec.InitRabbitMQ = func(context.Context, appconfig.Config) error { return errors.New("broker down") }
 
 	result, err := exec.Apply(context.Background(), executor.Request{Config: cfg, ManifestPath: "manifest.json"})

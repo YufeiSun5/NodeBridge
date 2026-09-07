@@ -1,6 +1,6 @@
 param(
     [switch]$NoBuild,
-    [switch]$SkipDataSyncLaunch,
+    [switch]$SkipNodeBridgeLaunch,
     [switch]$RefreshConfig
 )
 
@@ -38,6 +38,22 @@ function Invoke-FrontendBuild {
     }
 }
 
+function Resolve-Wails {
+    $repoWails = Join-Path $root ".tools/bin/wails.exe"
+    if (Test-Path -LiteralPath $repoWails) {
+        return $repoWails
+    }
+    $cmd = Get-Command "wails.exe" -ErrorAction SilentlyContinue
+    if ($cmd) {
+        return $cmd.Source
+    }
+    $userWails = Join-Path $env:USERPROFILE "go/bin/wails.exe"
+    if (Test-Path -LiteralPath $userWails) {
+        return $userWails
+    }
+    throw "wails.exe not found; Wails UI must be built with wails build"
+}
+
 function Copy-IfMissingOrRefresh {
     param(
         [string]$Source,
@@ -49,7 +65,7 @@ function Copy-IfMissingOrRefresh {
 }
 
 $binDir = Join-Path $root "build/bin"
-$dataSyncExe = Join-Path $binDir "DataSync.exe"
+$nodeBridgeExe = Join-Path $binDir "NodeBridge.exe"
 $syncAgentExe = Join-Path $binDir "SyncAgent.exe"
 $configPath = Join-Path $binDir "config.yaml"
 $rulesPath = Join-Path $binDir "sync-rules.yaml"
@@ -58,19 +74,19 @@ $summaryPath = Join-Path $binDir "package-smoke-summary.json"
 New-Item -ItemType Directory -Path $binDir -Force | Out-Null
 
 if (-not $NoBuild) {
-    Invoke-FrontendBuild
     Invoke-Repo {
+        $wailsExe = Resolve-Wails
+        & $wailsExe "build" "-nopackage" "-o" "NodeBridge.exe"
+        Assert-LastExit "wails build NodeBridge"
         & go build -o $syncAgentExe .\cmd\sync-agent
         Assert-LastExit "go build SyncAgent"
-        & go build -o $dataSyncExe .
-        Assert-LastExit "go build DataSync"
     }
 }
 
 Copy-IfMissingOrRefresh -Source (Join-Path $root "configs/edge.example.yaml") -Target $configPath
 Copy-IfMissingOrRefresh -Source (Join-Path $root "configs/sync-rules.example.yaml") -Target $rulesPath
 
-$required = @($dataSyncExe, $syncAgentExe, $configPath, $rulesPath)
+$required = @($nodeBridgeExe, $syncAgentExe, $configPath, $rulesPath)
 foreach ($path in $required) {
     if (-not (Test-Path -LiteralPath $path)) {
         throw "package file missing: $path"
@@ -82,21 +98,21 @@ Assert-LastExit "SyncAgent ready smoke"
 & $syncAgentExe "canal-check" "-config" $configPath
 Assert-LastExit "SyncAgent canal-check smoke"
 
-$dataSyncStatus = "skipped"
-$dataSyncPid = 0
-if (-not $SkipDataSyncLaunch) {
+$nodeBridgeStatus = "skipped"
+$nodeBridgePid = 0
+if (-not $SkipNodeBridgeLaunch) {
     $oldConfigPath = $env:NODEBRIDGE_CONFIG_PATH
     $env:NODEBRIDGE_CONFIG_PATH = $configPath
     try {
-        $process = Start-Process -FilePath $dataSyncExe -WorkingDirectory $binDir -PassThru -WindowStyle Hidden
-        $dataSyncPid = $process.Id
+        $process = Start-Process -FilePath $nodeBridgeExe -WorkingDirectory $binDir -PassThru -WindowStyle Hidden
+        $nodeBridgePid = $process.Id
         Start-Sleep -Seconds 3
         $running = Get-Process -Id $process.Id -ErrorAction SilentlyContinue
         if (-not $running) {
-            throw "DataSync exited during package smoke"
+            throw "NodeBridge exited during package smoke"
         }
         Stop-Process -Id $process.Id -Force
-        $dataSyncStatus = "started"
+        $nodeBridgeStatus = "started"
     } finally {
         if ($null -eq $oldConfigPath) {
             Remove-Item Env:NODEBRIDGE_CONFIG_PATH -ErrorAction SilentlyContinue
@@ -109,12 +125,12 @@ if (-not $SkipDataSyncLaunch) {
 $summary = [ordered]@{
     created_at = (Get-Date).ToString("o")
     bin_dir = $binDir
-    datasync_exe = $dataSyncExe
+    nodebridge_exe = $nodeBridgeExe
     syncagent_exe = $syncAgentExe
     config_path = $configPath
     rules_path = $rulesPath
-    datasync_launch = $dataSyncStatus
-    datasync_pid = $dataSyncPid
+    nodebridge_launch = $nodeBridgeStatus
+    nodebridge_pid = $nodeBridgePid
 }
 $summary | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $summaryPath -Encoding UTF8
 

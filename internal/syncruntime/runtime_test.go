@@ -3,6 +3,8 @@ package syncruntime
 import (
 	"context"
 	"errors"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -120,6 +122,69 @@ func TestEdgeUploadBatchRuntimeNacksFailureAndRest(t *testing.T) {
 	for i := 1; i < len(messages); i++ {
 		if messages[i].acked || !messages[i].nacked || !messages[i].requeue {
 			t.Fatalf("message %d should be requeue nacked, got %+v", i, messages[i])
+		}
+	}
+}
+
+func TestEdgeUploadBatchRuntimeUsesBatchPublisherInOrder(t *testing.T) {
+	messages := []*fakeMessage{
+		{body: mustJSON(t, sampleEventWithID("evt-001", 1))},
+		{body: mustJSON(t, sampleEventWithID("evt-002", 2))},
+		{body: mustJSON(t, sampleEventWithID("evt-003", 3))},
+	}
+	publisher := &fakeBatchPublisher{}
+	result, err := (EdgeUploadBatchRuntime{
+		Source:        &fakeBatchSource{messages: incomingRuntime(messages)},
+		Publisher:     publisher,
+		Consumer:      rabbitmq.Consumer{RequeueOnError: true},
+		Exchange:      "server.ingress.x",
+		RoutingKey:    "server.ingress",
+		MaxBatch:      3,
+		FlushInterval: time.Hour,
+	}).RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.Count != 3 || result.EventID != "evt-003" || result.Action != "forwarded" {
+		t.Fatalf("unexpected result %+v", result)
+	}
+	if len(publisher.batches) != 1 || len(publisher.batches[0]) != 3 {
+		t.Fatalf("expected one three-message batch, got %+v", publisher.batches)
+	}
+	for i, req := range publisher.batches[0] {
+		if string(req.Body) != string(messages[i].body) {
+			t.Fatalf("request %d out of order", i)
+		}
+	}
+	for i, msg := range messages {
+		if !msg.acked || msg.nacked {
+			t.Fatalf("message %d expected ack only, got %+v", i, msg)
+		}
+	}
+}
+
+func TestEdgeUploadBatchRuntimeBatchPublisherFailureNacksAll(t *testing.T) {
+	messages := []*fakeMessage{
+		{body: mustJSON(t, sampleEventWithID("evt-001", 1))},
+		{body: mustJSON(t, sampleEventWithID("evt-002", 2))},
+		{body: mustJSON(t, sampleEventWithID("evt-003", 3))},
+	}
+	result, err := (EdgeUploadBatchRuntime{
+		Source:        &fakeBatchSource{messages: incomingRuntime(messages)},
+		Publisher:     &fakeBatchPublisher{err: errors.New("broker down")},
+		Consumer:      rabbitmq.Consumer{RequeueOnError: true},
+		MaxBatch:      3,
+		FlushInterval: time.Hour,
+	}).RunOnce(context.Background())
+	if err == nil {
+		t.Fatal("expected batch publish failure")
+	}
+	if result.EventID != "evt-003" || result.Action != "failed" {
+		t.Fatalf("unexpected result %+v", result)
+	}
+	for i, msg := range messages {
+		if msg.acked || !msg.nacked || !msg.requeue {
+			t.Fatalf("message %d should be requeue nacked, got %+v", i, msg)
 		}
 	}
 }
@@ -365,6 +430,189 @@ func TestServerIngressBatchRuntimeEdgeToServerDoesNotDispatch(t *testing.T) {
 	}
 	if len(dispatcher.targets) != 0 {
 		t.Fatalf("unexpected dispatch targets %+v", dispatcher.targets)
+	}
+}
+
+func TestServerIngressBatchRuntimeUsesOrderedBatchWorker(t *testing.T) {
+	messages := []*fakeMessage{
+		{body: mustJSON(t, sampleEventWithID("evt-001", 1))},
+		{body: mustJSON(t, sampleEventWithID("evt-002", 2))},
+	}
+	worker := &fakeBatchWorker{}
+	store := &fakeEventStore{}
+	set := sampleRules()
+	set.Rules[0].Direction = rules.DirectionEdgeToServer
+
+	result, err := (ServerIngressBatchRuntime{
+		Source:        &fakeBatchSource{messages: incomingRuntime(messages)},
+		Rules:         set,
+		Worker:        worker,
+		EventStore:    store,
+		MaxBatch:      2,
+		FlushInterval: time.Hour,
+	}).RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.Count != 2 || result.EventID != "evt-002" || result.Action != "applied" {
+		t.Fatalf("unexpected result %+v", result)
+	}
+	if len(worker.events) != 2 || worker.events[0].Event.EventID != "evt-001" || worker.events[1].Event.EventID != "evt-002" {
+		t.Fatalf("unexpected batch apply order %+v", worker.events)
+	}
+	if len(store.records) != 2 || store.records[0].Status != syncstore.StatusSuccess || store.records[1].Status != syncstore.StatusSuccess {
+		t.Fatalf("expected success-only batch event logs, got %+v", store.records)
+	}
+	if !store.records[0].SkipPayload || !store.records[1].SkipPayload {
+		t.Fatalf("EDGE_TO_SERVER no-dispatch batch logs should skip payload, got %+v", store.records)
+	}
+	for i, msg := range messages {
+		if !msg.acked || msg.nacked {
+			t.Fatalf("message %d should be acked after batch commit, got %+v", i, msg)
+		}
+	}
+}
+
+func TestServerIngressBatchRuntimeNacksFromFailedApply(t *testing.T) {
+	messages := []*fakeMessage{
+		{body: mustJSON(t, sampleEventWithID("evt-001", 1))},
+		{body: mustJSON(t, sampleEventWithID("evt-002", 2))},
+		{body: mustJSON(t, sampleEventWithID("evt-003", 3))},
+	}
+	set := sampleRules()
+	set.Rules[0].Direction = rules.DirectionEdgeToServer
+	result, err := (ServerIngressBatchRuntime{
+		Source:        &fakeBatchSource{messages: incomingRuntime(messages)},
+		Consumer:      rabbitmq.Consumer{RequeueOnError: true},
+		Rules:         set,
+		Worker:        &fakeBatchWorker{err: errors.New("mysql down"), successCount: 1},
+		MaxBatch:      3,
+		FlushInterval: time.Hour,
+	}).RunOnce(context.Background())
+	if err == nil {
+		t.Fatal("expected batch apply failure")
+	}
+	if result.EventID != "evt-002" || result.Action != "failed" {
+		t.Fatalf("unexpected result %+v", result)
+	}
+	if !messages[0].acked || messages[0].nacked {
+		t.Fatalf("first message should be acked, got %+v", messages[0])
+	}
+	for i := 1; i < len(messages); i++ {
+		if messages[i].acked || !messages[i].nacked || !messages[i].requeue {
+			t.Fatalf("message %d should be requeue nacked, got %+v", i, messages[i])
+		}
+	}
+}
+
+func TestServerIngressBatchRuntimePersistsCommittedPrefixOnFailedApply(t *testing.T) {
+	messages := []*fakeMessage{
+		{body: mustJSON(t, sampleEventWithID("evt-001", 1))},
+		{body: mustJSON(t, sampleEventWithID("evt-002", 2))},
+	}
+	set := sampleRules()
+	set.Rules[0].Direction = rules.DirectionEdgeToServer
+	store := &fakeEventStore{}
+	result, err := (ServerIngressBatchRuntime{
+		Source:        &fakeBatchSource{messages: incomingRuntime(messages)},
+		Consumer:      rabbitmq.Consumer{RequeueOnError: true},
+		Rules:         set,
+		Worker:        &fakeBatchWorker{err: errors.New("mysql down"), successCount: 1},
+		EventStore:    store,
+		MaxBatch:      2,
+		FlushInterval: time.Hour,
+	}).RunOnce(context.Background())
+	if err == nil {
+		t.Fatal("expected batch apply failure")
+	}
+	if result.Action != "failed" || result.EventID != "evt-002" {
+		t.Fatalf("unexpected result %+v", result)
+	}
+	if len(store.records) != 1 || store.records[0].Event.EventID != "evt-001" || store.records[0].Status != syncstore.StatusSuccess {
+		t.Fatalf("expected committed prefix event log, got %+v", store.records)
+	}
+	if !messages[0].acked || messages[1].acked || !messages[1].nacked {
+		t.Fatalf("unexpected ack state first=%+v second=%+v", messages[0], messages[1])
+	}
+}
+
+func TestApplyBatchWithLanesKeepsSamePrimaryKeyInOrder(t *testing.T) {
+	events := []mapper.MappedEvent{
+		mappedRuntimeEvent("evt-001", 1),
+		mappedRuntimeEvent("evt-002", 2),
+		mappedRuntimeEvent("evt-003", 1),
+	}
+	worker := &laneRecordingBatchWorker{}
+	result, err := applyBatchWithLanes(context.Background(), worker, events, 4)
+	if err != nil {
+		t.Fatalf("applyBatchWithLanes returned error: %v", err)
+	}
+	if len(result.Results) != 3 {
+		t.Fatalf("expected 3 results, got %+v", result)
+	}
+	if worker.orderForPK("setting_id=1") != "evt-001,evt-003" {
+		t.Fatalf("same pk events were not ordered in one lane, batches=%+v", worker.batches)
+	}
+}
+
+func TestApplyBatchWithLanesFallsBackForCompactMode(t *testing.T) {
+	events := []mapper.MappedEvent{
+		mappedRuntimeEvent("evt-001", 1),
+		mappedRuntimeEvent("evt-002", 1),
+	}
+	events[0].SyncMode = rules.SyncModeCRUDCompact
+	events[1].SyncMode = rules.SyncModeCRUDCompact
+	worker := &laneRecordingBatchWorker{}
+	if _, err := applyBatchWithLanes(context.Background(), worker, events, 4); err != nil {
+		t.Fatalf("applyBatchWithLanes returned error: %v", err)
+	}
+	if len(worker.batches) != 1 || len(worker.batches[0]) != 2 {
+		t.Fatalf("compact mode should use one ordered batch, got %+v", worker.batches)
+	}
+}
+
+func TestServerIngressBatchRuntimeRejectsCompactWhenDisabled(t *testing.T) {
+	messages := []*fakeMessage{{body: mustJSON(t, sampleEventWithID("evt-001", 1))}}
+	set := sampleRules()
+	set.Rules[0].SyncMode = rules.SyncModeCRUDCompact
+	result, err := (ServerIngressBatchRuntime{
+		Source:        &fakeBatchSource{messages: incomingRuntime(messages)},
+		Consumer:      rabbitmq.Consumer{RequeueOnError: true},
+		Rules:         set,
+		Worker:        &fakeBatchWorker{},
+		MaxBatch:      1,
+		FlushInterval: time.Hour,
+	}).RunOnce(context.Background())
+	if err == nil {
+		t.Fatal("expected compact mode gate error")
+	}
+	if result.Action != "failed" || messages[0].acked || !messages[0].nacked || !messages[0].requeue {
+		t.Fatalf("unexpected result=%+v message=%+v", result, messages[0])
+	}
+}
+
+func TestServerIngressBatchRuntimeAllowsCompactWhenEnabled(t *testing.T) {
+	messages := []*fakeMessage{{body: mustJSON(t, sampleEventWithID("evt-001", 1))}}
+	set := sampleRules()
+	set.Rules[0].SyncMode = rules.SyncModeCRUDCompact
+	worker := &fakeBatchWorker{}
+	result, err := (ServerIngressBatchRuntime{
+		Source:           &fakeBatchSource{messages: incomingRuntime(messages)},
+		Consumer:         rabbitmq.Consumer{RequeueOnError: true},
+		Rules:            set,
+		Worker:           worker,
+		MaxBatch:         1,
+		FlushInterval:    time.Hour,
+		AllowCRUDCompact: true,
+	}).RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.Action != "applied" || !messages[0].acked || messages[0].nacked {
+		t.Fatalf("unexpected result=%+v message=%+v", result, messages[0])
+	}
+	if len(worker.events) != 1 || worker.events[0].SyncMode != rules.SyncModeCRUDCompact {
+		t.Fatalf("expected compact event to reach worker, got %+v", worker.events)
 	}
 }
 
@@ -718,9 +966,32 @@ func (p *fakePublisher) Publish(ctx context.Context, req rabbitmq.PublishRequest
 	return p.err
 }
 
+type fakeBatchPublisher struct {
+	fakePublisher
+	batches [][]rabbitmq.PublishRequest
+	err     error
+}
+
+func (p *fakeBatchPublisher) PublishBatch(ctx context.Context, reqs []rabbitmq.PublishRequest) error {
+	copied := append([]rabbitmq.PublishRequest(nil), reqs...)
+	p.batches = append(p.batches, copied)
+	return p.err
+}
+
 type fakeWorker struct {
 	events []mapper.MappedEvent
 	err    error
+}
+
+type fakeBatchWorker struct {
+	events       []mapper.MappedEvent
+	err          error
+	successCount int
+}
+
+type laneRecordingBatchWorker struct {
+	mu      sync.Mutex
+	batches [][]mapper.MappedEvent
 }
 
 type fakeEventStore struct {
@@ -778,6 +1049,56 @@ func (w *fakeWorker) Apply(ctx context.Context, evt mapper.MappedEvent) (apply.R
 	return apply.Result{EventID: evt.Event.EventID, SourceTable: evt.SourceTable, TargetTable: evt.TargetTable}, w.err
 }
 
+func (w *fakeBatchWorker) Apply(ctx context.Context, evt mapper.MappedEvent) (apply.Result, error) {
+	w.events = append(w.events, evt)
+	return apply.Result{EventID: evt.Event.EventID, SourceTable: evt.SourceTable, TargetTable: evt.TargetTable}, w.err
+}
+
+func (w *fakeBatchWorker) ApplyBatch(ctx context.Context, events []mapper.MappedEvent) (apply.BatchResult, error) {
+	w.events = append(w.events, events...)
+	limit := len(events)
+	if w.err != nil {
+		limit = w.successCount
+	}
+	results := make([]apply.Result, 0, limit)
+	for i := 0; i < limit && i < len(events); i++ {
+		evt := events[i]
+		results = append(results, apply.Result{EventID: evt.Event.EventID, SourceTable: evt.SourceTable, TargetTable: evt.TargetTable})
+	}
+	return apply.BatchResult{Results: results}, w.err
+}
+
+func (w *laneRecordingBatchWorker) Apply(ctx context.Context, evt mapper.MappedEvent) (apply.Result, error) {
+	return apply.Result{EventID: evt.Event.EventID, SourceTable: evt.SourceTable, TargetTable: evt.TargetTable}, nil
+}
+
+func (w *laneRecordingBatchWorker) ApplyBatch(ctx context.Context, events []mapper.MappedEvent) (apply.BatchResult, error) {
+	copied := append([]mapper.MappedEvent(nil), events...)
+	w.mu.Lock()
+	w.batches = append(w.batches, copied)
+	w.mu.Unlock()
+
+	results := make([]apply.Result, 0, len(events))
+	for _, evt := range events {
+		results = append(results, apply.Result{EventID: evt.Event.EventID, SourceTable: evt.SourceTable, TargetTable: evt.TargetTable})
+	}
+	return apply.BatchResult{Results: results}, nil
+}
+
+func (w *laneRecordingBatchWorker) orderForPK(pk string) string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var ids []string
+	for _, batch := range w.batches {
+		for _, evt := range batch {
+			if pkValue(evt.TargetPrimaryKey) == pk {
+				ids = append(ids, evt.Event.EventID)
+			}
+		}
+	}
+	return strings.Join(ids, ",")
+}
+
 type fakeDispatcher struct {
 	targets []string
 	err     error
@@ -810,6 +1131,26 @@ func sampleEventWithID(eventID string, id int) event.SyncEvent {
 		CreatedAt:     time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC),
 		EventTime:     time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC),
 		TraceID:       "trace-001",
+	}
+}
+
+func mappedRuntimeEvent(eventID string, id int) mapper.MappedEvent {
+	evt := sampleEventWithID(eventID, id)
+	return mapper.MappedEvent{
+		Event:          evt,
+		SourceDatabase: evt.DatabaseName,
+		SourceTable:    evt.TableName,
+		TargetDatabase: "scada_center",
+		TargetTable:    "device_settings",
+		SyncMode:       rules.SyncModeOrderedCRUD,
+		TargetPrimaryKey: map[string]any{
+			"setting_id": id,
+		},
+		TargetAfter: map[string]any{
+			"setting_id":    id,
+			"display_name":  "Pump A",
+			"setting_value": "ON",
+		},
 	}
 }
 

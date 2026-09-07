@@ -1,0 +1,46 @@
+mode: edge
+
+node:
+  id: edge-installer-test
+  name: Headless Installer Test
+
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  username: sync_user
+  database: nodebridge_test
+
+rabbitmq:
+  mode: managed
+  install: true
+  username: nb-edge-installer-test-local
+  password: "1234"
+  vhost: /nodebridge-edge
+
+cdc:
+  type: canal
+  mode: managed
+  install: true
+  reader_name: edge-installer-test
+  canal_addr: 127.0.0.1:11111
+  config_dir: nodebridge-canal
+  service_name: NodeBridgeCanal
+  destination: edge-installer-test
+  filter: nodebridge_test\..*
+
+sync:
+  upload_batch_size: 50
+  dispatch_batch_size: 50
+  flush_interval_millis: 500
+  retry_interval_seconds: 10
+  heartbeat_interval_seconds: 15
+
+log_web:
+  enable: false
+
+mcp_server:
+  enable: false
+
+security:
+  admin_password: "1234"
+  exit_password: "1234"

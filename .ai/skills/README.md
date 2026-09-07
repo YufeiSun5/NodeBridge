@@ -58,3 +58,9 @@ description: "Use when: English keywords / 中文关键词 / 日本語キーワ�
 argument-hint: "input / 输入 / 入力"
 ---
 ```
+
+## Active Project Skills / 当前项目技能 / 有効なプロジェクトスキル
+
+| Skill | Use when / 使用场景 / 利用場面 |
+| --- | --- |
+| `installer-vm-test` | Validate NodeBridge headless installer packages only inside the Hyper-V VM, restore the clean checkpoint, run install/verify/idempotent install/uninstall loops, collect evidence, and update `AI_BOARD.md`. / 仅在 Hyper-V VM 内验证 NodeBridge 无 GUI 安装包，恢复干净快照，执行安装、验证、幂等安装、卸载闭环，回收证据并更新看板。 / Hyper-V VM 内だけで NodeBridge ヘッドレスインストーラーを検証し、クリーンチェックポイント復元、インストール、検証、冪等再インストール、アンインストール、証跡回収、看板更新を行う。 |

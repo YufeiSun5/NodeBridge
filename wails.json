@@ -1,7 +1,7 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "DataSync",
-  "outputfilename": "DataSync",
+  "name": "NodeBridge",
+  "outputfilename": "NodeBridge",
   "frontend:dir": "frontend",
   "frontend:install": "node -e \"process.exit(0)\"",
   "frontend:build": "node_modules\\.bin\\tsc.cmd && node_modules\\.bin\\vite.cmd build",

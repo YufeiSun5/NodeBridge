@@ -26,6 +26,8 @@ export function GetMCPServerStatus():Promise<uiapi.MCPServerStatus>;
 
 export function GetManagedInstallPlan(arg1:uiapi.ManagedInstallRequest):Promise<uiapi.ManagedInstallResponse>;
 
+export function GetNodeOptions():Promise<uiapi.NodeOptionsResponse>;
+
 export function GetOverview():Promise<status.Overview>;
 
 export function GetQueueStatus():Promise<uiapi.QueueStatusResponse>;

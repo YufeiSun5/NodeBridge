@@ -84,7 +84,7 @@ func DefaultDesiredState(nodeID string) DesiredState {
 	}
 	return DesiredState{
 		Mode:              "managed",
-		CanalArchivePath:  "deploy/windows/canal-server.zip",
+		CanalArchivePath:  "deploy/windows/canal.deployer-1.1.8.tar.gz",
 		ServiceName:       "NodeBridgeCanal",
 		ConfigDir:         `%ProgramData%\NodeBridge\canal`,
 		ManagedResourceID: "nodebridge",

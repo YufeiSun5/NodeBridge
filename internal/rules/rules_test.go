@@ -239,6 +239,51 @@ func TestRuleSetValidateRejectsInvalidDispatchTarget(t *testing.T) {
 	}
 }
 
+func TestRuleSetValidateAllowsAppendOnlySyncMode(t *testing.T) {
+	set := rules.RuleSet{Rules: []rules.SyncRule{
+		{
+			DatabaseName: "scada_edge",
+			TableName:    "alarm_history",
+			Direction:    rules.DirectionEdgeToServer,
+			SyncMode:     rules.SyncModeAppendOnly,
+			PrimaryKeys:  []string{"id"},
+		},
+	}}
+	if err := set.Validate(); err != nil {
+		t.Fatalf("expected append_only sync mode to validate: %v", err)
+	}
+}
+
+func TestRuleSetValidateAllowsCRUDCompactSyncMode(t *testing.T) {
+	set := rules.RuleSet{Rules: []rules.SyncRule{
+		{
+			DatabaseName: "scada_edge",
+			TableName:    "tag_state_01",
+			Direction:    rules.DirectionBidirectional,
+			SyncMode:     rules.SyncModeCRUDCompact,
+			PrimaryKeys:  []string{"id"},
+		},
+	}}
+	if err := set.Validate(); err != nil {
+		t.Fatalf("expected crud_ordered_compact sync mode to validate: %v", err)
+	}
+}
+
+func TestRuleSetValidateRejectsInvalidSyncMode(t *testing.T) {
+	set := rules.RuleSet{Rules: []rules.SyncRule{
+		{
+			DatabaseName: "scada_edge",
+			TableName:    "alarm_history",
+			Direction:    rules.DirectionEdgeToServer,
+			SyncMode:     "fastish",
+			PrimaryKeys:  []string{"id"},
+		},
+	}}
+	if err := set.Validate(); err == nil {
+		t.Fatal("expected invalid sync mode error")
+	}
+}
+
 func TestRuleSetValidateRequiresSelectedDispatchNodes(t *testing.T) {
 	set := rules.RuleSet{Rules: []rules.SyncRule{
 		{

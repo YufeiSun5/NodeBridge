@@ -42,6 +42,21 @@ type SaveSyncRulesRequest struct {
 	Rules []rules.SyncRule `json:"rules"`
 }
 
+type NodeOptionDTO struct {
+	NodeID          string `json:"node_id"`
+	NodeName        string `json:"node_name,omitempty"`
+	NodeType        string `json:"node_type,omitempty"`
+	Status          string `json:"status"`
+	Location        string `json:"location,omitempty"`
+	LastHeartbeatAt string `json:"last_heartbeat_at,omitempty"`
+}
+
+type NodeOptionsResponse struct {
+	Items   []NodeOptionDTO `json:"items"`
+	Status  string          `json:"status"`
+	Message string          `json:"message,omitempty"`
+}
+
 type TestResult struct {
 	OK      bool   `json:"ok"`
 	Status  string `json:"status"`
@@ -152,9 +167,12 @@ type SetAutoStartRequest struct {
 }
 
 type MCPServerStatus struct {
-	Enabled bool   `json:"enabled"`
-	Status  string `json:"status"`
-	Message string `json:"message,omitempty"`
+	Enabled       bool   `json:"enabled"`
+	Status        string `json:"status"`
+	Message       string `json:"message,omitempty"`
+	Transport     string `json:"transport,omitempty"`
+	Ephemeral     bool   `json:"ephemeral"`
+	RestartResets bool   `json:"restart_resets"`
 }
 
 type SetMCPServerEnabledRequest struct {

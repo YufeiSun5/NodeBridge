@@ -41,27 +41,55 @@ func TestValidateCatalogChecksHashAndMissingAssets(t *testing.T) {
 	}
 }
 
+func TestValidateCatalogAllowsMissingOptionalAssets(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "WinSW-x64.exe")
+	results := ValidateCatalog(Catalog{Assets: []AssetSpec{{
+		Name:      "winsw",
+		Component: ComponentWinSW,
+		Path:      missing,
+		SHA256:    strings.Repeat("d", 64),
+		Optional:  true,
+	}}})
+	if len(results) != 1 || !results[0].OK || results[0].Status != StatusSkipped {
+		t.Fatalf("expected optional asset skipped and ok: %+v", results)
+	}
+	if !AllValid(results) {
+		t.Fatal("expected optional skipped asset to keep catalog valid")
+	}
+}
+
 func TestBuildCommandPlanDoesNotExecuteInstallers(t *testing.T) {
 	plan := BuildCommandPlan(Catalog{Assets: []AssetSpec{
 		{Name: "otp", Component: ComponentErlang, Path: `C:\packages\otp.exe`, SHA256: strings.Repeat("a", 64)},
+		{Name: "java", Component: ComponentJava, Path: `C:\packages\jre.zip`, SHA256: strings.Repeat("e", 64)},
 		{Name: "rabbit", Component: ComponentRabbitMQ, Path: `C:\packages\rabbitmq.exe`, SHA256: strings.Repeat("b", 64)},
-		{Name: "canal", Component: ComponentCanal, Path: `C:\packages\canal.zip`, SHA256: strings.Repeat("c", 64)},
+		{Name: "canal", Component: ComponentCanal, Path: `C:\packages\canal.deployer-1.1.8.tar.gz`, SHA256: strings.Repeat("c", 64)},
+		{Name: "winsw", Component: ComponentWinSW, Path: `C:\packages\winsw.exe`, SHA256: strings.Repeat("d", 64)},
 	}})
 
-	if len(plan) != 5 {
-		t.Fatalf("expected 5 planned steps, got %d: %+v", len(plan), plan)
+	if len(plan) != 7 {
+		t.Fatalf("expected 7 planned steps, got %d: %+v", len(plan), plan)
 	}
 	if plan[0].Component != ComponentErlang || plan[0].Action != "install" || !strings.Contains(plan[0].CommandLine, "/S") {
 		t.Fatalf("unexpected erlang step: %+v", plan[0])
 	}
-	if plan[1].Component != ComponentRabbitMQ || plan[1].Action != "install" {
-		t.Fatalf("unexpected rabbitmq install step: %+v", plan[1])
+	if plan[1].Component != ComponentJava || plan[1].Action != "extract" || !strings.Contains(plan[1].CommandLine, "Expand-Archive") {
+		t.Fatalf("unexpected java extract step: %+v", plan[1])
 	}
-	if plan[2].Action != "service-install" || plan[3].Action != "service-start" {
-		t.Fatalf("expected rabbitmq service steps: %+v", plan[2:4])
+	if plan[2].Component != ComponentRabbitMQ || plan[2].Action != "install" {
+		t.Fatalf("unexpected rabbitmq install step: %+v", plan[2])
 	}
-	if plan[4].Component != ComponentCanal || plan[4].Action != "extract" {
-		t.Fatalf("unexpected canal step: %+v", plan[4])
+	if plan[3].Action != "service-install" || plan[4].Action != "service-start" {
+		t.Fatalf("expected rabbitmq service steps: %+v", plan[3:5])
+	}
+	if plan[5].Component != ComponentCanal || plan[5].Action != "extract" {
+		t.Fatalf("unexpected canal step: %+v", plan[5])
+	}
+	if !strings.Contains(plan[5].CommandLine, "tar.exe") || !strings.Contains(plan[5].CommandLine, "-xzf") {
+		t.Fatalf("expected tar.gz canal extraction command: %+v", plan[5])
+	}
+	if plan[6].Component != ComponentWinSW || plan[6].Action != "copy-service-wrapper" {
+		t.Fatalf("unexpected winsw step: %+v", plan[6])
 	}
 	for _, step := range plan {
 		if step.Status != "planned" {

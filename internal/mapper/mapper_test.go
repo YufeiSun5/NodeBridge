@@ -37,6 +37,31 @@ func TestMapEventMapsTargetTable(t *testing.T) {
 	}
 }
 
+func TestMapEventCarriesSyncMode(t *testing.T) {
+	mapped, err := mapper.MapEvent(baseEvent(), rules.SyncRule{
+		TargetDatabaseName: "scada_center",
+		TargetTableName:    "alarm_history",
+		PrimaryKeys:        []string{"id"},
+		SyncMode:           rules.SyncModeAppendOnly,
+	})
+	if err != nil {
+		t.Fatalf("MapEvent returned error: %v", err)
+	}
+	if mapped.SyncMode != rules.SyncModeAppendOnly {
+		t.Fatalf("expected append_only sync mode, got %q", mapped.SyncMode)
+	}
+}
+
+func TestMapEventDefaultsSyncModeToOrderedCRUD(t *testing.T) {
+	mapped, err := mapper.MapEvent(baseEvent(), rules.SyncRule{PrimaryKeys: []string{"id"}})
+	if err != nil {
+		t.Fatalf("MapEvent returned error: %v", err)
+	}
+	if mapped.SyncMode != rules.SyncModeOrderedCRUD {
+		t.Fatalf("expected default sync mode, got %q", mapped.SyncMode)
+	}
+}
+
 func TestMapEventMapsColumnsAndPrimaryKey(t *testing.T) {
 	mapped, err := mapper.MapEvent(baseEvent(), rules.SyncRule{
 		TargetTableName: "device_settings",

@@ -14,7 +14,7 @@ func TestBuildPlanFreshInstall(t *testing.T) {
 	requireStep(t, plan, installer.ComponentService, installer.ActionInstall)
 	requireStep(t, plan, installer.ComponentService, installer.ActionStart)
 	requireStep(t, plan, installer.ComponentRabbitMQ, installer.ActionCreate)
-	requireStep(t, plan, installer.ComponentRabbitMQ, installer.ActionGrant)
+	requireNoStep(t, plan, installer.ComponentRabbitMQ, installer.ActionGrant)
 	requireStep(t, plan, installer.ComponentTopology, installer.ActionInitialize)
 }
 

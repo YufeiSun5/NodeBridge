@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
@@ -37,7 +38,7 @@ func NewWithlinClient(config Config) (*WithlinClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	connector := withlinclient.NewSimpleCanalConnector(host, port, config.Username, config.Password, config.Destination, 60000, 60000)
+	connector := withlinclient.NewSimpleCanalConnector(host, port, config.Username, config.Password, config.Destination, 60000, int32(time.Hour/time.Millisecond))
 	return &WithlinClient{
 		Config:    config,
 		TimeoutMS: 1000,
@@ -95,10 +96,18 @@ func (c *WithlinClient) Ack(ctx context.Context, offset cdc.Offset) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if offset.BatchID == 0 {
+	if !offset.HasCanalBatch() {
 		return nil
 	}
 	return c.connector.Ack(offset.BatchID)
+}
+
+func IsBatchNotExistError(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "batchid:") && strings.Contains(text, "is not exist")
 }
 
 func (c *WithlinClient) Close(ctx context.Context) error {
@@ -116,11 +125,14 @@ func ConvertWithlinMessage(msg *withlinprotocol.Message) ([]RowChange, cdc.Offse
 	offset := cdc.Offset{BatchID: msg.Id, UpdatedAt: time.Now()}
 	for i := range msg.Entries {
 		item := &msg.Entries[i]
-		if item.GetEntryType() != withlinentry.EntryType_ROWDATA {
-			continue
-		}
 		header := item.GetHeader()
 		if header == nil {
+			continue
+		}
+		offset.BinlogFile = header.GetLogfileName()
+		offset.BinlogPos = uint32(header.GetLogfileOffset())
+		offset.GTID = header.GetGtid()
+		if item.GetEntryType() != withlinentry.EntryType_ROWDATA {
 			continue
 		}
 		rowChange := &withlinentry.RowChange{}
@@ -147,9 +159,6 @@ func ConvertWithlinMessage(msg *withlinprotocol.Message) ([]RowChange, cdc.Offse
 				EventTime:    time.UnixMilli(header.GetExecuteTime()),
 			})
 		}
-		offset.BinlogFile = header.GetLogfileName()
-		offset.BinlogPos = uint32(header.GetLogfileOffset())
-		offset.GTID = header.GetGtid()
 	}
 	return rows, offset, nil
 }

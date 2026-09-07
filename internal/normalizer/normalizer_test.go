@@ -70,6 +70,59 @@ func TestNormalizeUsesNowWhenEventTimeMissing(t *testing.T) {
 	}
 }
 
+func TestNormalizeUsesStableCDCEventIDForReplay(t *testing.T) {
+	change := cdc.ChangeEvent{
+		DatabaseName: "scada_edge",
+		TableName:    "collect_data_01",
+		Operation:    cdc.OperationInsert,
+		PrimaryKey:   map[string]any{"id": "1"},
+		After:        map[string]any{"id": "1", "value": "42"},
+		BinlogFile:   "mysql-bin.000123",
+		BinlogPos:    456,
+	}
+	normalizer := New(Options{NodeID: "edge-001"})
+
+	first, err := normalizer.Normalize(change)
+	if err != nil {
+		t.Fatalf("first Normalize returned error: %v", err)
+	}
+	second, err := normalizer.Normalize(change)
+	if err != nil {
+		t.Fatalf("second Normalize returned error: %v", err)
+	}
+	if first.EventID != second.EventID || first.EventID == "" {
+		t.Fatalf("expected stable event id, first=%q second=%q", first.EventID, second.EventID)
+	}
+
+	change.PrimaryKey = map[string]any{"id": "2"}
+	third, err := normalizer.Normalize(change)
+	if err != nil {
+		t.Fatalf("third Normalize returned error: %v", err)
+	}
+	if third.EventID == first.EventID {
+		t.Fatalf("different pk must produce different event id %q", third.EventID)
+	}
+}
+
+func TestNormalizeFallsBackToRandomIDWithoutBinlogIdentity(t *testing.T) {
+	evt, err := New(Options{
+		NodeID:     "edge-001",
+		NewEventID: fixedID("evt-fallback"),
+	}).Normalize(cdc.ChangeEvent{
+		DatabaseName: "scada_edge",
+		TableName:    "collect_data_01",
+		Operation:    cdc.OperationInsert,
+		PrimaryKey:   map[string]any{"id": "1"},
+		After:        map[string]any{"id": "1"},
+	})
+	if err != nil {
+		t.Fatalf("Normalize returned error: %v", err)
+	}
+	if evt.EventID != "evt-fallback" {
+		t.Fatalf("expected fallback id, got %q", evt.EventID)
+	}
+}
+
 func TestNormalizeRejectsInvalidInput(t *testing.T) {
 	n := New(Options{NewEventID: fixedID("evt-001")})
 	if _, err := n.Normalize(cdc.ChangeEvent{DatabaseName: "db", TableName: "t", Operation: cdc.OperationInsert}); err == nil {

@@ -14,7 +14,7 @@ applyTo: "**/*.go,cmd/**,internal/**,configs/**,migrations/**,deploy/**"
 
 ## 前后端协作
 
-- 后端任务开始前必须读取 `.ai/docs/ai-collaboration-log.md` 的 Active Board。
+- 后端任务开始前必须读取根级 `AI_BOARD.md` 的 Active Board。
 - Wails 方法、DTO 字段、错误语义、页面所需数据变化，先写 Active Board，再改 contract 和代码。
 - 后端发现需要前端处理的问题，必须写入 Active Board，不只写在最终回复里。
 - 不新增单独的后端看板；稳定接口只维护 `.ai/docs/frontend-backend-contract.md`。

@@ -1,0 +1,72 @@
+rules:
+  - id: collect-data-01-upload
+    database_name: scada_edge_longtest
+    table_name: collect_data_01
+    target_database_name: scada_center_longtest
+    target_table_name: collect_data_01
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    sync_mode: append_only
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: collect-data-02-upload
+    database_name: scada_edge_longtest
+    table_name: collect_data_02
+    target_database_name: scada_center_longtest
+    target_table_name: collect_data_02
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    sync_mode: append_only
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: collect-data-03-upload
+    database_name: scada_edge_longtest
+    table_name: collect_data_03
+    target_database_name: scada_center_longtest
+    target_table_name: collect_data_03
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    sync_mode: append_only
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: collect-data-04-upload
+    database_name: scada_edge_longtest
+    table_name: collect_data_04
+    target_database_name: scada_center_longtest
+    target_table_name: collect_data_04
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    sync_mode: append_only
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: collect-data-05-upload
+    database_name: scada_edge_longtest
+    table_name: collect_data_05
+    target_database_name: scada_center_longtest
+    target_table_name: collect_data_05
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    sync_mode: append_only
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]
+
+  - id: collect-data-06-upload
+    database_name: scada_edge_longtest
+    table_name: collect_data_06
+    target_database_name: scada_center_longtest
+    target_table_name: collect_data_06
+    direction: EDGE_TO_SERVER
+    dispatch_target: NONE
+    sync_mode: append_only
+    conflict_policy: NONE
+    enable: true
+    primary_keys: [id]

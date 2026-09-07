@@ -48,6 +48,8 @@ export interface SyncConfig {
   retry_interval_seconds: number;
   heartbeat_interval_seconds?: number;
   node_timeout_seconds?: number;
+  apply_lanes?: number;
+  enable_crud_compact?: boolean;
 }
 
 export interface LogWebConfig {
@@ -93,6 +95,7 @@ export interface SyncRule {
   direction: string;
   dispatch_target?: string;
   dispatch_node_ids?: string[];
+  sync_mode?: string;
   conflict_policy: string;
   enable: boolean;
   primary_keys: string[];
@@ -100,6 +103,21 @@ export interface SyncRule {
   include_columns: string[];
   exclude_columns: string[];
   column_mappings?: ColumnMapping[];
+}
+
+export interface NodeOptionDTO {
+  node_id: string;
+  node_name?: string;
+  node_type?: string;
+  status: string;
+  location?: string;
+  last_heartbeat_at?: string;
+}
+
+export interface NodeOptionsResponse {
+  items: NodeOptionDTO[];
+  status: string;
+  message?: string;
 }
 
 export interface QueueStatusDTO {
@@ -159,6 +177,9 @@ export interface MCPServerStatus {
   enabled: boolean;
   status: string;
   message?: string;
+  transport?: string;
+  ephemeral?: boolean;
+  restart_resets?: boolean;
 }
 
 export interface AgentProcessStatus {
@@ -219,6 +240,7 @@ type BackendApp = {
   TestRabbitMQ?: (req: RabbitMQConfig) => Promise<TestResult>;
   GetSyncRules?: () => Promise<{ rules: SyncRule[] }>;
   SaveSyncRules?: (req: { rules: SyncRule[] }) => Promise<{ rules: SyncRule[] }>;
+  GetNodeOptions?: () => Promise<{ items: NodeOptionDTO[]; status: string; message?: string }>;
   GetQueueStatus?: () => Promise<{ queues: QueueStatusDTO[] }>;
   GetFailedEvents?: (req: { limit: number }) => Promise<{ items: FailedEventDTO[] }>;
   RetryFailedEvent?: (req: { event_id: string; target_node_id: string }) => Promise<OperationResult>;
@@ -300,6 +322,8 @@ export const emptyConfig: ConfigDTO = {
     retry_interval_seconds: 5,
     heartbeat_interval_seconds: 10,
     node_timeout_seconds: 30,
+    apply_lanes: 0,
+    enable_crud_compact: false,
   },
   log_web: { enable: false, bind: '127.0.0.1', port: 18080, token: '' },
   mcp_server: { enable: false },
@@ -399,6 +423,16 @@ export async function saveSyncRules(rules: SyncRule[]): Promise<SyncRule[]> {
     throw new Error('Wails SaveSyncRules binding is not available');
   }
   return (await fn({ rules })).rules || [];
+}
+
+export async function getNodeOptions(): Promise<NodeOptionsResponse> {
+  return (
+    (await app()?.GetNodeOptions?.()) || {
+      items: [],
+      status: 'unsupported',
+      message: 'Wails GetNodeOptions binding is not available',
+    }
+  );
 }
 
 export async function getQueueStatus(): Promise<QueueStatusDTO[]> {
@@ -508,6 +542,9 @@ export async function getMCPServerStatus(): Promise<MCPServerStatus> {
       enabled: false,
       status: 'unsupported',
       message: 'Wails GetMCPServerStatus binding is not available',
+      transport: 'stdio',
+      ephemeral: false,
+      restart_resets: false,
     }
   );
 }
@@ -518,6 +555,9 @@ export async function setMCPServerEnabled(enabled: boolean): Promise<MCPServerSt
       enabled: false,
       status: 'unsupported',
       message: 'Wails SetMCPServerEnabled binding is not available',
+      transport: 'stdio',
+      ephemeral: false,
+      restart_resets: false,
     }
   );
 }

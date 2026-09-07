@@ -28,22 +28,28 @@ import (
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const appVersion = "0.33.0"
+const (
+	appVersion          = "0.46.3"
+	defaultAdminTimeout = 24 * time.Hour
+)
 
 // App binds Wails UI. / UI 入口。 / UI入口。
 type App struct {
-	config     *appconfig.Config
-	ruleSet    *rules.RuleSet
-	configPath string
-	rulesPath  string
-	runtime    *status.RuntimeStore
-	autoStart  autostart.Manager
-	protector  appconfig.SecretProtector
-	agent      agentController
-	ctx        context.Context
-	tray       *nativeTray
-	exitArmed  atomic.Bool
-	auth       adminAuth
+	config           *appconfig.Config
+	ruleSet          *rules.RuleSet
+	configPath       string
+	rulesPath        string
+	runtime          *status.RuntimeStore
+	autoStart        autostart.Manager
+	protector        appconfig.SecretProtector
+	configLoadError  string
+	agent            agentController
+	ctx              context.Context
+	tray             *nativeTray
+	exitArmed        atomic.Bool
+	auth             adminAuth
+	openStore        func() (*syncstore.Store, func(), error)
+	mcpLabFullAccess bool
 }
 
 func NewApp() *App {
@@ -59,8 +65,15 @@ func NewApp() *App {
 	}
 	if cfg, err := appconfig.LoadFile(path); err == nil {
 		app.config = cfg
+	} else if cfg, draftErr := appconfig.LoadFileAllowIncomplete(path); draftErr == nil {
+		app.config = cfg
+	} else if err != nil {
+		app.configLoadError = err.Error()
 	}
-	app.auth.Timeout = 10 * time.Minute
+	app.auth.Timeout = defaultAdminTimeout
+	if controller, ok := app.agent.(*externalAgentController); ok {
+		controller.configPath = path
+	}
 	return app
 }
 
@@ -91,7 +104,7 @@ func newAppForTest(configPath, rulesPath string, protector appconfig.SecretProte
 		runtime:    status.NewRuntimeStore(),
 		autoStart:  autoStart,
 		protector:  protector,
-		auth:       adminAuth{Timeout: 10 * time.Minute},
+		auth:       adminAuth{Timeout: defaultAdminTimeout},
 	}
 }
 
@@ -233,11 +246,21 @@ func (a *App) SaveConfig(req uiapi.SaveConfigRequest) (uiapi.ConfigDTO, error) {
 		cfg = appconfig.MergeRedactedSecrets(cfg, *a.config)
 	}
 	if err := cfg.Validate(); err != nil {
-		return uiapi.ConfigDTO{}, err
+		if !isSecurityDraftConfig(cfg) {
+			return uiapi.ConfigDTO{}, err
+		}
+		if strings.TrimSpace(cfg.Security.AdminPassword) == "" {
+			return uiapi.ConfigDTO{}, errors.New("security.admin_password is required")
+		}
+		return a.saveConfigAllowIncomplete(cfg)
 	}
 	if strings.TrimSpace(cfg.Security.AdminPassword) == "" {
 		return uiapi.ConfigDTO{}, errors.New("security.admin_password is required")
 	}
+	return a.saveConfigStrict(cfg)
+}
+
+func (a *App) saveConfigStrict(cfg appconfig.Config) (uiapi.ConfigDTO, error) {
 	path := a.configPath
 	if path == "" {
 		path = appconfig.DefaultConfigPath()
@@ -246,10 +269,25 @@ func (a *App) SaveConfig(req uiapi.SaveConfigRequest) (uiapi.ConfigDTO, error) {
 		return uiapi.ConfigDTO{}, err
 	}
 	a.config = &cfg
+	a.configLoadError = ""
+	return uiapi.RedactConfig(uiapi.ConfigFromApp(cfg)), nil
+}
+
+func (a *App) saveConfigAllowIncomplete(cfg appconfig.Config) (uiapi.ConfigDTO, error) {
+	path := a.configPath
+	if path == "" {
+		path = appconfig.DefaultConfigPath()
+	}
+	if err := appconfig.SaveFileAllowIncomplete(path, cfg, a.protectorOrDefault()); err != nil {
+		return uiapi.ConfigDTO{}, err
+	}
+	a.config = &cfg
+	a.configLoadError = ""
 	return uiapi.RedactConfig(uiapi.ConfigFromApp(cfg)), nil
 }
 
 func (a *App) TestMySQL(req appconfig.MySQLConfig) uiapi.TestResult {
+	req = a.resolveMySQLTestConfig(req)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -265,19 +303,73 @@ func (a *App) TestMySQL(req appconfig.MySQLConfig) uiapi.TestResult {
 }
 
 func (a *App) TestRabbitMQ(req appconfig.RabbitMQConfig) uiapi.TestResult {
-	target := req.ServerURL
-	if target == "" {
-		target = req.LocalURL
-	}
-	if target == "" {
+	req = a.resolveRabbitMQTestConfig(req)
+	localURL := strings.TrimSpace(req.LocalURL)
+	serverURL := strings.TrimSpace(req.ServerURL)
+	if localURL == "" && serverURL == "" {
 		return uiapi.TestResult{OK: false, Status: status.AgentError, Message: "rabbitmq url is required"}
 	}
-	conn, err := rabbitmq.Dial(target)
+
+	var messages []string
+	localOK := false
+	serverOK := false
+	if localURL != "" {
+		if err := probeRabbitMQURL(localURL); err != nil {
+			messages = append(messages, "local rabbitmq unreachable: "+err.Error())
+		} else {
+			localOK = true
+			messages = append(messages, "local rabbitmq reachable")
+		}
+	}
+	if serverURL != "" {
+		if err := probeRabbitMQURL(serverURL); err != nil {
+			messages = append(messages, "server rabbitmq unreachable: "+err.Error())
+		} else {
+			serverOK = true
+			messages = append(messages, "server rabbitmq reachable")
+		}
+	}
+
+	if localOK && serverURL != "" && !serverOK {
+		return uiapi.TestResult{OK: true, Status: uiapi.StateConfigured, Message: strings.Join(messages, "; ")}
+	}
+	if localOK || serverOK {
+		return uiapi.TestResult{OK: true, Status: status.AgentRunning, Message: strings.Join(messages, "; ")}
+	}
+	return uiapi.TestResult{OK: false, Status: status.AgentError, Message: strings.Join(messages, "; ")}
+}
+
+func (a *App) resolveMySQLTestConfig(req appconfig.MySQLConfig) appconfig.MySQLConfig {
+	if a.config == nil {
+		return req
+	}
+	merged := appconfig.MergeRedactedSecrets(
+		appconfig.Config{MySQL: req},
+		appconfig.Config{MySQL: a.config.MySQL},
+	)
+	return merged.MySQL
+}
+
+func (a *App) resolveRabbitMQTestConfig(req appconfig.RabbitMQConfig) appconfig.RabbitMQConfig {
+	if a.config == nil {
+		return req
+	}
+	merged := appconfig.MergeRedactedSecrets(
+		appconfig.Config{RabbitMQ: req},
+		appconfig.Config{RabbitMQ: a.config.RabbitMQ},
+	)
+	return merged.RabbitMQ
+}
+
+var dialRabbitMQ = rabbitmq.Dial
+
+func probeRabbitMQURL(url string) error {
+	conn, err := dialRabbitMQ(url)
 	if err != nil {
-		return uiapi.TestResult{OK: false, Status: status.AgentError, Message: err.Error()}
+		return err
 	}
 	defer conn.Close()
-	return uiapi.TestResult{OK: true, Status: status.AgentRunning, Message: "rabbitmq reachable"}
+	return nil
 }
 
 func (a *App) GetSyncRules() (uiapi.SyncRulesDTO, error) {
@@ -315,6 +407,37 @@ func (a *App) SaveSyncRules(req uiapi.SaveSyncRulesRequest) (uiapi.SyncRulesDTO,
 	}
 	a.ruleSet = &set
 	return uiapi.SyncRulesDTO{Rules: append([]rules.SyncRule(nil), req.Rules...)}, nil
+}
+
+func (a *App) GetNodeOptions() uiapi.NodeOptionsResponse {
+	store, closeFn, err := a.openSyncStore()
+	if err != nil {
+		if errors.Is(err, errConfigMissing) {
+			return uiapi.NodeOptionsResponse{Items: []uiapi.NodeOptionDTO{}, Status: uiapi.StateUnknown, Message: "config is not loaded"}
+		}
+		return uiapi.NodeOptionsResponse{Items: []uiapi.NodeOptionDTO{}, Status: status.AgentError, Message: err.Error()}
+	}
+	defer closeFn()
+
+	nodes, err := store.ListNodes(context.Background())
+	if err != nil {
+		return uiapi.NodeOptionsResponse{Items: []uiapi.NodeOptionDTO{}, Status: status.AgentError, Message: err.Error()}
+	}
+	items := make([]uiapi.NodeOptionDTO, 0, len(nodes))
+	for _, node := range nodes {
+		if !strings.EqualFold(node.NodeType, "edge") || node.Status != syncstore.StatusActive {
+			continue
+		}
+		items = append(items, uiapi.NodeOptionDTO{
+			NodeID:          node.NodeID,
+			NodeName:        node.NodeName,
+			NodeType:        node.NodeType,
+			Status:          node.Status,
+			Location:        node.Location,
+			LastHeartbeatAt: uiapi.TimeString(node.LastHeartbeatAt),
+		})
+	}
+	return uiapi.NodeOptionsResponse{Items: items, Status: status.AgentRunning}
 }
 
 func (a *App) GetQueueStatus() uiapi.QueueStatusResponse {
@@ -560,15 +683,28 @@ func (a *App) SetAutoStart(req uiapi.SetAutoStartRequest) uiapi.AutoStartStatus 
 
 func (a *App) GetMCPServerStatus() uiapi.MCPServerStatus {
 	if a.config == nil {
-		return uiapi.MCPServerStatus{Enabled: false, Status: uiapi.StateUnknown, Message: "config is not loaded"}
+		message := "config is not loaded"
+		state := uiapi.StateUnknown
+		if strings.TrimSpace(a.configLoadError) != "" {
+			state = uiapi.StateUnsupported
+			message = "config cannot be loaded by current user: " + a.configLoadError
+		}
+		return uiapi.MCPServerStatus{Enabled: false, Status: state, Message: message, Transport: "stdio", Ephemeral: false, RestartResets: false}
+	}
+	readyMessage, ready := a.mcpReadiness()
+	if !ready {
+		return uiapi.MCPServerStatus{Enabled: false, Status: uiapi.StateUnsupported, Message: readyMessage, Transport: "stdio", Ephemeral: false, RestartResets: false}
 	}
 	if !a.config.MCP.Enable {
-		return uiapi.MCPServerStatus{Enabled: false, Status: status.AgentStopped, Message: "mcp server is disabled"}
+		return uiapi.MCPServerStatus{Enabled: false, Status: status.AgentStopped, Message: "mcp service is disabled; it stays disabled until the user enables it", Transport: "stdio", Ephemeral: false, RestartResets: false}
 	}
 	return uiapi.MCPServerStatus{
-		Enabled: true,
-		Status:  uiapi.StateConfigured,
-		Message: "mcp server switch is enabled; runtime server is reserved for a later version",
+		Enabled:       true,
+		Status:        uiapi.StateConfigured,
+		Message:       "stdio MCP is enabled persistently; only the user can disable it",
+		Transport:     "stdio",
+		Ephemeral:     false,
+		RestartResets: false,
 	}
 }
 
@@ -577,13 +713,40 @@ func (a *App) SetMCPServerEnabled(req uiapi.SetMCPServerEnabledRequest) uiapi.MC
 		return uiapi.MCPServerStatus{Enabled: false, Status: uiapi.StateLocked, Message: err.Error()}
 	}
 	if a.config == nil {
-		return uiapi.MCPServerStatus{Enabled: false, Status: status.AgentError, Message: "config is not loaded"}
+		message := "config is not loaded"
+		state := status.AgentError
+		if strings.TrimSpace(a.configLoadError) != "" {
+			state = uiapi.StateUnsupported
+			message = "config cannot be loaded by current user: " + a.configLoadError
+		}
+		return uiapi.MCPServerStatus{Enabled: false, Status: state, Message: message, Transport: "stdio", Ephemeral: false, RestartResets: false}
 	}
-	a.config.MCP.Enable = req.Enabled
-	if err := appconfig.SaveFileWithProtector(a.effectiveConfigPath(), *a.config, a.protectorOrDefault()); err != nil {
-		return uiapi.MCPServerStatus{Enabled: a.config.MCP.Enable, Status: status.AgentError, Message: err.Error()}
+	if req.Enabled {
+		if message, ready := a.mcpReadiness(); !ready {
+			return uiapi.MCPServerStatus{Enabled: false, Status: uiapi.StateUnsupported, Message: message, Transport: "stdio", Ephemeral: false, RestartResets: false}
+		}
 	}
+	next := *a.config
+	next.MCP.Enable = req.Enabled
+	if err := appconfig.SaveFileAllowIncomplete(a.effectiveConfigPath(), next, a.protectorOrDefault()); err != nil {
+		return uiapi.MCPServerStatus{Enabled: a.config.MCP.Enable, Status: status.AgentError, Message: err.Error(), Transport: "stdio", Ephemeral: false, RestartResets: false}
+	}
+	a.config = &next
+	a.configLoadError = ""
 	return a.GetMCPServerStatus()
+}
+
+func (a *App) mcpReadiness() (string, bool) {
+	if strings.TrimSpace(a.configLoadError) != "" {
+		return "config cannot be loaded by current user: " + a.configLoadError, false
+	}
+	if a.config == nil {
+		return "config is not loaded", false
+	}
+	if _, err := appconfig.LoadFileWithProtector(a.effectiveConfigPath(), a.protectorOrDefault()); err != nil {
+		return "sync config is not ready for mcp-stdio: " + err.Error(), false
+	}
+	return "", true
 }
 
 func (a *App) GetManagedInstallPlan(req uiapi.ManagedInstallRequest) (uiapi.ManagedInstallResponse, error) {
@@ -865,6 +1028,9 @@ func (a *App) probeCDCStatus() (string, string) {
 var errConfigMissing = errors.New("config is not loaded")
 
 func (a *App) openSyncStore() (*syncstore.Store, func(), error) {
+	if a.openStore != nil {
+		return a.openStore()
+	}
 	if a.config == nil {
 		return nil, func() {}, errConfigMissing
 	}
@@ -1026,7 +1192,80 @@ func (a *App) ensureRulesFile() error {
 	return rules.SaveFile(path, rules.RuleSet{Rules: dto.Rules})
 }
 
+func isSecurityDraftConfig(cfg appconfig.Config) bool {
+	hasSecurity := strings.TrimSpace(cfg.Security.AdminPassword) != "" || strings.TrimSpace(cfg.Security.ExitPassword) != ""
+	if !hasSecurity || strings.TrimSpace(cfg.Mode) != "" {
+		return false
+	}
+	return isEmptyNodeConfig(cfg.Node) &&
+		isEmptyMySQLConfig(cfg.MySQL) &&
+		isEmptyRabbitMQConfig(cfg.RabbitMQ) &&
+		isEmptyCDCConfig(cfg.CDC) &&
+		isEmptySyncConfig(cfg.Sync) &&
+		isEmptyLogWebConfig(cfg.LogWeb)
+}
+
+func isEmptyNodeConfig(cfg appconfig.NodeConfig) bool {
+	return strings.TrimSpace(cfg.ID) == "" &&
+		strings.TrimSpace(cfg.Name) == "" &&
+		strings.TrimSpace(cfg.Location) == ""
+}
+
+func isEmptyMySQLConfig(cfg appconfig.MySQLConfig) bool {
+	return strings.TrimSpace(cfg.Host) == "" &&
+		cfg.Port == 0 &&
+		strings.TrimSpace(cfg.Username) == "" &&
+		strings.TrimSpace(cfg.Password) == "" &&
+		strings.TrimSpace(cfg.Database) == ""
+}
+
+func isEmptyRabbitMQConfig(cfg appconfig.RabbitMQConfig) bool {
+	return strings.TrimSpace(cfg.Mode) == "" &&
+		!cfg.Install &&
+		strings.TrimSpace(cfg.LocalURL) == "" &&
+		strings.TrimSpace(cfg.ServerURL) == "" &&
+		strings.TrimSpace(cfg.ManagementURL) == "" &&
+		strings.TrimSpace(cfg.Username) == "" &&
+		strings.TrimSpace(cfg.Password) == "" &&
+		strings.TrimSpace(cfg.VHost) == ""
+}
+
+func isEmptyCDCConfig(cfg appconfig.CDCConfig) bool {
+	return strings.TrimSpace(cfg.Type) == "" &&
+		strings.TrimSpace(cfg.Mode) == "" &&
+		!cfg.Install &&
+		strings.TrimSpace(cfg.ReaderName) == "" &&
+		strings.TrimSpace(cfg.CanalAddr) == "" &&
+		strings.TrimSpace(cfg.ConfigDir) == "" &&
+		strings.TrimSpace(cfg.ServiceName) == "" &&
+		strings.TrimSpace(cfg.Destination) == "" &&
+		strings.TrimSpace(cfg.Username) == "" &&
+		strings.TrimSpace(cfg.Password) == "" &&
+		strings.TrimSpace(cfg.Filter) == "" &&
+		cfg.BatchSize == 0 &&
+		!cfg.UseGTID
+}
+
+func isEmptySyncConfig(cfg appconfig.SyncConfig) bool {
+	return cfg.UploadBatchSize == 0 &&
+		cfg.DispatchBatchSize == 0 &&
+		cfg.FlushIntervalMillis == 0 &&
+		cfg.RetryIntervalSeconds == 0 &&
+		cfg.HeartbeatIntervalSecond == 0 &&
+		cfg.NodeTimeoutSeconds == 0
+}
+
+func isEmptyLogWebConfig(cfg appconfig.LogWebConfig) bool {
+	return !cfg.Enable &&
+		strings.TrimSpace(cfg.Bind) == "" &&
+		cfg.Port == 0 &&
+		strings.TrimSpace(cfg.Token) == ""
+}
+
 func (a *App) requireAdmin() error {
+	if a.mcpLabFullAccess {
+		return nil
+	}
 	if a.GetAuthState().Unlocked {
 		return nil
 	}
@@ -1052,11 +1291,11 @@ func (a *App) adminTimeout() time.Duration {
 	if a.auth.Timeout > 0 {
 		return a.auth.Timeout
 	}
-	return 10 * time.Minute
+	return defaultAdminTimeout
 }
 
 func unsupported(message string) uiapi.OperationResult {
-	return uiapi.OperationResult{OK: false, Status: uiapi.StateUnsupported, Message: fmt.Sprintf("%s", message)}
+	return uiapi.OperationResult{OK: false, Status: uiapi.StateUnsupported, Message: message}
 }
 
 type adminAuth struct {

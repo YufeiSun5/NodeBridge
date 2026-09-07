@@ -97,6 +97,39 @@ func TestAdapterFetchOncePublishesEventsAndSavesOffset(t *testing.T) {
 	}
 }
 
+func TestAdapterCommitDoesNotSaveOffsetWhenAckFails(t *testing.T) {
+	store := cdc.NewMemoryOffsetStore()
+	client := &fakeCanalClient{ackErr: errors.New("ack down")}
+	adapter, err := NewAdapter(Config{ReaderName: "edge-001", Address: "127.0.0.1:11111", Destination: "edge-001"}, client, store)
+	if err != nil {
+		t.Fatalf("NewAdapter returned error: %v", err)
+	}
+
+	err = adapter.Commit(context.Background(), cdc.Offset{BatchID: 7, BinlogFile: "mysql-bin.000001", BinlogPos: 99})
+	if err == nil {
+		t.Fatal("expected ack error")
+	}
+	if _, ok, loadErr := store.Load(context.Background(), "edge-001"); loadErr != nil || ok {
+		t.Fatalf("offset should not be saved ok=%t err=%v", ok, loadErr)
+	}
+}
+
+func TestAdapterCommitToleratesMissingCanalBatch(t *testing.T) {
+	store := cdc.NewMemoryOffsetStore()
+	client := &fakeCanalClient{ackErr: errors.New("batchId:4 is not exist")}
+	adapter, err := NewAdapter(Config{ReaderName: "edge-001", Address: "127.0.0.1:11111", Destination: "edge-001"}, client, store)
+	if err != nil {
+		t.Fatalf("NewAdapter returned error: %v", err)
+	}
+
+	if err := adapter.Commit(context.Background(), cdc.Offset{BatchID: 4, BinlogFile: "mysql-bin.000001", BinlogPos: 99}); err != nil {
+		t.Fatalf("Commit returned error: %v", err)
+	}
+	if offset, ok, err := store.Load(context.Background(), "edge-001"); err != nil || !ok || offset.BatchID != 4 {
+		t.Fatalf("expected saved offset offset=%+v ok=%t err=%v", offset, ok, err)
+	}
+}
+
 func TestAdapterLifecycleDelegatesClient(t *testing.T) {
 	client := &fakeCanalClient{}
 	adapter, err := NewAdapter(Config{ReaderName: "edge-001", Address: "127.0.0.1:11111", Destination: "edge-001"}, client, nil)
@@ -135,6 +168,7 @@ type fakeCanalClient struct {
 	connected   bool
 	destination string
 	acked       bool
+	ackErr      error
 	closed      bool
 }
 
@@ -157,7 +191,7 @@ func (c *fakeCanalClient) Fetch(ctx context.Context, batchSize int) ([]RowChange
 
 func (c *fakeCanalClient) Ack(ctx context.Context, offset cdc.Offset) error {
 	c.acked = true
-	return nil
+	return c.ackErr
 }
 
 func (c *fakeCanalClient) Close(ctx context.Context) error {

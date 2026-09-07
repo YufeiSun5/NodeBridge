@@ -61,6 +61,39 @@ func TestRunMissingConfig(t *testing.T) {
 	}
 }
 
+func TestManagedConfigMigrateUpdatesOwnedPasswords(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	cfg := appconfig.Config{
+		Mode:  appconfig.ModeEdge,
+		Node:  appconfig.NodeConfig{ID: "edge-002"},
+		MySQL: appconfig.MySQLConfig{Database: "field_db", Username: "root", Password: "mysql-secret"},
+		RabbitMQ: appconfig.RabbitMQConfig{
+			Mode: "managed", Install: true,
+			LocalURL:  "amqp://old:old@127.0.0.1:5672/%2Fnodebridge-edge",
+			ServerURL: "amqp://old:old@192.168.10.10:5672/%2Fnodebridge-server",
+		},
+		Security: appconfig.SecurityConfig{AdminPassword: "old-admin", ExitPassword: "old-exit"},
+	}
+	if err := appconfig.SaveFile(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if err := run([]string{"managed-config-migrate", "-config", path}, &stdout, &stderr); err != nil {
+		t.Fatalf("migrate: %v stderr=%s", err, stderr.String())
+	}
+	loaded, err := appconfig.LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Security.AdminPassword != "1234" || loaded.Security.ExitPassword != "1234" || loaded.RabbitMQ.Username != "nb-edge-002-local" || loaded.RabbitMQ.Password != "1234" {
+		t.Fatalf("owned credentials not migrated: %+v", loaded)
+	}
+	if loaded.MySQL.Password != "mysql-secret" {
+		t.Fatal("MySQL password must not be changed")
+	}
+}
+
 func TestRunApplyEventRequiresFile(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 
@@ -535,6 +568,155 @@ func TestRunServeLogWebRespectsDisabledConfig(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "log web unavailable") {
 		t.Fatalf("expected stderr to mention log web unavailable, got %q", stderr.String())
+	}
+}
+
+func TestRunMCPStdioInitializeAndOverview(t *testing.T) {
+	configPath := writeTempConfig(t, `
+mode: server
+node:
+  id: server-001
+  name: Server 001
+mysql:
+  database: scada_center
+rabbitmq:
+  server_url: amqp://sync:secret@127.0.0.1:5672/server-sync
+sync:
+  retry_interval_seconds: 1
+mcp_server:
+  enable: true
+`)
+	rulesPath := filepath.Join(t.TempDir(), "rules.yaml")
+	if err := os.WriteFile(rulesPath, []byte("rules: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	input := strings.Join([]string{
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`,
+		`{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"nodebridge_overview","arguments":{}}}`,
+	}, "\n") + "\n"
+	oldStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = r
+	defer func() { os.Stdin = oldStdin }()
+	if _, err := w.WriteString(input); err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+
+	err = run([]string{"mcp-stdio", "-config", configPath, "-rules", rulesPath}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("mcp-stdio returned error: %v stderr=%s", err, stderr.String())
+	}
+	out := stdout.String()
+	if !strings.Contains(out, "server-001") || !strings.Contains(out, "mcp_read_only") {
+		t.Fatalf("unexpected mcp output %s", out)
+	}
+	if strings.Contains(out, "secret") {
+		t.Fatalf("mcp output leaked secret: %s", out)
+	}
+}
+
+func TestRunMCPStdioSavesNonSecretConfigPatch(t *testing.T) {
+	configPath := writeTempConfig(t, `
+mode: edge
+node:
+  id: edge-001
+  name: Old Edge
+mysql:
+  host: 127.0.0.1
+  database: scada_edge
+rabbitmq:
+  server_url: amqp://sync:secret@127.0.0.1:5672/server-sync
+sync:
+  retry_interval_seconds: 1
+mcp_server:
+  enable: true
+`)
+	rulesPath := filepath.Join(t.TempDir(), "rules.yaml")
+	if err := os.WriteFile(rulesPath, []byte("rules: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	input := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"nodebridge_save_config_patch","arguments":{"patch":{"node":{"name":"Remote Edge"},"sync":{"apply_lanes":2}}}}}` + "\n"
+	oldStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = r
+	defer func() { os.Stdin = oldStdin }()
+	if _, err := w.WriteString(input); err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+
+	err = run([]string{"mcp-stdio", "-config", configPath, "-rules", rulesPath}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("mcp-stdio returned error: %v stderr=%s", err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "saved") {
+		t.Fatalf("expected saved response, got %s", stdout.String())
+	}
+	cfg, err := appconfig.LoadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Node.Name != "Remote Edge" || cfg.Sync.ApplyLanes != 2 {
+		t.Fatalf("expected config patch to persist, got %+v", cfg)
+	}
+}
+
+func TestRunMCPStdioRejectsDisabledConfig(t *testing.T) {
+	configPath := writeTempConfig(t, `
+mode: server
+node:
+  id: server-001
+mysql:
+  database: scada_center
+sync:
+  retry_interval_seconds: 1
+mcp_server:
+  enable: false
+`)
+	rulesPath := filepath.Join(t.TempDir(), "rules.yaml")
+	if err := os.WriteFile(rulesPath, []byte("rules: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	oldStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdin = r
+	defer func() { os.Stdin = oldStdin }()
+	_ = w.Close()
+
+	err = run([]string{"mcp-stdio", "-config", configPath, "-rules", rulesPath}, &stdout, &stderr)
+	if err == nil || !strings.Contains(err.Error(), "mcp_server.enable") {
+		t.Fatalf("expected disabled mcp error, got err=%v stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "mcp_server.enable") {
+		t.Fatalf("expected disabled mcp stderr, got %s", stderr.String())
+	}
+}
+
+func TestRunMCPClientConfigOutputsClaudeCompatibleShape(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"mcp-client-config", "-exe", `C:\NodeBridge\SyncAgent.exe`, "-config", `C:\NodeBridge\config.yaml`, "-rules", `C:\NodeBridge\sync-rules.yaml`, "-log", `C:\NodeBridge\logs\sync-agent.log`}, &stdout, &stderr)
+	if err != nil {
+		t.Fatalf("mcp-client-config returned error: %v stderr=%s", err, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{"mcpServers", "nodebridge", "mcp-stdio", `C:\\NodeBridge\\config.yaml`, `C:\\NodeBridge\\logs\\sync-agent.log`} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in mcp-client-config output %s", want, out)
+		}
 	}
 }
 

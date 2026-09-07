@@ -24,6 +24,8 @@ const pageViews: Record<PageKey, () => ReactElement> = {
   settings: SettingsPage,
 };
 
+const editLockedPages = new Set<PageKey>(['config', 'rules', 'settings']);
+
 export function App() {
   return (
     <AuthProvider>
@@ -45,8 +47,9 @@ function AppContent() {
   const [exitDialogOpen, setExitDialogOpen] = useState(false);
   const [exitPassword, setExitPassword] = useState('');
   const { t } = useI18n();
-  const { authState, lock } = useAuth();
+  const { authState, ensureUnlocked, lock } = useAuth();
   const ActivePage = useMemo(() => pageViews[active], [active]);
+  const showUnlockHint = !authState.unlocked && editLockedPages.has(active);
 
   useEffect(() => onTrayExitRequest(() => setExitDialogOpen(true)), []);
   useEffect(() => {
@@ -85,24 +88,6 @@ function AppContent() {
         </section>
       ) : null}
 
-      <section className="auth-banner">
-        <span className={authState.unlocked ? 'status-dot ok' : 'status-dot'} />
-        <span className={authState.unlocked ? 'auth-state unlocked' : 'auth-state locked'}>
-          {authState.unlocked ? t('unlocked') : t('locked')}
-        </span>
-        {authState.unlocked && authState.expires_at ? (
-          <span className="config-path">
-            {t('expiresAt')} {formatAuthExpiry(authState.expires_at)}
-          </span>
-        ) : (
-          <span className="config-path">{t('adminLockedHelp')}</span>
-        )}
-        <span className="status-spacer" />
-        <button className="button-secondary compact" type="button" onClick={() => void lock()} disabled={!authState.unlocked}>
-          {t('lock')}
-        </button>
-      </section>
-
       <nav className="filter-bar">
         {pages.map((page) => (
           <button
@@ -125,7 +110,33 @@ function AppContent() {
         <span>{t('footerReady')}</span>
         <span className="status-spacer" />
         <span className="license-note">{t('licenseNotice')}</span>
-        <span>{t('darkTerminal')}</span>
+        {showUnlockHint ? <span className="auth-inline-hint">{t('unlockCapsuleHint')}</span> : null}
+        {authState.unlocked ? (
+          <div className="auth-control" title={t('adminUnlockedHelp')}>
+            <div className="auth-control-status">
+              <span className="status-dot ok" />
+              <span className="auth-state unlocked">{t('editMode')}</span>
+              {authState.expires_at ? (
+                <span className="auth-expiry">
+                  {t('expiresAt')} {formatAuthExpiry(authState.expires_at)}
+                </span>
+              ) : null}
+            </div>
+            <button className="auth-control-action" type="button" onClick={() => void lock()}>
+              {t('lock')}
+            </button>
+          </div>
+        ) : (
+          <div className="auth-control" title={t('adminLockedHelp')}>
+            <div className="auth-control-status">
+              <span className="status-dot" />
+              <span className="auth-state locked">{t('readOnlyLockedTitle')}</span>
+            </div>
+            <button className="auth-control-action primary-action" type="button" onClick={() => void ensureUnlocked()}>
+              {t('unlock')}
+            </button>
+          </div>
+        )}
       </footer>
 
       {exitDialogOpen ? (

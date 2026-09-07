@@ -110,19 +110,8 @@ export function OverviewPage() {
           <strong>{summary.cdcMessage}</strong>
         </div>
       ) : null}
-      <div className="path-grid">
-        <div className="readonly-item">
-          <span>{t('configPath')}</span>
-          <strong>{summary.configPath || '-'}</strong>
-        </div>
-        <div className="readonly-item">
-          <span>{t('rulesPath')}</span>
-          <strong>{summary.rulesPath || '-'}</strong>
-        </div>
-      </div>
-
       <div className="overview-actions">
-        <div className="toolbar-row">
+        <div className="toolbar-row action-group">
           <button className="button-primary" type="button" onClick={() => void runControl('start')}>
             {t('start')}
           </button>
@@ -130,7 +119,7 @@ export function OverviewPage() {
             {t('refresh')}
           </button>
         </div>
-        <div className="toolbar-row danger-actions">
+        <div className="toolbar-row danger-actions action-group">
           <button className="button-danger" type="button" onClick={() => void runControl('stop')}>
             {t('stop')}
           </button>
@@ -178,10 +167,6 @@ export function OverviewPage() {
         </div>
         <div className="readonly-grid">
           <div className="readonly-item">
-            <span>{t('agentExecutable')}</span>
-            <strong>{agentProcess?.executable_path || '-'}</strong>
-          </div>
-          <div className="readonly-item">
             <span>PID</span>
             <strong>{agentProcess?.pid || '-'}</strong>
           </div>
@@ -192,10 +177,6 @@ export function OverviewPage() {
           <div className="readonly-item">
             <span>{t('agentExitedAt')}</span>
             <strong>{formatTime(agentProcess?.exited_at)}</strong>
-          </div>
-          <div className="readonly-item">
-            <span>{t('agentLogPath')}</span>
-            <strong>{agentProcess?.log_path || summary.agentLogPath || '-'}</strong>
           </div>
           <div className="readonly-item">
             <span>{t('agentLastError')}</span>

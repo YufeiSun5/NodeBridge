@@ -6,6 +6,7 @@ import { SwitchControl } from '../components/SwitchControl';
 import { useI18n } from '../i18n';
 import {
   emptyConfig,
+  applyManagedInstall,
   getConfig,
   saveConfig,
   testMySQL,
@@ -42,11 +43,18 @@ function displayValue(value: unknown) {
   return String(value);
 }
 
+function isLongValue(value: unknown) {
+  if (typeof value !== 'string') return false;
+  return value.length > 24 || value.includes('\\') || value.includes('/') || value.includes('://');
+}
+
 function ReadOnlyItem({ label, value, secret = false }: { label: string; value: unknown; secret?: boolean }) {
+  const text = secret ? '******' : displayValue(value);
+  const long = !secret && isLongValue(text);
   return (
-    <div className="readonly-item">
+    <div className={long ? 'readonly-item long-value' : 'readonly-item'} title={long ? text : undefined}>
       <span>{label}</span>
-      <strong className={secret ? 'frosted-secret' : ''}>{secret ? '******' : displayValue(value)}</strong>
+      <strong className={secret ? 'frosted-secret' : ''}>{text}</strong>
     </div>
   );
 }
@@ -55,13 +63,32 @@ function ReadOnlySection({ title, children }: { title: string; children: ReactNo
   return (
     <section className="readonly-section">
       <h3>{title}</h3>
-      <div className="readonly-grid">{children}</div>
+      <div className="readonly-grid config-readonly-grid">{children}</div>
     </section>
   );
 }
 
 function FieldHint({ children }: { children: ReactNode }) {
   return <small className="field-hint">{children}</small>;
+}
+
+function runtimeConfigChanged(before: ConfigDTO | null, after: ConfigDTO) {
+  if (!before) return false;
+  return JSON.stringify({
+    mode: before.mode,
+    node_id: before.node.id,
+    mysql: before.mysql,
+    rabbitmq: before.rabbitmq,
+    cdc: before.cdc,
+    sync: before.sync,
+  }) !== JSON.stringify({
+    mode: after.mode,
+    node_id: after.node.id,
+    mysql: after.mysql,
+    rabbitmq: after.rabbitmq,
+    cdc: after.cdc,
+    sync: after.sync,
+  });
 }
 
 function ConfigReadOnly({ config, t }: { config: ConfigDTO; t: (key: string) => string }) {
@@ -126,13 +153,16 @@ export function ConfigPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [result, setResult] = useState<TestResult | null>(null);
+  const [savedConfig, setSavedConfig] = useState<ConfigDTO | null>(null);
 
   useEffect(() => {
     async function load() {
       setLoading(true);
       setError('');
       try {
-        setConfig(await getConfig());
+        const loaded = await getConfig();
+        setConfig(loaded);
+        setSavedConfig(loaded);
       } catch (err) {
         setError(err instanceof Error ? err.message : t('configError'));
       } finally {
@@ -175,9 +205,12 @@ export function ConfigPage() {
     setError('');
     if (!(await ensureUnlocked())) return;
     try {
-      setConfig(await saveConfig(config));
+      const saved = await saveConfig(config);
+      const needsRestart = runtimeConfigChanged(savedConfig, config);
+      setConfig(saved);
+      setSavedConfig(saved);
       await refreshAuth();
-      setResult({ ok: true, status: t('saved'), message: t('configSaved') });
+      setResult({ ok: true, status: t('saved'), message: needsRestart ? t('configSavedRestartRequired') : t('configSaved') });
     } catch (err) {
       setError(err instanceof Error ? err.message : t('configError'));
     }
@@ -190,6 +223,29 @@ export function ConfigPage() {
       setResult(kind === 'mysql' ? await testMySQL(config.mysql) : await testRabbitMQ(config.rabbitmq));
     } catch (err) {
       setError(err instanceof Error ? err.message : `${t('configError')}: ${kind}`);
+    }
+  }
+
+  async function initializeRabbitMQQueues() {
+    setResult(null);
+    setError('');
+    if (!(await ensureUnlocked())) return;
+    try {
+      const saved = await saveConfig(config);
+      setConfig(saved);
+      setSavedConfig(saved);
+      const response = await applyManagedInstall();
+      const failed = response.operations.some((operation) => operation.status === 'failed');
+      const message = response.operations
+        .map((operation) => `${operation.component}:${operation.action}:${operation.status}${operation.message ? ` ${operation.message}` : ''}`)
+        .join('; ');
+      setResult({
+        ok: !failed,
+        status: failed ? t('managedInstallFailed') : t('rabbitmqQueuesInitialized'),
+        message: message || t('noDetails'),
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('configError'));
     }
   }
 
@@ -504,15 +560,6 @@ export function ConfigPage() {
 
       {locked ? (
         <>
-          <div className="readonly-banner">
-            <div>
-              <strong>{t('readOnlyLockedTitle')}</strong>
-              <span>{t('readOnlyLockedDetail')}</span>
-            </div>
-            <button className="button-primary compact" type="button" onClick={() => void ensureUnlocked()}>
-              {t('unlock')}
-            </button>
-          </div>
           <ConfigReadOnly config={config} t={t} />
         </>
       ) : (
@@ -526,6 +573,9 @@ export function ConfigPage() {
             </button>
             <button className="button-tool" type="button" onClick={() => void runTest('rabbitmq')}>
               {t('testRabbitmq')}
+            </button>
+            <button className="button-tool" type="button" onClick={() => void initializeRabbitMQQueues()}>
+              {t('initRabbitmqQueues')}
             </button>
           </div>
 

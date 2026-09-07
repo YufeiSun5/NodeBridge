@@ -23,6 +23,12 @@ func TestLoadEdgeExample(t *testing.T) {
 	if cfg.RabbitMQ.Mode != "managed" || !cfg.RabbitMQ.Install || cfg.RabbitMQ.VHost != "/nodebridge-edge" {
 		t.Fatalf("expected managed NodeBridge RabbitMQ, got %+v", cfg.RabbitMQ)
 	}
+	if !strings.Contains(cfg.RabbitMQ.LocalURL, "1234@127.0.0.1:5672/%2Fnodebridge-edge") {
+		t.Fatalf("edge local RabbitMQ URL must match managed bootstrap credentials and encoded vhost, got %q", cfg.RabbitMQ.LocalURL)
+	}
+	if !strings.Contains(cfg.RabbitMQ.ServerURL, "1234@192.168.1.10:5672/%2Fnodebridge-server") {
+		t.Fatalf("edge server RabbitMQ URL must use managed credentials and encoded vhost, got %q", cfg.RabbitMQ.ServerURL)
+	}
 	if cfg.CDC.Mode != "managed" || !cfg.CDC.Install || cfg.CDC.ServiceName != "NodeBridgeCanal" {
 		t.Fatalf("expected managed NodeBridge Canal, got %+v", cfg.CDC)
 	}
@@ -41,6 +47,9 @@ func TestLoadServerExample(t *testing.T) {
 	}
 	if cfg.RabbitMQ.Mode != "managed" || !cfg.RabbitMQ.Install || cfg.RabbitMQ.VHost != "/nodebridge-server" {
 		t.Fatalf("expected managed NodeBridge RabbitMQ, got %+v", cfg.RabbitMQ)
+	}
+	if !strings.Contains(cfg.RabbitMQ.ServerURL, "1234@127.0.0.1:5672/%2Fnodebridge-server") {
+		t.Fatalf("server RabbitMQ URL must match managed bootstrap credentials and encoded vhost, got %q", cfg.RabbitMQ.ServerURL)
 	}
 	if cfg.CDC.Mode != "managed" || !cfg.CDC.Install || cfg.CDC.ServiceName != "NodeBridgeCanal" {
 		t.Fatalf("expected managed NodeBridge Canal, got %+v", cfg.CDC)

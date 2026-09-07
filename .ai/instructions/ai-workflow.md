@@ -18,6 +18,7 @@ applyTo: "**/*"
 ## 开始前
 
 - 先读 `AGENTS.md` 和 `MEMORY.md`。
+- 涉及前端、后端、测试、审阅或跨 AI 协作时，读取根级 `AI_BOARD.md`；旧 `.ai/docs/ai-collaboration-log.md` 只保留迁移提示。
 - 按任务类型读取 `.ai/instructions/` 中对应规范。
 - 遇到文档与代码冲突时，以代码和构建配置为准，并在文档中标注 `<!-- 待确认 -->`。
 
@@ -40,5 +41,6 @@ applyTo: "**/*"
 
 ## 归档规则
 
+- 根级 `AI_BOARD.md` 只保留活跃看板、交接和必要流水；闭合历史在影响阅读时归档到 `.ai/docs/archive/` 或阶段总结。
 - 失效 prompt、skill、doc 移入 `.ai/docs/archive/`。
 - 不确定内容必须显式写 `<!-- 待确认 -->`，不要伪装成确定事实。

@@ -117,7 +117,7 @@ export function FailuresPage() {
         <button className="button-secondary" type="button" onClick={() => void load()}>
           {t('refresh')}
         </button>
-        <button className="button-danger" type="button" onClick={() => void retryBatch()} disabled={configMissing}>
+        <button className="button-danger" type="button" onClick={() => void retryBatch()} disabled={configMissing || items.length === 0}>
           {t('retryBatch')}
         </button>
         <input
@@ -132,10 +132,26 @@ export function FailuresPage() {
       </div>
 
       {!loading && items.length === 0 ? (
-        <EmptyState
-          title={configMissing ? t('configMissing') : t('noFailedEvents')}
-          detail={configMissing ? t('failuresConfigMissing') : t('retryQueueEmpty')}
-        />
+        <section className="operational-empty">
+          <EmptyState
+            title={configMissing ? t('configMissing') : t('noFailedEvents')}
+            detail={configMissing ? t('failuresConfigMissing') : t('retryQueueEmpty')}
+          />
+          <div className="operational-empty-grid">
+            <div className="readonly-item">
+              <span>{t('status')}</span>
+              <strong>{configMissing ? t('notConfigured') : t('noFailedEvents')}</strong>
+            </div>
+            <div className="readonly-item">
+              <span>{t('retryBatch')}</span>
+              <strong>{items.length}</strong>
+            </div>
+            <div className="readonly-item">
+              <span>{t('deadLettersPreview')}</span>
+              <strong>{configMissing ? t('notConfigured') : t('previewDeadLetters')}</strong>
+            </div>
+          </div>
+        </section>
       ) : null}
 
       {items.length > 0 ? (

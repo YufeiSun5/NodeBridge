@@ -83,6 +83,8 @@ export namespace appconfig {
 	export class SyncConfig {
 	    upload_batch_size?: number;
 	    dispatch_batch_size?: number;
+	    apply_lanes?: number;
+	    enable_crud_compact?: boolean;
 	    flush_interval_millis?: number;
 	    retry_interval_seconds: number;
 	    heartbeat_interval_seconds?: number;
@@ -96,6 +98,8 @@ export namespace appconfig {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.upload_batch_size = source["upload_batch_size"];
 	        this.dispatch_batch_size = source["dispatch_batch_size"];
+	        this.apply_lanes = source["apply_lanes"];
+	        this.enable_crud_compact = source["enable_crud_compact"];
 	        this.flush_interval_millis = source["flush_interval_millis"];
 	        this.retry_interval_seconds = source["retry_interval_seconds"];
 	        this.heartbeat_interval_seconds = source["heartbeat_interval_seconds"];
@@ -245,6 +249,7 @@ export namespace rules {
 	    direction: string;
 	    dispatch_target?: string;
 	    dispatch_node_ids?: string[];
+	    sync_mode?: string;
 	    conflict_policy: string;
 	    enable: boolean;
 	    primary_keys: string[];
@@ -268,6 +273,7 @@ export namespace rules {
 	        this.direction = source["direction"];
 	        this.dispatch_target = source["dispatch_target"];
 	        this.dispatch_node_ids = source["dispatch_node_ids"];
+	        this.sync_mode = source["sync_mode"];
 	        this.conflict_policy = source["conflict_policy"];
 	        this.enable = source["enable"];
 	        this.primary_keys = source["primary_keys"];
@@ -667,6 +673,9 @@ export namespace uiapi {
 	    enabled: boolean;
 	    status: string;
 	    message?: string;
+	    transport?: string;
+	    ephemeral: boolean;
+	    restart_resets: boolean;
 
 	    static createFrom(source: any = {}) {
 	        return new MCPServerStatus(source);
@@ -677,6 +686,9 @@ export namespace uiapi {
 	        this.enabled = source["enabled"];
 	        this.status = source["status"];
 	        this.message = source["message"];
+	        this.transport = source["transport"];
+	        this.ephemeral = source["ephemeral"];
+	        this.restart_resets = source["restart_resets"];
 	    }
 	}
 	export class ManagedInstallOperationDTO {
@@ -725,6 +737,62 @@ export namespace uiapi {
 	        this.mode = source["mode"];
 	        this.manifest_path = source["manifest_path"];
 	        this.operations = this.convertValues(source["operations"], ManagedInstallOperationDTO);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class NodeOptionDTO {
+	    node_id: string;
+	    node_name?: string;
+	    node_type?: string;
+	    status: string;
+	    location?: string;
+	    last_heartbeat_at?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new NodeOptionDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.node_id = source["node_id"];
+	        this.node_name = source["node_name"];
+	        this.node_type = source["node_type"];
+	        this.status = source["status"];
+	        this.location = source["location"];
+	        this.last_heartbeat_at = source["last_heartbeat_at"];
+	    }
+	}
+	export class NodeOptionsResponse {
+	    items: NodeOptionDTO[];
+	    status: string;
+	    message?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new NodeOptionsResponse(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], NodeOptionDTO);
+	        this.status = source["status"];
+	        this.message = source["message"];
 	    }
 
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

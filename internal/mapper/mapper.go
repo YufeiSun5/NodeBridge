@@ -17,6 +17,7 @@ type MappedEvent struct {
 	SourceTable      string
 	TargetDatabase   string
 	TargetTable      string
+	SyncMode         string
 	TargetPrimaryKey map[string]any
 	TargetBefore     map[string]any
 	TargetAfter      map[string]any
@@ -66,6 +67,7 @@ func MapEvent(evt event.SyncEvent, rule rules.SyncRule) (MappedEvent, error) {
 		SourceTable:      evt.TableName,
 		TargetDatabase:   targetDatabase,
 		TargetTable:      targetTable,
+		SyncMode:         defaultString(rule.SyncMode, rules.SyncModeOrderedCRUD),
 		TargetPrimaryKey: primaryKey,
 		TargetBefore:     before,
 		TargetAfter:      after,

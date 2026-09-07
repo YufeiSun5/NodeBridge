@@ -57,6 +57,7 @@ type Executor struct {
 	MkdirAll       func(string, os.FileMode) error
 	RemoveAll      func(string) error
 	SaveManifest   func(string, manifest.Manifest) error
+	EnsureRabbitMQ func(context.Context, appconfig.Config) error
 	InitRabbitMQ   func(context.Context, appconfig.Config) error
 	LoadManifest   func(string) (manifest.Manifest, error)
 	WriteCanalFile func(appconfig.Config, manifest.Manifest) (string, error)
@@ -69,6 +70,7 @@ func New() Executor {
 		MkdirAll:       os.MkdirAll,
 		RemoveAll:      os.RemoveAll,
 		SaveManifest:   manifest.Save,
+		EnsureRabbitMQ: rabbitplan.NewAdmin().EnsureForNode,
 		InitRabbitMQ:   initRabbitMQ,
 		LoadManifest:   manifest.Load,
 		WriteCanalFile: writeCanalDestinationConfig,
@@ -98,6 +100,10 @@ func (e Executor) Apply(ctx context.Context, req Request) (Result, error) {
 			result.Operations[i].Target = target
 		case "rabbitmq-topology:initialize":
 			if err := e.initRabbitMQ(ctx, req.Config); err != nil {
+				return fail(result, i, err), err
+			}
+		case "rabbitmq-access:ensure":
+			if err := e.ensureRabbitMQ(ctx, req.Config); err != nil {
 				return fail(result, i, err), err
 			}
 		default:
@@ -154,6 +160,9 @@ func plannedOperations(req Request, m manifest.Manifest) []Operation {
 	for _, step := range rabbitplan.BuildPlan(rabbitplan.CurrentState{}, rabbitDesired).Steps {
 		ops = append(ops, Operation{Component: "rabbitmq-" + step.Component, Action: step.Action, Target: step.Target, Status: StatusPlanned})
 	}
+	if rabbitDesired.Mode == manifest.ModeManaged && len(rabbitDesired.Users) > 0 && rabbitURL(req.Config) != "" {
+		ops = append(ops, Operation{Component: "rabbitmq-access", Action: "ensure", Target: "node-derived-users", Status: StatusPlanned})
+	}
 	if rabbitDesired.Mode == manifest.ModeManaged && rabbitURL(req.Config) != "" {
 		ops = append(ops, Operation{Component: "rabbitmq-topology", Action: "initialize", Target: "configured-amqp-url", Status: StatusPlanned})
 	}
@@ -190,6 +199,7 @@ func buildManifest(req Request, now time.Time) manifest.Manifest {
 	if destination := canalDestination(req.Config); destination != "" {
 		m.ManagedComponents.Canal.Destinations = []string{destination}
 	}
+	m.ManagedComponents.RabbitMQ.Users = managedRabbitMQUsernames(req.Config)
 	return m
 }
 
@@ -198,7 +208,31 @@ func rabbitDesiredState(cfg appconfig.Config, m manifest.Manifest) rabbitplan.De
 	desired.Mode = m.ManagedComponents.RabbitMQ.Mode
 	desired.ServiceName = m.ManagedComponents.RabbitMQ.ServiceName
 	desired.VHosts = append([]string(nil), m.ManagedComponents.RabbitMQ.VHosts...)
+	desired.Users = managedRabbitMQUsers(cfg)
 	return desired
+}
+
+func managedRabbitMQUsers(cfg appconfig.Config) []rabbitplan.UserSpec {
+	if !appconfig.IsManagedRabbitMQ(cfg) {
+		return nil
+	}
+	identity, err := appconfig.ManagedRabbitMQIdentityFor(cfg.Mode, cfg.Node.ID)
+	if err != nil {
+		return nil
+	}
+	if cfg.Mode == appconfig.ModeServer {
+		return []rabbitplan.UserSpec{{Username: identity.ServerUser, Password: appconfig.ManagedRabbitMQPassword, VHost: identity.ServerVHost, ConfigureRE: ".*", WriteRE: ".*", ReadRE: ".*"}}
+	}
+	return []rabbitplan.UserSpec{{Username: identity.LocalUser, Password: appconfig.ManagedRabbitMQPassword, VHost: identity.LocalVHost, ConfigureRE: ".*", WriteRE: ".*", ReadRE: ".*"}}
+}
+
+func managedRabbitMQUsernames(cfg appconfig.Config) []string {
+	users := managedRabbitMQUsers(cfg)
+	result := make([]string, 0, len(users))
+	for _, user := range users {
+		result = append(result, user.Username)
+	}
+	return result
 }
 
 func canalDesiredState(cfg appconfig.Config, m manifest.Manifest) canalplan.DesiredState {
@@ -331,6 +365,13 @@ func (e Executor) initRabbitMQ(ctx context.Context, cfg appconfig.Config) error 
 		return e.InitRabbitMQ(ctx, cfg)
 	}
 	return initRabbitMQ(ctx, cfg)
+}
+
+func (e Executor) ensureRabbitMQ(ctx context.Context, cfg appconfig.Config) error {
+	if e.EnsureRabbitMQ != nil {
+		return e.EnsureRabbitMQ(ctx, cfg)
+	}
+	return rabbitplan.NewAdmin().EnsureForNode(ctx, cfg)
 }
 
 func (e Executor) writeCanalFile(cfg appconfig.Config, m manifest.Manifest) (string, error) {

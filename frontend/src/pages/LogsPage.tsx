@@ -115,10 +115,26 @@ export function LogsPage() {
       ) : null}
 
       {!loading && rows.length === 0 ? (
-        <EmptyState
-          title={configMissing ? t('configMissing') : t('noLogs')}
-          detail={configMissing ? t('logsConfigMissing') : t('emptyLogBuffer')}
-        />
+        <section className="operational-empty logs-empty">
+          <EmptyState
+            title={configMissing ? t('configMissing') : t('noLogs')}
+            detail={configMissing ? t('logsConfigMissing') : t('emptyLogBuffer')}
+          />
+          <div className="operational-empty-grid">
+            <div className="readonly-item">
+              <span>{t('level')}</span>
+              <strong>{level || t('allLevels')}</strong>
+            </div>
+            <div className="readonly-item">
+              <span>{t('module')}</span>
+              <strong>{module || t('allModules')}</strong>
+            </div>
+            <div className="readonly-item">
+              <span>{t('diagnostic')}</span>
+              <strong>{t('exportDiagnostic')}</strong>
+            </div>
+          </div>
+        </section>
       ) : null}
 
       {rows.length > 0 ? (

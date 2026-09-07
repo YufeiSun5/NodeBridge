@@ -163,7 +163,7 @@ func (t *nativeTray) run() {
 	defer close(t.done)
 
 	instance, _, _ := procGetModuleHandle.Call(0)
-	className, _ := windows.UTF16PtrFromString("NodeBridgeDataSyncTrayWindow")
+	className, _ := windows.UTF16PtrFromString("NodeBridgeTrayWindow")
 	taskbarCreated, _ := windows.UTF16PtrFromString("TaskbarCreated")
 	taskbarMessage, _, _ := procRegisterMessage.Call(uintptr(unsafe.Pointer(taskbarCreated)))
 	t.taskbar = uint32(taskbarMessage)
@@ -297,20 +297,15 @@ func (t *nativeTray) iconData() notifyIconData {
 }
 
 func createTrayIcon(instance windows.Handle) (windows.Handle, error) {
-	const size = 32
+	const size = trayIconSize
 	andMask := make([]byte, size*size/8)
-	xorMask := make([]byte, size*size*4)
+	xorMask := make([]byte, len(trayIconBGRA))
+	copy(xorMask, trayIconBGRA)
 	for y := 0; y < size; y++ {
 		for x := 0; x < size; x++ {
 			offset := (y*size + x) * 4
-			xorMask[offset+0] = 0x22
-			xorMask[offset+1] = 0xd3
-			xorMask[offset+2] = 0xee
-			xorMask[offset+3] = 0xff
-			if x < 4 || x >= size-4 || y < 4 || y >= size-4 {
-				xorMask[offset+0] = 0x08
-				xorMask[offset+1] = 0x1a
-				xorMask[offset+2] = 0x1f
+			if xorMask[offset+3] == 0 {
+				andMask[y*size/8+x/8] |= 0x80 >> (x % 8)
 			}
 		}
 	}

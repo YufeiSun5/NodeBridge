@@ -58,14 +58,14 @@ func New(installID, version string, now time.Time) Manifest {
 				Mode:        ModeManaged,
 				ServiceName: "NodeBridgeRabbitMQ",
 				VHosts:      []string{"/nodebridge-edge", "/nodebridge-server"},
-				Users:       []string{"nb-server-sync", "nb-edge-001", "nb-edge-001-local"},
+				Users:       []string{},
 				TopologyTag: "nodebridge",
 			},
 			Canal: CanalComponent{
 				Mode:         ModeManaged,
 				ServiceName:  "NodeBridgeCanal",
 				ConfigDir:    `%ProgramData%\NodeBridge\canal`,
-				Destinations: []string{"nodebridge-edge-001", "nodebridge-server-001"},
+				Destinations: []string{},
 			},
 		},
 	}

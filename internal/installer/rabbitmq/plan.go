@@ -112,12 +112,8 @@ func DefaultDesiredState() DesiredState {
 		RabbitMQInstallerPath: "deploy/windows/rabbitmq-server.exe",
 		ServiceName:           "NodeBridgeRabbitMQ",
 		VHosts:                []string{"/nodebridge-edge", "/nodebridge-server"},
-		Users: []UserSpec{
-			{Username: "nb-server-sync", VHost: "/nodebridge-server", ConfigureRE: ".*", WriteRE: ".*", ReadRE: ".*"},
-			{Username: "nb-edge-001", VHost: "/nodebridge-server", ConfigureRE: "^$", WriteRE: "server\\.ingress\\..*", ReadRE: "edge-001\\.downlink\\..*"},
-			{Username: "nb-edge-001-local", VHost: "/nodebridge-edge", ConfigureRE: ".*", WriteRE: ".*", ReadRE: ".*"},
-		},
-		PreserveData:      true,
-		ManagedResourceID: "nodebridge",
+		Users:                 []UserSpec{},
+		PreserveData:          true,
+		ManagedResourceID:     "nodebridge",
 	}
 }

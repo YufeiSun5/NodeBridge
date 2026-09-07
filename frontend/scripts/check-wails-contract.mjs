@@ -21,6 +21,7 @@ assert.match(service, /GetMCPServerStatus/, 'service must expose GetMCPServerSta
 assert.match(service, /SetMCPServerEnabled/, 'service must expose SetMCPServerEnabled');
 assert.match(service, /GetManagedInstallPlan/, 'service must expose GetManagedInstallPlan');
 assert.match(service, /ApplyManagedInstall/, 'service must expose ApplyManagedInstall');
+assert.match(service, /GetNodeOptions/, 'service must expose GetNodeOptions');
 assert.match(settingsPage, /admin_password/, 'Settings page must expose admin_password input');
 assert.doesNotMatch(configPage, /admin_password/, 'Config page must not mix app security settings into sync config');
 

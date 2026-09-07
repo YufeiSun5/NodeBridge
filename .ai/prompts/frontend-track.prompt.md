@@ -9,10 +9,10 @@ tools: [read, edit, search, run]
 Read first:
 
 - [AGENTS.md](../../AGENTS.md)
+- [AI_BOARD.md](../../AI_BOARD.md) Active Board
 - [.ai/docs/frontend-requirements.md](../docs/frontend-requirements.md)
 - [.ai/docs/frontend-backend-contract.md](../docs/frontend-backend-contract.md)
 - [.ai/docs/ui-design-spec.md](../docs/ui-design-spec.md)
-- [.ai/docs/ai-collaboration-log.md](../docs/ai-collaboration-log.md) Active Board
 
 Ownership:
 
@@ -22,7 +22,7 @@ Ownership:
 
 Rules:
 
-- Before work, scan `ai-collaboration-log.md` Active Board.
+- Before work, scan root-level `AI_BOARD.md` Active Board.
 - Use Wails bindings only.
 - No `fetch`, no `axios`.
 - Keep dark terminal style.
