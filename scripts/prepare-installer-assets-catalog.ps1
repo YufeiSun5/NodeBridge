@@ -1,5 +1,6 @@
 param(
     [string]$BundleRoot = "",
+    [string]$BundleVersion = "0.46.12",
     [string]$ErlangFile = "otp_win64.exe",
     [string]$JavaFile = "OpenJDK-jre.zip",
     [string]$RabbitMQFile = "rabbitmq-server.exe",
@@ -76,7 +77,7 @@ if ($winsw) {
 }
 
 $catalog = [ordered]@{
-    version = "0.46.3"
+    version = $BundleVersion
     assets = $assets
 }
 

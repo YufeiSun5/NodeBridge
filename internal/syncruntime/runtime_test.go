@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/YufeiSun5/NodeBridge/internal/apply"
+	"github.com/YufeiSun5/NodeBridge/internal/dbgovernance"
 	"github.com/YufeiSun5/NodeBridge/internal/event"
 	"github.com/YufeiSun5/NodeBridge/internal/mapper"
 	"github.com/YufeiSun5/NodeBridge/internal/rabbitmq"
@@ -233,6 +234,74 @@ func TestServerIngressRuntimeAppliesDispatchesAndAcks(t *testing.T) {
 	}
 }
 
+func TestServerIngressRuntimeAppliesAndDispatchesMappedAddColumn(t *testing.T) {
+	evt := sampleSchemaEvent(event.TypeAddColumn)
+	msg := &fakeMessage{body: mustJSON(t, evt)}
+	worker := &fakeWorker{}
+	dispatcher := &fakeDispatcher{}
+	set := sampleRules()
+	set.Rules[0].SourceNodeIDs = []string{"edge-a"}
+	set.Rules[0].DispatchTarget = rules.DispatchActiveEdges
+	set.Rules[0].SchemaSync.AddColumns = true
+	set.Rules[0].IncludeColumns = append(set.Rules[0].IncludeColumns, "source_note")
+	set.Rules[0].ColumnMappings = append(set.Rules[0].ColumnMappings, rules.ColumnMapping{SourceColumn: "source_note", TargetColumn: "target_note"})
+
+	result, err := (ServerIngressRuntime{
+		Source: &fakeSource{msg: msg, ok: true}, Rules: set, Worker: worker,
+		Dispatcher: dispatcher, EdgeNodes: []string{"edge-a", "edge-b"},
+	}).RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.Action != "applied" || result.DispatchCount != 1 || len(worker.events) != 1 {
+		t.Fatalf("unexpected result=%+v applied=%d", result, len(worker.events))
+	}
+	mapped := worker.events[0]
+	if mapped.Event.SchemaChange == nil || mapped.Event.SchemaChange.Column.Name != "target_note" || mapped.TargetTable != "device_settings" {
+		t.Fatalf("unexpected mapped schema event %+v", mapped)
+	}
+	if len(dispatcher.targets) != 1 || dispatcher.targets[0] != "edge-b" || !msg.acked || msg.nacked {
+		t.Fatalf("unexpected dispatch=%+v ack=%t nack=%t", dispatcher.targets, msg.acked, msg.nacked)
+	}
+}
+
+func TestServerIngressRuntimeAcksDisabledSchemaChangeWithoutApplying(t *testing.T) {
+	msg := &fakeMessage{body: mustJSON(t, sampleSchemaEvent(event.TypeAddColumn))}
+	worker := &fakeWorker{}
+	dispatcher := &fakeDispatcher{}
+
+	result, err := (ServerIngressRuntime{
+		Source: &fakeSource{msg: msg, ok: true}, Rules: sampleRules(), Worker: worker,
+		Dispatcher: dispatcher, EdgeNodes: []string{"edge-a", "edge-b"},
+	}).RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if result.Action != "applied" || len(worker.events) != 0 || len(dispatcher.targets) != 0 || !msg.acked || msg.nacked {
+		t.Fatalf("disabled schema change was not safely suppressed: result=%+v applied=%d dispatch=%+v ack=%t nack=%t", result, len(worker.events), dispatcher.targets, msg.acked, msg.nacked)
+	}
+}
+
+func TestServerIngressRuntimeSuppressesUnscopedDropColumn(t *testing.T) {
+	msg := &fakeMessage{body: mustJSON(t, sampleSchemaEvent(event.TypeDropColumn))}
+	worker := &fakeWorker{}
+	dispatcher := &fakeDispatcher{}
+	set := sampleRules()
+	set.Rules[0].SchemaSync.DropColumns = true
+	set.Rules[0].DispatchTarget = rules.DispatchActiveEdges
+
+	result, err := (ServerIngressRuntime{
+		Source: &fakeSource{msg: msg, ok: true}, Rules: set, Worker: worker,
+		Dispatcher: dispatcher, EdgeNodes: []string{"edge-a", "edge-b"},
+	}).RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce returned error: %v", err)
+	}
+	if len(worker.events) != 0 || len(dispatcher.targets) != 0 || !msg.acked || msg.nacked {
+		t.Fatalf("unscoped DROP was not suppressed: result=%+v applied=%d dispatch=%+v ack=%t nack=%t", result, len(worker.events), dispatcher.targets, msg.acked, msg.nacked)
+	}
+}
+
 func TestServerIngressRuntimeUsesActiveNodeStore(t *testing.T) {
 	msg := &fakeMessage{body: mustJSON(t, sampleEvent())}
 	dispatcher := &fakeDispatcher{}
@@ -261,6 +330,7 @@ func TestServerIngressRuntimeEdgeToServerDoesNotDispatch(t *testing.T) {
 	dispatcher := &fakeDispatcher{}
 	set := sampleRules()
 	set.Rules[0].Direction = rules.DirectionEdgeToServer
+	set.Rules[0].DispatchTarget = rules.DispatchAuto
 	runtime := ServerIngressRuntime{
 		Source:     &fakeSource{msg: msg, ok: true},
 		Rules:      set,
@@ -413,6 +483,7 @@ func TestServerIngressBatchRuntimeEdgeToServerDoesNotDispatch(t *testing.T) {
 	dispatcher := &fakeDispatcher{}
 	set := sampleRules()
 	set.Rules[0].Direction = rules.DirectionEdgeToServer
+	set.Rules[0].DispatchTarget = rules.DispatchAuto
 	result, err := (ServerIngressBatchRuntime{
 		Source:        &fakeBatchSource{messages: incomingRuntime(messages)},
 		Rules:         set,
@@ -442,6 +513,7 @@ func TestServerIngressBatchRuntimeUsesOrderedBatchWorker(t *testing.T) {
 	store := &fakeEventStore{}
 	set := sampleRules()
 	set.Rules[0].Direction = rules.DirectionEdgeToServer
+	set.Rules[0].DispatchTarget = rules.DispatchAuto
 
 	result, err := (ServerIngressBatchRuntime{
 		Source:        &fakeBatchSource{messages: incomingRuntime(messages)},
@@ -635,29 +707,30 @@ func TestServerIngressRuntimeNacksOnEventStoreFailure(t *testing.T) {
 	}
 }
 
-func TestServerIngressRuntimeDisabledRuleAcksWithoutApply(t *testing.T) {
+func TestServerIngressRuntimeDisabledRuleRequeuesWithoutApply(t *testing.T) {
 	msg := &fakeMessage{body: mustJSON(t, sampleEvent())}
 	set := sampleRules()
 	set.Rules[0].Enable = false
 	worker := &fakeWorker{}
 	runtime := ServerIngressRuntime{
-		Source: &fakeSource{msg: msg, ok: true},
-		Rules:  set,
-		Worker: worker,
+		Source:   &fakeSource{msg: msg, ok: true},
+		Rules:    set,
+		Worker:   worker,
+		Consumer: rabbitmq.Consumer{RequeueOnError: true},
 	}
 
 	result, err := runtime.RunOnce(context.Background())
-	if err != nil {
-		t.Fatalf("RunOnce returned error: %v", err)
+	if err == nil {
+		t.Fatal("disabled rule was silently accepted")
 	}
-	if result.Action != "applied" {
+	if result.Action != "failed" {
 		t.Fatalf("unexpected result %+v", result)
 	}
 	if len(worker.events) != 0 {
 		t.Fatalf("disabled rule should not apply, got %d", len(worker.events))
 	}
-	if !msg.acked {
-		t.Fatal("disabled rule should still ack the message")
+	if msg.acked || !msg.nacked || !msg.requeue {
+		t.Fatal("disabled rule must retain the message")
 	}
 }
 
@@ -821,29 +894,30 @@ func TestEdgeDownlinkRuntimeNacksOnApplyFailure(t *testing.T) {
 	}
 }
 
-func TestEdgeDownlinkRuntimeDisabledRuleAcksWithoutApply(t *testing.T) {
+func TestEdgeDownlinkRuntimeDisabledRuleRequeuesWithoutApply(t *testing.T) {
 	msg := &fakeMessage{body: mustJSON(t, sampleEvent())}
 	set := sampleRules()
 	set.Rules[0].Enable = false
 	worker := &fakeWorker{}
 	runtime := EdgeDownlinkRuntime{
-		Source: &fakeSource{msg: msg, ok: true},
-		Rules:  set,
-		Worker: worker,
+		Source:   &fakeSource{msg: msg, ok: true},
+		Rules:    set,
+		Worker:   worker,
+		Consumer: rabbitmq.Consumer{RequeueOnError: true},
 	}
 
 	result, err := runtime.RunOnce(context.Background())
-	if err != nil {
-		t.Fatalf("RunOnce returned error: %v", err)
+	if err == nil {
+		t.Fatal("disabled rule was silently accepted")
 	}
-	if result.Action != "applied" {
+	if result.Action != "failed" {
 		t.Fatalf("unexpected result %+v", result)
 	}
 	if len(worker.events) != 0 {
 		t.Fatalf("disabled rule should not apply, got %d", len(worker.events))
 	}
-	if !msg.acked {
-		t.Fatal("disabled rule should still ack the message")
+	if msg.acked || !msg.nacked || !msg.requeue {
+		t.Fatal("disabled rule must retain the message")
 	}
 }
 
@@ -1134,6 +1208,22 @@ func sampleEventWithID(eventID string, id int) event.SyncEvent {
 	}
 }
 
+func sampleSchemaEvent(operation string) event.SyncEvent {
+	evt := sampleEvent()
+	evt.EventID = "evt-schema-001"
+	evt.EventType = operation
+	evt.PrimaryKey, evt.Before, evt.After = nil, nil, nil
+	evt.SchemaChange = &dbgovernance.SchemaChange{
+		Operation: operation,
+		Column: dbgovernance.ColumnDefinition{
+			Name:     "source_note",
+			Type:     "varchar(64)",
+			Nullable: true,
+		},
+	}
+	return evt
+}
+
 func mappedRuntimeEvent(eventID string, id int) mapper.MappedEvent {
 	evt := sampleEventWithID(eventID, id)
 	return mapper.MappedEvent{
@@ -1189,8 +1279,9 @@ func sampleRules() *rules.RuleSet {
 			TableName:          "device_config",
 			TargetDatabaseName: "scada_center",
 			TargetTableName:    "device_settings",
-			Direction:          rules.DirectionBidirectional,
-			ConflictPolicy:     rules.ConflictLastWriteWin,
+			Direction:          rules.DirectionEdgeToServer,
+			DispatchTarget:     rules.DispatchActiveEdges,
+			ConflictPolicy:     rules.ConflictNone,
 			Enable:             true,
 			PrimaryKeys:        []string{"id"},
 			TargetPrimaryKeys:  []string{"setting_id"},

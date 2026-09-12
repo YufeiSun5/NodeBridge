@@ -5,11 +5,13 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/YufeiSun5/NodeBridge/internal/apply"
+	"github.com/YufeiSun5/NodeBridge/internal/dbgovernance"
 	"github.com/YufeiSun5/NodeBridge/internal/event"
 	"github.com/YufeiSun5/NodeBridge/internal/mapper"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
@@ -229,7 +231,7 @@ func TestSQLWorkerApplyBatchUsesAppendOnlyBulkInsert(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT event_id FROM sync_apply_log WHERE event_id IN (?, ?)")).
 		WithArgs("evt-001", "evt-002").
 		WillReturnRows(sqlmock.NewRows([]string{"event_id"}))
-	mock.ExpectExec("INSERT IGNORE INTO `scada_center`.`alarm_history`").
+	mock.ExpectExec("INSERT INTO `scada_center`.`alarm_history`").
 		WillReturnResult(sqlmock.NewResult(1, 2))
 	mock.ExpectExec("INSERT INTO sync_apply_log").
 		WillReturnResult(sqlmock.NewResult(1, 2))
@@ -241,6 +243,37 @@ func TestSQLWorkerApplyBatchUsesAppendOnlyBulkInsert(t *testing.T) {
 	}
 	if len(result.Results) != 2 || result.Results[0].EventID != "evt-001" || result.Results[1].EventID != "evt-002" {
 		t.Fatalf("unexpected batch result %+v", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestSQLWorkerApplyBatchDoesNotIgnoreAppendOnlyDataErrors(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	event := appendOnlyMappedEvent("evt-too-long", int64(1))
+	worker := apply.NewSQLWorker(db)
+	worker.Clock = fixedClock
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT event_id FROM sync_apply_log WHERE event_id IN (?)")).
+		WithArgs("evt-too-long").
+		WillReturnRows(sqlmock.NewRows([]string{"event_id"}))
+	mock.ExpectExec("INSERT INTO `scada_center`.`alarm_history`").
+		WillReturnError(fmt.Errorf("Error 1406: Data too long for column 'payload'"))
+	mock.ExpectRollback()
+
+	result, err := worker.ApplyBatch(context.Background(), []mapper.MappedEvent{event})
+	if err == nil {
+		t.Fatal("expected append_only data error")
+	}
+	if len(result.Results) != 0 {
+		t.Fatalf("data error must not be reported as applied: %+v", result.Results)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
@@ -266,11 +299,11 @@ func TestSQLWorkerApplyBatchGroupsInterleavedAppendOnlyTables(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT event_id FROM sync_apply_log WHERE event_id IN (?, ?, ?)")).
 		WithArgs("evt-001", "evt-002", "evt-003").
 		WillReturnRows(sqlmock.NewRows([]string{"event_id"}))
-	mock.ExpectExec("INSERT IGNORE INTO `scada_center`.`alarm_history`").
+	mock.ExpectExec("INSERT INTO `scada_center`.`alarm_history`").
 		WillReturnResult(sqlmock.NewResult(1, 2))
 	mock.ExpectExec("INSERT INTO sync_apply_log").
 		WillReturnResult(sqlmock.NewResult(1, 2))
-	mock.ExpectExec("INSERT IGNORE INTO `scada_center`.`collect_data_02`").
+	mock.ExpectExec("INSERT INTO `scada_center`.`collect_data_02`").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("INSERT INTO sync_apply_log").
 		WillReturnResult(sqlmock.NewResult(1, 1))
@@ -310,11 +343,11 @@ func TestSQLWorkerApplyBatchGroupsAppendOnlySegmentBeforeCRUD(t *testing.T) {
 		WithArgs("evt-001", "evt-002", "evt-003", "evt-004").
 		WillReturnRows(sqlmock.NewRows([]string{"event_id"}))
 	mock.ExpectExec("SAVEPOINT nb_apply_0").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec("INSERT IGNORE INTO `scada_center`.`alarm_history`").
+	mock.ExpectExec("INSERT INTO `scada_center`.`alarm_history`").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("INSERT INTO sync_apply_log").
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec("INSERT IGNORE INTO `scada_center`.`collect_data_02`").
+	mock.ExpectExec("INSERT INTO `scada_center`.`collect_data_02`").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("INSERT INTO sync_apply_log").
 		WillReturnResult(sqlmock.NewResult(1, 1))
@@ -326,7 +359,7 @@ func TestSQLWorkerApplyBatchGroupsAppendOnlySegmentBeforeCRUD(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("RELEASE SAVEPOINT nb_apply_2").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("SAVEPOINT nb_apply_3").WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec("INSERT IGNORE INTO `scada_center`.`alarm_history`").
+	mock.ExpectExec("INSERT INTO `scada_center`.`alarm_history`").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectExec("INSERT INTO sync_apply_log").
 		WillReturnResult(sqlmock.NewResult(1, 1))
@@ -417,9 +450,9 @@ func TestSQLWorkerApplyBatchChunksLargeAppendOnlyBulkInsert(t *testing.T) {
 	mock.ExpectQuery("SELECT event_id FROM sync_apply_log WHERE event_id IN").
 		WithArgs(eventIDs...).
 		WillReturnRows(sqlmock.NewRows([]string{"event_id"}))
-	mock.ExpectExec("INSERT IGNORE INTO `scada_center`.`alarm_history`").
+	mock.ExpectExec("INSERT INTO `scada_center`.`alarm_history`").
 		WillReturnResult(sqlmock.NewResult(1, 20000))
-	mock.ExpectExec("INSERT IGNORE INTO `scada_center`.`alarm_history`").
+	mock.ExpectExec("INSERT INTO `scada_center`.`alarm_history`").
 		WillReturnResult(sqlmock.NewResult(1, 5001))
 	for i := 0; i < 5; i++ {
 		mock.ExpectExec("INSERT INTO sync_apply_log").
@@ -461,6 +494,78 @@ func TestSQLWorkerAppendOnlyRejectsUpdate(t *testing.T) {
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
 	}
+}
+
+func TestSQLWorkerApplySchemaAddColumnAndLog(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	mapped := schemaMappedEvent(event.TypeAddColumn, dbgovernance.ColumnDefinition{Name: "governed_note", Type: "varchar(64)", Nullable: true})
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(1) FROM sync_apply_log WHERE event_id = ?")).WithArgs("evt-schema-001").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	expectSchemaColumnState(mock, "governed_note", false)
+	expectSchemaColumnState(mock, "governed_note", false)
+	mock.ExpectExec(regexp.QuoteMeta("ALTER TABLE `scada_center`.`device_settings` ADD COLUMN `governed_note` VARCHAR(64) NULL")).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT INTO sync_apply_log").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	worker := apply.NewSQLWorker(db)
+	worker.Clock = fixedClock
+	result, err := worker.Apply(context.Background(), mapped)
+	if err != nil {
+		t.Fatalf("Apply returned error: %v", err)
+	}
+	if result.EventID != "evt-schema-001" || result.AlreadyApplied {
+		t.Fatalf("unexpected result %+v", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSQLWorkerSchemaApplyNeverCreatesMissingTable(t *testing.T) {
+	db, mock, _ := sqlmock.New()
+	defer db.Close()
+	mapped := schemaMappedEvent(event.TypeAddColumn, dbgovernance.ColumnDefinition{Name: "governed_note", Type: "text", Nullable: true})
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(1) FROM sync_apply_log WHERE event_id = ?")).WithArgs("evt-schema-001").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?")).
+		WithArgs("scada_center", "device_settings").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+	if _, err := apply.NewSQLWorker(db).Apply(context.Background(), mapped); err == nil || !strings.Contains(err.Error(), "table creation is disabled") {
+		t.Fatalf("expected missing table rejection, got %v", err)
+	}
+}
+
+func TestSQLWorkerSchemaApplyIsIdempotentFromApplyLog(t *testing.T) {
+	db, mock, _ := sqlmock.New()
+	defer db.Close()
+	mapped := schemaMappedEvent(event.TypeDropColumn, dbgovernance.ColumnDefinition{Name: "governed_note"})
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(1) FROM sync_apply_log WHERE event_id = ?")).WithArgs("evt-schema-001").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	result, err := apply.NewSQLWorker(db).Apply(context.Background(), mapped)
+	if err != nil || !result.AlreadyApplied {
+		t.Fatalf("unexpected result=%+v err=%v", result, err)
+	}
+}
+
+func schemaMappedEvent(eventType string, column dbgovernance.ColumnDefinition) mapper.MappedEvent {
+	change := &dbgovernance.SchemaChange{Operation: eventType, Column: column}
+	return mapper.MappedEvent{
+		Event:          event.SyncEvent{EventID: "evt-schema-001", EventType: eventType, OriginNodeID: "edge-001", SourceNodeID: "edge-001", SchemaChange: change},
+		SourceDatabase: "scada_edge", SourceTable: "device_config", TargetDatabase: "scada_center", TargetTable: "device_settings",
+		SchemaChangeSelected: true,
+	}
+}
+
+func expectSchemaColumnState(mock sqlmock.Sqlmock, column string, exists bool) {
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?")).
+		WithArgs("scada_center", "device_settings").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	query := mock.ExpectQuery(regexp.QuoteMeta("SELECT COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?")).
+		WithArgs("scada_center", "device_settings", column)
+	rows := sqlmock.NewRows([]string{"type", "nullable", "key"})
+	if exists {
+		rows.AddRow("varchar(64)", "YES", "")
+	}
+	query.WillReturnRows(rows)
 }
 
 func mappedEvent(eventType string) mapper.MappedEvent {

@@ -47,7 +47,7 @@ function Invoke-NodeBridgeRetry {
 function Wait-RabbitMQ {
     param([string]$Container)
     for ($i = 0; $i -lt 30; $i++) {
-        docker exec $Container rabbitmq-diagnostics -q ping | Out-Null
+        docker exec $Container rabbitmq-diagnostics -q -t 5 ping 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) {
             return
         }

@@ -31,15 +31,179 @@
 
 ## Active Board
 
+2026-09-12 15:41 backend-ai版本归档：用户要求提交并推送GitHub，本次仅归档累计源码、迁移、测试脚本及文档到origin/main，不继续功能开发或发布安装包。排除output截图、缓存、安装产物及本地凭据文件变更，FB-107/FB-094保持open；不把Git提交视作功能交付，owner backend-ai。
+
+2026-09-12 01:42 backend-ai停止交接：用户设定的累计5小时上限已到，本轮不再继续开发。未出新安装包，首次对齐到增量交接及公开入口仍未完成；FB-107保持open，FB-094旧长测问题不关闭。源码/短测/全量门禁证据见阶段报告，测试资源已清理、业务现场未动。下一步等待用户新指令，owner backend-ai。
+
+2026-09-12 01:39 backend-ai收尾FB-107：新增过期计划只准已提交目标恢复、源SOURCE_READY缺边界/账本身份与UUID篡改拒绝、取消后迟到标记拒绝。真实捕获恢复7.64秒、双Agent短测51.36秒、双物理MySQL传输4.46秒、含写锁覆盖SQL核心6.61秒通过；全量test/vet/lint与核心shuffle两轮、前端build/binding及三语1366/390截图通过。测试资源已清理、业务现场未动。CGO/GCC缺失未跑race；底层Canal网络硬超时/旧事件过滤/启用握手/公开操作仍open。已更新稳定架构约束与阶段报告；无新包、不部署、不长测，owner backend-ai。
+
+2026-09-12 01:20 backend-ai接续FB-107：两端本机Canal探针不ACK，源持业务锁写/观察边界，目标标记与复制/收据同事务；SOURCE_READY在发送最终提交请求前保存源摘要，目标提交后边界失败可重连观察原标记，再核对源/目标持久结果幂等确认。跨test-ai仅单元及独占故障夹具；真实双Canal/RabbitMQ复制、1644提交后故障与重连恢复10.03秒通过，证据.cache/canal-business/d53e80054a2c4413b7287d9c2122dd2f；真实SQL摘要不符拒绝/收据丢失恢复5.43秒通过，全量test/vet/lint通过。全部phase仍阻断Agent；没有完成CDC过滤/双方启用握手/多端点协同或公开维护与恢复工具，无新增Wails DTO/入口，不出包。FB-107保持open，owner backend-ai。
+
+2026-09-12 backend-ai接续FB-107：严格区分源binlog秒级平局后，增强6轮交替来源离线删除/业务行+墓碑+修复标志及实际进程启动阻断51.34秒通过，证据.cache/canal-business/fa28cfb4b29b4acaa4c7b60402ba1f64。最早6f813a超时缺少SQL现场、暂未复现，不能标记根因已修复；c1948d重建用例确认同秒平局的测试前提错误，9754d启动用例确认仅检查stderr漏日志，均已修正。新增内部RabbitMQ逐帧传输，持久消息/confirm/进度回信，数据与回执提交前不ACK输入，无自动清队列；暂限64MiB/两分钟。跨test-ai新增两台独立MySQL与RabbitMQ的独占短测脚本；产品级维护/恢复/CDC交接未接通，仍不出包。owner backend-ai。
+
+2026-09-12 backend-ai FB-107回归发现：新一轮真实双向短测在离线新删除收敛处25秒超时，证据.cache/canal-business/6f813aaa4c2d43f888beeaccc6f8efe5。服务器有1213死锁并显示重试恢复，但超时根因尚未确认；未到启动阻断用例。暂停新增传输实现，补失败前业务行/版本/收据状态取证后复现，不能沿用此前通过记录宣称当前双向验收完成。所有本轮独占资源已由脚本清理。owner backend-ai。
+
+2026-09-12 backend-ai接续FB-107：新增007对齐作业账本，准备记录按本机实际库表唯一锁定计划，目标提交收据与复制业务行同事务；源确认后仍保留对齐阻断。Edge/Server Agent启动读取未完成作业并报alignment_cutover_pending，旧库仅不存在新表时兼容，权限/连接等错误不放行。无新增Wails DTO/方法，现有启动错误展示沿用；跨test-ai仅独占SQL作业/故障/启动门禁验证。CDC交接尚未完成，无解除阻断或公开执行工具；owner backend-ai。
+
+2026-09-12 backend-ai接续FB-107：拆分仅使用本机数据库的首次全量ExportSnapshot/SnapshotReceiver，数据帧保留原始字节、限制1MiB、严格序号/计划/摘要，目标事务复读校验后才返回提交收据。跨test-ai仅单元测试及独占MySQL短测；当前仍是内部离线传输原语，尚无RabbitMQ传输适配、持久作业恢复或CDC交接，不新增UI/MCP入口、不解除正式门禁。owner backend-ai。
+
+2026-09-11 23:56 backend-ai进展FB-107：增强双节点短测27.21秒通过，实际观察edge-downlink回执失败和edge-cdc-canal登记失败1644后恢复，后者不重启Agent；SUPERSEDED账本经GetEventStatus底层服务实查正确。证据.cache/canal-business/310de5648490438d83e897cb0f206650；单向下发11.85秒回归.cache/canal-business/f382630b45f14eb4821d9456b070e50e。离线CopySnapshot使用专用UTC连接并用后丢弃，TIMESTAMP(6)跨+09/-04/NULL/池时区隔离实测通过，SQL核心4.45秒；禁用HARD双向草稿可保存，普通启用仍受门禁。event_status新增superseded/recorded_outcome_unknown，三语已补，合同已记；test/vet/lint和前端build/binding通过，未做新UI截图。全部测试资源清理；尚未远端schema自动采集、首次传输/作业恢复/CDC交接、完整Wails/MCP操作或出包，FB-107保持open，owner backend-ai。
+
+2026-09-11 backend-ai接续FB-107：真实双Agent/双Canal/RabbitMQ异名LWW短测26.16秒通过，证据.cache/canal-business/3f5a44f278744662894278aa54052f2d；修复YAML/JSON空集合误判、生产插值JSON参数类型与Canal断线后旧连接复用。CLI run只在显式实际schema清单、规则比对、本机实时schema复核后绑定不可序列化的配对运行规则，普通UI/MCP启用门禁及能力声明暂不变，尚无首次对齐/自动配对，不出包。下一步event_status新增superseded与recorded_outcome_unknown，应用时间字段仍表示收据时间；跨frontend-ai仅三语文案，原因是不能把loser记账显示为已写入。owner backend-ai。
+
+2026-09-11 backend-ai接续FB-107：将Capture/Incoming分离接入Agent装配，并增加本地schema复核与配对清单读取。清单只冻结规则和双方schema观测，不是授权，不能绕过现有运行门禁；远端采集/双方就绪协议仍待接入。计划CLI run增加可选-pair-manifest，Wails暂不增加方法或按钮，正式能力开启前需补稳定契约与前端状态。跨test-ai仅编译/装配/独占夹具，owner backend-ai。
+
+2026-09-11 23:17 backend-ai进展FB-107：新增BuildBidirectionalGraph，基于双端实际schema观测生成各节点独立Capture/Incoming集合；中心捕获保持本机名称，Edge间转发经中心列名组合映射，不重写原事件。仅合并同一中心表的兼容配对，歧义端点/矛盾schema/混用启用或删除策略拒绝，显式分发范围不扩大，不分发回来源。单测覆盖异名/同名/无损值/顺序稳定/切片隔离/拒绝歧义；现有RoutingDownlinkDispatcher普通与批量序列化覆盖三源节点CRUD并验证原始身份，非真实broker验收。全量test/vet/lint通过；尚无远端schema交换、Agent自动配对或首次对齐交接，公共运行门禁不变，无UI/API改动、出包或部署。owner backend-ai，FB-107保持open。
+
+2026-09-11 23:08 backend-ai进展FB-107：新增实际schema驱动的BuildBidirectionalPair，分别生成Edge上行/Server反向/Edge原名转发投影，固定端点节点、不扩大来源或分发范围；完整可写列双射、复合PK顺序、类型/排序规则/NULL、生成列、保留回放列及软删除双端校验。首次对齐计划复用此检查；ValidateStructure只校验结构，不替代公共Validate运行门禁。单测覆盖同名/异名/隐式碰撞/生成列/软删/作用域/不变性，独占MySQL实际schema+三投影写入保留BIGINT/DECIMAL/二进制通过（4.41秒），全量test/vet/lint通过、资源已清理。该配对尚未接入Agent自动解析或远端schema交换，不能宣称生产双向已启用；运行路由、事件诊断、首次全量传输/交接仍open。无UI/API变化、无出包/部署；跨test-ai仅独占SQL夹具，owner backend-ai。
+
+2026-09-11 22:55 backend-ai进展FB-107：Edge/Server生产run入口新增共享屏障构造和conflict-repair调度；只在启用双向LWW规则时组装，现有规则运行门禁未解除，单向/禁用不触发新SQL。Canal订阅保留原过滤并追加本机脉冲表；服务端过滤仍须包含脉冲，不能把客户端扩展当作服务端配置已完成。构造/调度单测及实际Canal夹具使用同一个生产attach函数验证共享屏障，上下行12.24秒/12.16秒通过，证据.cache/canal-business/4353b0b2343c4d2e8432e317696a6004、c823ae51ac7948b688d5bf97e38de8af，test/vet/lint通过。首次误用PowerShell5触发stderr异常；仅清理本轮58619d0302904d77813511ec7ad64f22资源后用pwsh完成，测试资源均已清理。完整双向规则配对/运行验收、细粒度待修复与SUPERSEDED状态、首次对齐仍open，无新包/部署。用户停止条件改为出包或累计5小时先到即结束，owner backend-ai。
+
+2026-09-11 backend-ai接续FB-107：接通受门禁保护的Agent冲突组件构造，同一节点的CDC包装器/LocalRecorder/SQLWorker/RepairWorker共享捕获屏障，修复调度复用现有Worker重试与状态日志。新增worker名conflict-repair沿用现有状态DTO，无新Wails方法；前端细粒度待修复/失败/SUPERSEDED仍待合同冻结。跨test-ai仅构造/调度测试及独占夹具，不操作业务环境；完整双向规则配对/首次对齐验收前不解除能力门禁，owner backend-ai。
+
+2026-09-11 22:40 backend-ai进展FB-107：新增006迁移sync_conflict_state与sync_repair_replay，LWW获胜数据和本地获胜镜像随版本事务持久化；本地loser现原子记录待修复标志并让CDC继续前进，不再在捕获线程等待业务锁。RepairWorker只处理启用的本地双向LWW规则，按行/间隙锁->新鲜屏障->重新读取当前获胜版本和镜像顺序修复，保留原业务版本，修复写入/专用来源证明/apply日志/清任务同事务；新本地winner取消旧任务。loop新增仅本节点专用repair证明识别，UPDATE保留标记仍上传、DELETE不借用旧UPDATE/INSERT证明。真实Canal上下行11.43秒/13.35秒通过持久任务、失败回滚+重建worker重试、DECIMAL/二进制恢复、修复INSERT/UPDATE/DELETE不回放及后续本地修改不误丢、删除墓碑修复；证据.cache/canal-business/55a1b4bf75014ecdb4f06b81e0644d85、8cbdf56d235d4818baf832aa0d25915b，夹具清理。SQL核心5.07秒另验证缺行软删除创建逻辑墓碑、获胜镜像失败全回滚、软删除源时间、软行恢复/物理删除后重建、新winner取消待修复；该软删除用例是串行SQL夹具，不冒充CDC验证。全量test/vet/lint通过。内部修复闭合但生产构造/后台调度/失败诊断与前端状态尚未接入，后续需向UI区分待修复/失败/SUPERSEDED；暂无新增Wails DTO。首次对齐/完整双节点运行仍open，capabilities不变，无安装包/部署，owner backend-ai。
+
+2026-09-11 22:13 backend-ai进展FB-107：SQLWorker接入内部LWW路径，MappedEvent冻结映射前原始事件JSON并校验映射投影；强制实际schema/完整目标镜像/无触发器与外键/规范主键、RR事务锁行或间隙，再等新鲜Canal屏障，之后才取schema/版本锁。获胜INSERT/UPDATE按真实行存在性写入（不使用ON DUP覆盖），DELETE保存墓碑，loser只落回执，历史重试校验原始身份后返回Duplicate；版本/业务/身份收据/apply日志原子提交。含LWW批次逐事件事务，不持前项版本锁等待后项屏障。Result.ConflictDecision为内部字段，暂无Wails DTO变化；后续生产事件状态/UI必须区分SUPERSEDED与实际写入，不能一律展示已写入，待backend冻结契约后交frontend-ai。真实Canal/LocalRecorder/SQL Apply组合在独占夹具验证映射、新旧版本/重复、失败回滚+重试、删除防复活、更新恢复缺行、缺行墓碑、批次顺序及历史ID篡改；上行9.50秒/下行13.50秒，证据.cache/canal-business/ad54f976aa8048d6a1acdab3a203d426、1aee2dab550046ef9b20a888ea248ae4，全部资源清理。首轮夹具错误使用宿主时间判断源事件先后已修正为实际持久源版本基线。test/vet/lint通过；真实入站事件由测试直接调用禁用规则映射后的SQLWorker，生产构造/运行门禁未解，不冒充双节点已启用双向。获胜状态持久内容/本地loser恢复、首次对齐、生产路由/状态/UI仍open，无新包/部署，owner backend-ai。
+
+2026-09-11 21:56 backend-ai进展FB-107：新增conflict.CanonicalKey，按实际PRIMARY顺序规范整数/DECIMAL/二进制键，文本使用实际MySQL collation weight及PAD属性，拒绝精度损失/前缀PK/未支持类型；PinKeySchema与005迁移固定键结构，漂移拒绝。LocalRecorder已实现无业务行锁/不重写业务的本地持久版本登记，并在独占真实Canal包装运行时接通：持有业务行锁，屏障等待版本入库后才返回。sync_conflict_event保留所有已处理事件（含loser）的原始身份/版本/规范行，旧事件ID变更内容或改行拒绝。原已见旧事件重试现返回DUPLICATE而不是SUPERSEDED。单测/全量test/vet/lint通过；真实MySQL复制+24并发/回滚/主键排序规则/本地登记4.74秒，候选上下行8.45秒/8.33秒，证据.cache/canal-business/55a5324cfc0c44c489a5be451220312f、2b0aee2bd2df49e6ae35d075ef140d69，夹具已清理。新发现必须闭合：实际本地写入若比账本获胜版本旧，不能仅登记为loser后放行，否则本地行已被改坏；当前显式conflict_local_write_superseded阻断，获胜数据恢复路径未完成。生产SQLWorker/构造、其他PK类型/PK变更、完整对齐与双向流程仍open，无UI/DTO变更，不解除capabilities、不出包/部署，owner backend-ai。
+
+2026-09-11 21:42 backend-ai进展FB-107：新增internal/capture和004_capture_fence迁移，每节点单行随机脉冲、30秒有界等待、批次包装器在完整处理/ACK成功后解除等待；不以旧持久检查点冒充当前进度，不发布内部脉冲，不产生纯脉冲检查点反馈。Canal上下行增加可选LocalVersions登记接口，失败不发布/不ACK并重置源，回放不登记为本地变更；实际规范主键登记实现尚未接入。单测覆盖错误token/库/表/节点/操作、取消/SQL失败清理、错误批次、发布/ACK失败和重试。真实Canal在候选进程停止后单独验证持有业务行锁时跨过先前变更、纯脉冲等待和单行存储；上下行完整夹具9.59秒/9.27秒通过，证据.cache/canal-business/2181d7703ba049a29de461837eff63fd、1d992820fc18432bade7f6e242e4bf8d，所有资源已清理。全量test/vet/lint通过。此处只证明捕获处理顺序，不证明完整冲突仲裁；实际主键规范化、登记实现、SQLWorker接入、首次对齐产品链路仍open，无UI/DTO变化、未出包/部署，owner backend-ai。
+
+2026-09-11 21:34 backend-ai进展FB-107：提取conflict.ApplyInTx，复用调用方SQL事务，业务写入/版本/回执保持同事务；接口不自行commit/rollback，错误必须由调用方整事务回滚，成功也不代表可以ACK。新增成功和回执失败后调用方仍可回滚、回调事务一致性及nil依赖测试，全量test/vet/lint通过。本轮仅内部事务接口，无UI/DTO变化，尚未接入生产SQLWorker；本地待捕获写边界、SQL规范行身份、首次对齐运行链路仍open，未出包/部署，owner backend-ai。
+
+2026-09-11 21:26 backend-ai进展FB-107：新增双向映射TrackDeleteReplay路径，HARD DELETE前同事务标记+专用sync_delete_replay收据+删除+apply日志，普通单向删除不变；RequireNoTriggers复用到alignment和delete，缺元数据/可见性或有触发器拒绝；loop用专用收据区分删除回放与保留旧INSERT标记的本地删除。新增003迁移、SQL事务/查询/标记单测。真实候选上下行分别8.45秒/7.88秒，验证标记UPDATE和DELETE均不回放、本地DELETE正常上传、收据失败全回滚后重试；隔离复制核心回归3.18秒，全量test/vet/lint通过，资源清理。证据.cache/canal-business/519d8227382644b697d132e959830565、115a24a76e8d4727b43d17975ce77dc8。测试直接调用禁用规则映射的内部Apply路径，不把它冒充已启用同表双向；capabilities仍false，首次对齐入口/CDC交接/完整仲裁仍open，无UI DTO改变/新安装包/部署，owner backend-ai。
+
+2026-09-11 21:15 backend-ai进展FB-107：修复loop.Suppressor仅凭旧last_event_id收据误过滤后续本地UPDATE，改为FULL前后镜像比较标记；保留旧标记的本地修改上传，实际远端标记迁移才查回放，前镜像缺失返回明确错误。新增普通/映射标记单测，候选Agent真实Canal/Rabbit/MySQL上下行各验证SQL Apply回放INSERT过滤和随后本地UPDATE唯一收据；证据.cache/canal-business/af5ea013bd654667b0036bac76a11b52（7.95秒）、a73a40ee4b9e437bb11c70d9ece0cc26（8.59秒）。全量test/vet/lint通过，夹具已清理；未部署/出包。无DTO变化，前端仅沿用错误展示；HARD DELETE回放、双向仲裁接入及首次对齐运行入口仍open，owner backend-ai。
+
+2026-09-11 21:07 backend-ai进展FB-107：新增内部CopySnapshot离线复制原语，明确确认+禁用规则、源/目标事务锁与空表重查、schema重查、按映射流式复制及目标行数/摘要核验、失败整批回滚；独占MySQL验证正反向映射/无损精度/约束失败回滚/结构漂移与触发器拒绝。test/vet/lint通过，测试容器已清理。该原语只用于内部隔离测试，未接入远端直连或运行入口；RabbitMQ分块/作业恢复/CDC交接/生产双向Apply仍未完成，TIMESTAMP适配未完成，capabilities仍false。无新增DTO/前端操作/安装包，FB-107保持open，owner backend-ai；严格业务指令时间字段和删除时间仍待确认。
+
+2026-09-11 20:56 backend-ai进展FB-107：新增alignment空表实测/手动配对方向/双向可逆映射/计划hash与时效，conflict源时间/确定同时间顺序/删除版本及SQL业务-版本-收据原子事务核心，新增002_row_version迁移；Normalizer标记source_binlog/source_event/processing_fallback防止拿处理时间仲裁。独占MySQL24并发/收据失败回滚/墓碑及test/vet/lint通过，夹具已清理。尚无首次复制执行器、CDC交接、生产双向Apply/本地待捕获写登记/回环接入，capabilities仍false，工具/安装包未变，FB-107保持open。时间来源选择等待用户答复；下一owner backend-ai继续真实链路，frontend-ai待DTO冻结。记录docs/alignment-bidirectional-progress-20260911.md。
+
+2026-09-11 backend-ai接续FB-107：用户明确开始实现首次全量与同表双向；首次全量为手动确认、有数据端到空表端，两空跳过、两端非空拒绝自动覆盖，按映射后的实际表判断。用户进一步确定双向冲突采用源端指令/事件时间较晚者优先，非接收/处理时间；需固定同时间排序、删除墓碑、时钟/缺时间保护，并区分业务指令时间字段与Canal源事件时间。backend-ai负责核心/CLI/MCP/DTO，跨test-ai仅独占夹具；前端新增对齐/冲突时间来源配置在稳定接口后交frontend-ai。先实现和验证安全核心，未经真实链路验收不解除unsupported能力声明；不改现有业务配置/数据、不部署或启动长测。<!-- 待确认 -->严格业务指令时间的字段名及删除时间写入方式尚未提供。
+
+2026-09-11 review-ai回复FB-107功能核对：源码能力声明及运行策略一致，initial_alignment.execute/online=false、sync.bidirectional=false，启用规则仅支持NONE且无冲突仲裁；MANUAL只是可保存策略。0.46.16最终Agent隔离上下行CDC证据均passed，另有真实MySQL/RabbitMQ严格CRUD/失败重试证据，不能替代当前业务表或长测验收。本轮仅只读核对源码/既有证据并记录答复，未连接现场、未改产品/配置、未重新运行测试；FB-107及FB-094保持open，后续owner backend-ai/test-ai按既有范围推进。
+
+2026-09-11 15:55 backend-ai交付0.46.16升级包：最终SHA256 0EB2142378774225E6E23CFBF14AC945DB48B868B63BD7094D2384732A6116A7，Agent16C571C9/UI BCE48F85。43文件/5资产、隔离双覆盖/配置原文、32/64各15、真实双方向Canal CRUD/精度/重启/收据、普通stdio与真实SSH39工具5资源、日志及UI回归通过。VPN实现按用户决定撤回；用户自行安装，长测安装后安排，无业务配置/表/队列/Agent变更。详见docs/v0.46.16-upgrade-handoff-20260911.md；跨frontend/test范围已交接，未将首次对齐/历史误账/冲突仲裁或旧七小时失败关闭。
+
+2026-09-11 backend-ai FB-107真实Canal短测发现二进制高位字节被UTF-8重编码：00017F80FF落库00017FC280C3BF，其他BIGINT/DECIMAL/NULL/time正确。接修Canal按JDBC二进制类型解码、稳定带标签JSON行值与SQL字节绑定，需单测+真实候选CRUD/重启回归。双端需同包升级；旧版不支持新增二进制标签，历史错值不自动修复。无新增UI操作/API，仅行值协议及诊断展示影响，owner backend-ai。
+
+2026-09-11 backend-ai：用户撤销VPN远程MCP，回到SSH承载原stdio；最新目标仅交付升级安装包，长测安装后另行安排，不自动部署。FB-108改为撤回VPN实现并验证SSH兼容；跨frontend-ai删除专用设置/绑定，跨test-ai仅隔离短测与封包门禁。FB-107本包交付已实现的正确性修复；首次对齐执行及历史误账修复不纳入本包完成声明，继续open。
+
+2026-09-11 backend-ai FB-107发现并接修Edge下行目标库口径：生产默认库override覆盖SERVER_TO_EDGE显式target_database_name，预检/治理与实际写库不一致。改为直接下发显式目标优先，空目标保留本机默认；EDGE_TO_SERVER转发沿用本机落库兼容行为。同步预检、治理、错误元数据与真实Broker/MySQL测试；不改现场配置。owner backend-ai。
+
+2026-09-11 backend-ai FB-108进展：已实现官方SDK Streamable HTTP、每设备Bearer token、VPN/Origin/来源边界、机器DPAPI+ACL、独立SYSTEM启动任务脚本、升级预停与资源manifest、安装选项/连接复制页、三语设置/轮换/复制。真实TCP SDK与CLI生命周期/实际目录与摘要/本机探针、DPAPI/DACL、设置鉴权、五模式安装夹具、启动归属模拟测试通过；三语1366/390 UI交互/截图通过，NSIS测试编译及中文原生选项预览通过。当前非管理员，未注册真实任务/防火墙、未安装部署，真实SYSTEM无登录重启/VPN对端/完成页复制仍open，不把配置启用当运行成功。合同及docs/remote-mcp-vpn.md已同步；下个owner backend-ai继续隔离验收及原FB-107。
+
 | ID | Owner | Type | Status | Item | Next Action |
 | --- | --- | --- | --- | --- | --- |
+| FB-109 | frontend-ai | risk | open | npm audit报告7项既有前端构建依赖漏洞（含Babel/browserslist/nanoid/postcss/vite等）；新增lucide不是本次报告来源，未擅自批量升级。 | 独立评估可达性和兼容版本，升级后跑构建及三语UI回归；不作为本轮功能门禁已解决。 |
+
+2026-09-11 backend-ai新增FB-108：用户要求安装时可选远程MCP并确认首版仅受保护VPN；设备独立token、地址/客户端配置、重启无人登录恢复，保留stdio，不加角色/审批/逐项授权，中心中转不在首版。backend-ai跨frontend-ai负责三语设置/安装展示，跨test-ai仅隔离配置/loopback协议/安装夹具，不部署业务环境。需解决现有用户DPAPI与SYSTEM启动的兼容，仅选择远程功能时迁机器范围+ACL。原FB-107整改保持open，不以新需求替代旧验收。
+
+| ID | Owner | Type | Status | Item | Next Action |
+| --- | --- | --- | --- | --- | --- |
+| FB-108 | backend-ai | decision | closed | 用户撤销VPN方案，相关HTTP/token/机器凭据/SYSTEM任务/防火墙/安装及UI实现已撤回，0.46.16沿用SSH+stdio。 | 最终包Agent真实边缘SSH握手/39工具/5资源/能力通过，临时目录已清理；不安装SSH、不改用户公钥或业务配置。 |
+
+2026-09-11 backend-ai接口预告（FB-107）：新增按规则+事件的队列隔离plan/apply/audit，固定配置队列、规则revision及消息指纹，有界检查，明确确认后持久隔离副本并ACK原消息；不提供purge、不标记业务应用成功。跨frontend-ai仅DTO/binding与三语事件处理入口，后端先实现并用独占Broker验证；MCP全开放仍保留操作确认，无新增授权体系。
+
+2026-09-11 13:38 backend-ai继续FB-107：收紧BINARY宽度无损判断、修软删除运行时误查排除列/跨规则软删映射缓存；预检新增可见触发器/入出外键警告，明确元数据可见性与副作用未核验。独占MySQL真实回归通过。修PeekMessages立即requeue导致重复取样，独占RabbitMQ随机端口45054上消息完整保留及禁用规则反复退回/启用后ACK各5次通过；后者Apply是测试替身，不冒充真实DB整链路。全量go test/vet通过；未出包/部署，历史误账/受控残留动作/首次对齐仍继续。
+
+2026-09-11 13:27 backend-ai进展（FB-107仍open，非交付）：本机schema/主键/InnoDB/软删列/权限预检及启用前检查、生产Apply事务内真实PK防护、CAS/saved/active_revision、按规则选择库表治理、运行事件状态工具与三语UI、禁用规则残留不ACK、MCP输入UseNumber已实施。独占MySQL与实际stdio关键回归通过；全量test/lint/tsc及三语宽窄屏检查通过。剩余历史误账修复、残留审计工具、首次对齐及最终包真实链路继续，不接触业务AI环境。下一owner仍backend-ai。
+
+2026-09-11 backend-ai：用户明确继续完成剩余需求，不在首批阶段小结停止。FB-107新增规则预检接口（按rule_id及source/target选择本机规则引用库表）、后续事件状态与revision保护；跨frontend-ai负责对应合同/规则页面入口，跨test-ai仅独占容器/库/队列及隔离配置。MCP工具全开放，不恢复审批授权体系；实际业务环境和对方残留不动。
+
+2026-09-11 backend-ai：用户纠偏：MCP权限全开放；“隔离”仅指本方测试库/表/config，不是产品范围授权。撤销本轮FB-106申请/审批/授权存储/UI，不保留这套额外机制。保留首次对齐默认关闭/手动选择和可信时间脱敏修复。当前优先答复业务报告Q1-Q12并修复正确性，不改业务AI数据库、配置、现场进程或残留消息。
+
+| ID | Owner | Type | Status | Item | Next Action |
+| --- | --- | --- | --- | --- | --- |
+| FB-107 | backend-ai | bug | open | 0.46.16为此前已交付整改包。本轮源码新增配对LWW/墓碑/loser修复，真实双Agent短测51.36秒通过；受限首次快照/RabbitMQ/持久收据/Canal边界/核对恢复实测通过，仍无新安装包。 | 完成CDC旧事件过滤及血缘验证、维护租约/全部参与端启用握手、自动配对和公开Wails/MCP执行恢复后再验收出包；所有作业仍阻断Agent，不能删账本解锁。较早6f813a超时根因未闭环；底层Canal socket deadline及大表暂存也未完成。用户限定出包或累计5小时先到即停止，不部署/长测；详见docs/alignment-bidirectional-progress-20260911.md。 |
+
+
+2026-09-11 backend-ai：用户已授权实施方案并进行完备测试，随后明确只用隔离数据，不操作业务表。本轮按P0/P1起步再接M1，现场安装/配置/业务数据保持。backend-ai跨frontend-ai仅共用能力的Wails视图及三语交互，跨test-ai仅隔离夹具/协议/E2E；各阶段证据独立，不将M2或未跑门禁记为完成。
+
+2026-09-11 backend-ai补充边界：业务开发AI已进场，用户明确试验仅限我方测试库和表，开发业务表的配置不动。所有真实测试必须使用独占测试数据库/表/队列及隔离config/rules白名单，禁止读取调整业务表数据、同步规则、连接或节点配置，不借业务表作探针。
+
+2026-09-11 review-ai：本轮仅制定首次对齐/全功能MCP方案。用户明确首次对齐为可选项、不能全自动：默认关闭，手动范围/差异预览/确认，安装注册保存启停均不触发；未选择时保持原增量。下列新任务尚未实施，不代表批准部署、改库或启动长测。
+
+2026-09-11 backend-ai：用户最新要求中心本机与边缘均正式安装新包，取代下方旧的中心仅工作区决定；本轮只出包，不自动安装或启动长测。
+
+2026-09-10 test-ai：用户确认中心直接使用本机工作区运行，无须安装；FB-078 的中心安装阻塞由此解除，转 open 待完整测试。中心固定候选二进制、边缘正式安装版，不将工作区测试记为双端实装通过。
+
+| ID | Owner | Type | Status | Item | Next Action |
+| --- | --- | --- | --- | --- | --- |
+| FB-106 | backend-ai | task | closed | 授权系统按用户纠偏撤回，不作为功能交付。MCP启用后全开放，删除申请/审批/存储/UI；保留DISABLED/MANUAL选项、capabilities及可信时间修复。 | 后续正确性和接口验证转FB-107；此前审批测试不再是现行产品证据。 |
+| FB-105 | review-ai | decision | open | 首次对齐方案P0待冻结业务边界：维护窗口、表/行权威、跨Edge主键、范围撤回、数据量/短锁权限；用户已确认可选非全自动，不能将待确认事项当作停写或覆盖授权。 | 依据.ai/docs/initial-alignment-implementation-plan.md第11节确认；默认KEEP、不创建业务schema；M1/M2分别验收，不关闭既有FB-094/084/089等项。 |
+| FB-104 | test-ai | test | open | 拟议对齐/MCP发布门禁T01-T11：旧33工具/5资源/CLI全入口兼容，中心+两Edge范围/精度/故障/在线交接/100GB预算，默认不执行和明确批准测试。 | 待实现后按覆盖清单逐行真实stdio/SSH验收；重启后对齐PAUSED、无授权start不得写入。源码/最终包hash绑定；不能自动启动长测或把旧125秒失败追认为通过。 |
+| FB-103 | frontend-ai | task | open | 拟议新增三语数据对齐页及接入可选项：执行首次对齐默认未勾选，选择范围/差异预览/明确确认；未选择直接原增量。旧UI管理功能均有对应MCP能力。 | 等backend-ai冻结DTO后用Wails薄适配实现列表/详情/冲突/进度/暂停恢复取消；保存/启停不触发，重启暂停、部分提交可见，不直接访问DB/HTTP。 |
+| FB-102 | backend-ai | task | open | 按方案补正式MCP授权与旧功能缺口，并新增手动QUIESCED对齐、持久作业、行范围/映射/条件写/收据核验；后续ONLINE水位/暂存/代际交接。当前仅拟议，未修改稳定接口。 | 先P0/P1再P2/P3；参见.ai/docs/mcp-capability-coverage-plan.md逐项33工具+旧CLI/UI+新增能力。默认DISABLED、无AUTO，MCP首次start需计划明确批准；记录DTO/规则/迁移影响后交frontend-ai。 |
+| FB-101 | review-ai | task | closed | 已完成首次对齐具体实施方案、技术路线、阶段人日/门禁、全量MCP覆盖清单及可编辑架构图。纳入用户追加“可选、不能全自动”：默认关闭、手动预览确认、启停不触发、重启后暂停。 | 文档.ai/docs/initial-alignment-implementation-plan.md及mcp-capability-coverage-plan.md；33工具/38CLI无遗漏、链接及图结构检查通过，现有test/vet/lint通过，非新增功能验收。只关闭方案，实施/业务确认见FB-102至105；未改产品/现场/安装包或启动同步；图未导出PNG。 |
+| FB-100 | test-ai | test | closed | 用户完成本机安装后只读核验：10:42:59正式0.46.15安装passed/reuse，组件安装、密码迁移、拓扑配置均skipped，config/rules kept-existing；正式Agent/UI哈希与F012包一致。 | 注册版本0.46.15、无原生RabbitMQ/Canal/MySQL相关服务；Docker原实例仍运行。原生Erlang来自09-08旧安装（旧日志及目录时间），非本次新增；离线packages仅复制未执行。安装版MCP MySQL/RabbitMQ连接ok，server-001/external保留，Agent stopped且无旧工作区进程。未启停/改配置/清理；未做同步E2E或长测，FB-094/084/089仍open（此次无原UI待恢复，不算FB-084通过）。 |
+| FB-099 | backend-ai | task | closed | 0.46.15 F012F1FE新包已交付半自动NSIS组件选择页，中英日，默认复用；静默/直接脚本也默认跳过，显式InstallSystemComponents才装组件，互斥参数拒绝。复用保留配置原文/密码，跳过组件安装/迁移/拓扑；首次创建external配置。 | backend-ai跨test-ai仅模式/升级/UI验证：五模式fixture、三语真实预览、NSIS冲突返回2、双覆盖配置哈希、32/64各15、43文件/5资产、MCP33工具/5资源、test/vet/lint全通过。无Wails DTO/同步变化；记录docs/v0.46.15-component-mode-handoff-20260911.md。未实装或自动Docker检测；FB-094/084/089仍open。 |
+| FB-098 | backend-ai | bug | closed | 默认安装可能重复安装Docker已有组件的问题，通过用户授权的半自动方案FB-099处理：0.46.15新增可见选择页且默认复用，组件安装需显式选择；本机Docker可保持默认，不再需要记命令参数。 | 选择复用时跳过组件及密码/拓扑配置，旧配置不改；不是自动Docker识别。原0.46.14仍须/SkipSystemComponents，新包F012替代本次交付。自动环境探测不纳入本轮；未部署现场。 |
+| FB-097 | backend-ai | task | closed | 0.46.14 C580851F安装包交付，纳入FB-096日志状态UPDATE修复；同包供中心/边缘安装，内含业务AI MCP说明，另生成双端普通模式客户端JSON。不带实验室凭据清单。 | 全量test/vet/lint、Wails/CLI/契约、42文件/5资产hash、隔离双覆盖、32/64位各15项、MCP标准握手/33工具/5资源/真实ERROR读取通过。backend-ai跨test-ai仅补封包标准验证与独立证据目录，无UI/DTO变化。记录docs/v0.46.14-package-handoff-20260911.md；未部署，中心须先停工作区Agent。FB-094/084/089仍open。 |
+| FB-096 | backend-ai | bug | closed | 已先报告后修复确认后的日志状态UPSERT锁放大：现按已有event_id事务UPDATE，不覆盖payload；缺失记录回滚、重复完成安全，确认后状态提交成功才提交Canal位点。 | 真实MySQL产品SQL UPSERT/UPDATE/UPSERT对照1.55秒：旧路径阻塞、新路径不阻塞；跨块缺失回滚/payload/重入及运行时失败重放、全量test/vet/lint通过。无UI/DTO/参数变化。仅源码，未出包部署；不是完整性能验收，FB-094仍open。 |
+| FB-095 | backend-ai | task | closed | 用户确认方案后，review-ai→test-ai有界原表续跑→报告更新→backend-ai受控修复完成本轮交付。原表60万历史和热点版本续跑574.185秒，新范围50列/2000键/账本通过；短暂停Canal追赶后段再现约1.9秒event_log与PRIMARY尾部锁等待。 | 报告docs/performance-root-cause-20260911.md明确证据与边界，锁机制修复见FB-096；未复现完整125秒超时、不追加长测或追认七小时通过。双端原表先备份；旧11040消息隔离保留。09:36原规则/Agent15972与19320/队列0/Canal和PFS恢复，无UI影响。 |
+| FB-094 | backend-ai | bug | open | 0.46.13七小时213112于09-11 02:08:12因延迟探针超过125秒失败；峰值入口ready10925/unacked50，每方向605440 INSERT/320720 UPDATE后停止，最终一致性未验收。 | FB-095/096已找到并修复可重复的日志状态UPSERT锁放大，源码真实锁/正确性门禁通过；修复版尚未出包部署或双端完整验收，原125秒失败仍未闭环。旧11040消息已confirm隔离保留，09:36运行队列0、原规则CD26及Agent15972/19320恢复；原表诊断续写前备份见报告。 |
+| FB-093 | test-ai | test | closed | wide25200s_0910_213112于09-11 02:08:12延迟探针125秒超时失败，02:08:29恢复结束，实际约4小时36分，未跑满七小时。两次15分钟停机/追平及DDL通过，峰值阶段失败，最终一致性未验收。 | 记录为失败闭环，问题转FB-094；不把closed写成测试通过。每方向605440 INSERT/320720 UPDATE，最后采样净空间下降Edge6.19GB/Server22.68GB，非容量触发。原规则/Agent恢复passed、awake释放，但08:28运行队列仍11040残留待处理，未自动重启。 |
+| FB-092 | test-ai | decision | open | 用户要求按100 GB设计，已形成docs/100gb-storage-test-plan.md：暂按每节点总工作存储100,000,000,000字节，已有数据计入、分项归属、持续增长与临时峰值分开，保留1.5安全系数与独立物理盘安全下限。 | 先实现分项容量测量/预算绑定及回归，再完整30分钟重验后组织原负载36000秒测试；70GB告警、80GB停止造数并排空，越界记失败不算通过。不迁移数据、不裁剪幂等/待消费记录。自动数据保留如需产品实现另交backend-ai。本轮仅设计，未改容量脚本/产品或启动长测。 |
+| FB-091 | test-ai | task | closed | 按用户授权清理边缘192.168.10.105 MySQL无用测试表：依据终态run清单、当前规则、外键/触发器/视图检查，105张旧nb7表先完整mysqldump到D盘并hash，再复核行数后DROP；2379293行，释放3780857856字节。 | 最新175644验收表、nb_e2e_probe、同步系统表及spindle_edge_ac01业务库保留；MySQL查询正常，Agent18980存活，规则CD26哈希不变。备份D:/NodeBridge-Test-Backups/cleanup-20260910-205208/scada_edge-obsolete.sql，清单.cache/edge-cleanup-20260910-205208-manifest.json。C现159.6GiB，仍未满足原276GiB十小时预测；未迁移MySQL、未清binlog或重开长测，FB-090仍blocked。 |
+| FB-090 | test-ai | test | blocked | 0.46.13 widesmoke_0910_175644完整1801.222秒completed；每端64220 INSERT/39850 UPDATE，50列/精确账本、13生命周期、双故障/DDL/晚期回放交接、126样本含30压力/方向全部通过。恢复passed，租约已释放。 | 十小时未启动：边缘最低空间法测得5,293,061 bytes/s，36000秒*1.5+10GiB需约276GiB，C盘现约156GiB；D盘约929GiB空闲。已请求用户批准迁移实验室MySQL数据到D盘并重新验证，未停库/迁移/清历史/放宽门禁。当前短测证明绑定36000秒，但实际启动仍必须通过实时容量检查；旧失败保持。 |
+| FB-088 | test-ai | test | closed | 用户确认边缘安装后再次只读实测：192.168.10.105正式安装MCP握手0.46.13成功，普通模式15工具、overview/logs/agent_status正常；保存的MySQL、本地RabbitMQ、中心RabbitMQ测试均ok=true。中心MySQL及RabbitMQ也正常。 | 边缘同步Agent仍stopped，中心仍原0.46.12工作区PID17460 running；两端读取旧sync-agent.log各5条。未改配置、未启停同步，不视为端到端同步通过。当前对话未加载NodeBridge原生工具入口，本次通过直接stdio及SSH stdio验证。 |
+| FB-089 | backend-ai | bug | closed | 0.46.16类型感知保留AgentProcessStatus可信时间/PID，自由文本错误与路径仍脱敏。数字密码2026与started_at/exited_at/PID碰撞回归通过。 | 修复已入包，普通stdio/真实SSH及日志数值脱敏验证通过；不代表旧长测已验收。 |
+| FB-087 | backend-ai | task | closed | 0.46.13最终5A38候选包交付：真实Edge ApplyBatch、持久ERROR/WARN/轮转/脱敏/阶段与卡顿采样、UI/MCP日志读取、NSIS三语向导与会话恢复。GetLogs DTO/33工具不变，显式-log兼容；MCP全协议纯数字密码JSON回归及真实启动ERROR读取通过。 | 全量test/vet/lint、Wails/契约/CLI、42文件/5资产hash、双覆盖、32/64位各15回归、MCP版本/诊断通过，最终Agent6C0795与证据绑定。报告docs/v0.46.13-candidate-handoff-20260910.md；不自动安装，FB-084实际UI恢复及FB-085双端性能留复测。 |
+| FB-086 | backend-ai | task | closed | 固定utf8mb4驱动插值与真实下行批量纳入0.46.13。真实隔离50列1200混合下行逐事件62–81/s→批量353–410/s，50万历史356–401/s；全列/版本/Apply数量、SQL失败整批回滚/重入队/重放通过。 | 用户最新明确交付新包后复测，候选已由FB-087交付；局部基准不作双端验收，原门禁/可靠性/现场MySQL保持。FB-085仍open，旧formal-ready撤销保留；未部署候选或启动新长测。 |
+| FB-085 | test-ai | bug | open | wide7h_0910_100650于14:44:10因latency probe exceeded 125 seconds自动失败，14:44:25 finished，运行约4小时36分。失败前每方向约80 INSERT/s+40 UPDATE/s，中心入口ready13585；已完成样本P99上行9674ms/下行12461ms，超时探针不计入这些完成样本。 | 先保留现场证据并定位高负载积压/探针超时原因，不放宽门禁，不自动重启长测。restoration passed，正常Agent中心17460/边缘5836存活、边缘原规则hash一致、awake5388 released已核验。FB-083未通过；UI修复仍由FB-084独立处理。 |
+| FB-084 | backend-ai | bug | open | wide7h结束恢复后，0.46.13实现preflight记录原UI的SessionId/owner SID，安装完成以临时Limited InteractiveToken任务恢复，只允许唯一原用户桌面；拒绝Session0/模糊会话，避免重复UI，失败记录warning并清理临时任务。 | 9项选择器/模拟任务回归与隔离覆盖通过；真实原用户桌面恢复仍待用户安装复测，不写成已验收。安装资源归属、自启动与NSIS框架不变；当前候选未部署。 |
+| FB-083 | test-ai | test | closed | 七小时wide7h_0910_100650于14:44:10延迟探针超过125秒自动失败，14:44:25 finished，未满七小时。保留原始失败，不追认为通过。 | 恢复passed、awake5388 released，backend-ai按FB-086完成13768条本run残留confirm隔离，正常入口/下行ready及unacked均0、原Agent17460/5836仍存活；旧准入已撤销。完整最终一致性未验收，高负载问题由FB-085/086继续处理。 |
+| FB-082 | test-ai | test | closed | v0.46.12包/边缘实装/中心工作区E61核验通过。093438完整1800.925秒completed，每端64220 INSERT/39850 UPDATE，全50列/oracle/精确账本、33452次版本观察、12生命周期、双故障/DDL/晚期探针交接通过。 | 135样本/方向（102稳态/33压力），Edge稳态P95=607.918ms/全部P99=1011.091ms，Server=634.690/2893.418ms通过。恢复passed、旧awake4940released退出，正式准入已生成，七小时转FB-083。 |
+| FB-081 | backend-ai | task | closed | Store事件日志改为同事务有界多行SQL，128行/估算1MiB，保留顺序、冲突字段和错误传播。全量门禁、真实257事件16字段逐条对照/跨段重复/特殊大payload/后段SQL错误整批回滚通过。 | 同隔离1000混合/320回放基准4.400→2.244s，日志3.097→1.148s；已纳入v0.46.12交test-ai FB-082。SyncEvent/Wails DTO/UI不变，局部收益不是整体延迟通过证明。 |
+| FB-080 | test-ai | test | closed | 083751全量账本通过但双向P99=6852.765/12428.633ms失败，原证据保留。FB-081定位并优化事件日志逐条SQL往返，未改负载/可靠性/延迟阈值或清历史。 | v0.46.12的093438完整30分钟同负载、全压力样本P99=1011.091/2893.418ms通过，闭环证据见FB-082；不宣称唯一性能瓶颈已完全证明或七小时通过。 |
+| FB-079 | test-ai | task | closed | WorkspaceServer监督器/准入绑定模式、路径和hash，边缘仍要求正式安装；拒绝越界/旧进程/hash及证明误用回归通过。 | 093438完整30分钟、恢复及正式准入验证通过，100650正式Start/Run接受同一绑定模式并运行。Installed默认未改，工作区结果不写成双端实装。 |
+| FB-078 | test-ai | decision | closed | 按用户决定取消中心安装前置条件，改为工作区候选，未重试UAC；v0.46.11回放/位点修复及v0.46.12日志优化不改SyncEvent/Wails DTO/UI。 | v0.46.12完整短测通过（FB-082），MySQL保持8GiB/2GiB，正式七小时已启动（FB-083）。旧083751失败不追认。 |
+| FB-077 | test-ai | bug | closed | 234447及083751压力延迟失败均保留，未通过扩大内存或放宽门禁认定解决。FB-081日志多行SQL优化后，093438完整同负载验收通过。 | 135样本含33压力样本/方向，稳态P95与全部P99均满足原门禁（FB-082）。七小时长期结果仍待FB-083。 |
+| FB-076 | backend-ai | bug | closed | Store回放判定已改为事务内FOR SHARE及context/error传播，查询失败不发布不ACK；真实提交/回滚/锁等待取消实验与核心回归通过。234447多出一条UPDATE证据保留。 | 083751与093438精确Apply/SUCCESS账本均通过，093438完整30分钟及33452次在线版本观察通过；未将精确账本改为容差，不追认旧失败。 |
+| FB-075 | test-ai | bug | closed | 最终核验重试已统一DateTimeOffset UTC并记录原始错误；跨午夜/时区/成功不重试/期限边界回归通过。 | 083751原始延迟错误完整记录且恢复，093438完整30分钟与最终验收通过，未再被时间类型错误掩盖；234447失败保留。 |
+| FB-074 | test-ai | bug | closed | File.Replace原子替换/2秒有界共享锁重试修复已通过专项及234447约28分钟完整负载阶段，无相同文件错误；错误调用栈成功定位后续FB-075。 | 原文件锁/持续失败保留/UTF8等回归及全量门禁通过；234447因独立FB-075/076未通过，不能将本项关闭等同完整准入。 |
+| FB-073 | backend-ai | bug | open | v0.46.11已实现空/全抑制批次只ACK不写SQL位点，有效业务保留位点语义，单测通过并含于v0.46.12。旧空闲自写+816证据保留。 | 093438完整短测通过；双端纯空闲位点写计数专项复核仍待进行，不认定原自写是所有性能问题唯一根因。 |
+| FB-072 | backend-ai | bug | open | 19:22实测概览downlink_queue_depth=0，而RabbitMQ edge-001.downlink.q实际ready=499；逐条metadata确认为184033遗留消息，随后confirm隔离。 | 核查Server概览队列统计来源/聚合口径，不能以UI/MCP概览0代替直接broker门禁。test-ai证据.cache/fb071/overview-with-backlog.json、queue-head-metadata.log；本轮未改UI/DTO。 |
+| FB-071 | test-ai | bug | open | 两端8GiB/2GiB、可靠性1/1保留。234447双故障实时恢复通过，完整生成每端64220 INSERT/39850 UPDATE；最终因FB-075/076失败，压力延迟另有FB-077。两端wait_free增量0，不宣称唯一根因。 | 00:14:14自动恢复passed，原配置/规则hash核验一致，正常Agent74960/6832，awake33392已released、正常broker队列0。无新长测；先处理FB-076/077，FB-072/073仍open。 |
+| FB-070 | test-ai | bug | open | v0.46.10双端正式安装及Apply覆盖索引迁移通过；同一保留数据计数不变，中心64-96ms/边缘232-266ms。184033中16组Apply统计最慢中心1831.774ms/Edge281.926ms，无metrics超时。 | 本轮因另一生命周期/恢复延迟问题FB-071失败，未满30分钟；索引改进已验证但完整负载门禁尚未完成。保留全部旧失败证据。 |
+| FB-069 | test-ai | bug | closed | 测试夹具现读取32/64位安装登记并拒绝冲突；32位NSIS登记不再误报未安装。 | 32位/64位/重复/冲突/空登记及原监督器回归通过；180024实装预检确认双端注册0.46.9、正式路径、运行实例和包hash一致。不改产品或安装包。 |
+| FB-068 | test-ai | test | blocked | 双端正式v0.46.10配置保留、MCP33工具/诊断、标准migrate和前置功能通过；184033生命周期超时，192354四路对比中心恢复超时，完整30分钟未通过。 | 阻塞转FB-071，所有失败不追认。原现场和中心一路配置恢复，formal-ready仍失效，新七小时未启动。 |
+| FB-067 | test-ai | task | closed | 用户授权的backend-ai实现已完成：只读限时MCP MySQL诊断、非唯一覆盖索引和标准migrate升级、包内schema，不改同步/ACK语义。隔离8万条4KB payload失败计数2310.761ms -> 0.826ms，80条失败及总数不变；最终包CLI独立工作目录迁移通过。 | v0.46.9最终包SHA 6C26E6D397C36238A7DEDCBB246D0EC39368F23C40D741F04917B9F6E699514F；全量test/vet/lint、Wails/契约、41解包hash、5资产、双覆盖含schema、32/64位回归、MCP0.46.9/33工具及新诊断通过。实装交FB-068，负载归因FB-066；无Wails新binding/UI需求。 |
+| FB-066 | test-ai | bug | open | 原正式长测约21分钟snapshot超时，原始失败缺逐SQL诊断，唯一根因未证明。v0.46.10已在双端正式安装并标准迁移事件/Apply覆盖索引，同一保留数据计数不变。 | 15秒采样门禁保留；后续短测未再出现同类采样超时，但受FB-071恢复积压阻塞，仍需完整30分钟实装准入。旧600秒与隔离基准不能代替；当前无长测，formal-ready失效。 |
+| FB-065 | test-ai | task | closed | 临时SYSTEM_REQUIRED唤醒租约通过精确规则归属测试、真实20秒到期退出和160102恢复规则后释放；不写电源方案。 | 正式run租约PID10724已验证active及脚本hash，最长23:23:36，正常规则恢复后自动释放。证据随正式run保留；手动睡眠/关机不在保护范围。 |
+| FB-064 | test-ai | decision | closed | 以源COMMIT时刻和固定峰值/更新重载阶段分组，压力样本保留；稳态P95<=2秒、全部P99<=5秒，样本下限40/25/3。160102共43组，稳态36/压力7，全部门禁通过。 | Edge/Server稳态P95=206.636/620.148ms；全部P95=403.629/1842.609ms，全部P99=808.016/2445.866ms。154525混算失败仍保留，未追认通过。 |
+| FB-063 | test-ai | bug | closed | 修复PowerShell大小写变量冲突、UTF8/共享删除读取、清理错误隔离和Windows原子替换共享锁2秒有界重试；真实临时/持续锁及恢复隔离回归通过。 | 160102完整600.494秒completed，双端原配置/规则/路径自动恢复passed；151711/153921失败证据保留。 |
+| FB-062 | backend-ai | task | closed | 连续不同目标主键UPDATE合并最多64键的publisher-confirm批次；同键/INSERT/DELETE/DDL保持确认屏障，选择性NACK、失败回退及严格主键约束不变。 | 全量test/vet/lint与同速率真实短测160102通过：每端21420 INSERT/13290 UPDATE，5次生命周期、两次故障、峰值及最终全50列/账本通过。长期性能留FB-055。 |
+| FB-061 | backend-ai | bug | closed | Edge常驻Canal与canal-publish-once正确装配apply-log依赖，构造器拒绝nil；修复Server自写行经Edge回传的问题。 | v0.46.8最终包bootstrap、两次所有权交接和11176次在线版本观察通过；143533失败保留，最终证据160102。 |
+| FB-060 | backend-ai | decision | closed | 按用户授权完成backend-ai产品修复，再切换test-ai补夹具、打包和真实准入；无新增Wails DTO/UI功能。 | v0.46.8包、完整600秒短测与formal-ready通过；正式wide7h_0909_161239已启动并经两次相隔78秒快照确认推进。正式七小时结论转FB-055；旧失败与642条隔离消息保留。 |
+| FB-059 | backend-ai | bug | closed | Apply单条/批量/compact写入当前回放标记并兼容列映射，配合FB-061日志依赖修复双向回环与版本回退；业务写入和日志同事务，不改转发源事件。 | 160102六张50列表、每端13290真实UPDATE、完整事务oracle、精确apply/SUCCESS账本、两次同键交接及11176次在线观察通过；旧134654版本回退失败保留。 |
+| FB-058 | backend-ai | bug | closed | SyncEvent/ChangeEvent统一无损JSON数字解码，Canal字符串sync_version正确标准化；BIGINT和DECIMAL不再经float64丢精度。 | v0.46.8包内初/晚期9007199254740993与精确DECIMAL探针、真实Canal边界和全部50列通过；原0.46.7失败证据保留。 |
+| FB-057 | backend-ai | bug | closed | MCP与UI overview共用buildinfo.Version=0.46.8，删除旧硬编码版本。 | 最终包MCP initialize/overview=0.46.8、32工具、headless及NSIS版本验证通过；用户安装目录未永久升级，本轮临时运行包内Agent。 |
+| FB-056 | test-ai | test | closed | 原边缘机 v0.46.7 实包 hash、注册版本和安装摘要 8 步通过；MySQL、本地/中心 RabbitMQ、MCP 32 工具可用。初始 Agent 未启动，已通过安装版 MCP 启动为 PID 1516，并确认 SSH 断开后驻留。20/20 真实上传成功，P50 94.219ms、P95 126.016ms，数据与 apply/SUCCESS 日志各 20，错误/失败 ACK 为 0。 | 原规则未改，队列为空；报告 docs/v0.46.7-installed-connectivity-20260909.md。中心仍 v0.46.6，七小时测试仍未启动（FB-055）；版本文字问题转 FB-057。 |
+| FB-055 | test-ai | test | blocked | wide7h_0909_161239约21分钟因snapshot超过15秒失败，16:34:26自动恢复；每端24980 INSERT/12490 UPDATE，流水行数对齐但最终50列未核验。 | formal-ready已撤销并验证Start拒绝，退化转FB-066；原规则/配置/Agent恢复passed。报告docs/v0.46.8-seven-hour-interruption-20260909.md；不重开或宣称七小时通过。 |
+| FB-054 | backend-ai | bug | closed | 批内幂等已修复，严格业务 INSERT 保留；全量 test/vet/lint 通过。v0.46.7 包内同一事件 4+4 副本真实消费后业务/apply/SUCCESS 各 1，队列为空。安装包 hash F8EB939E1E97956A122ADBA77E27CB0397A9FA6AFF711E9F941BFBCB499161D4，32/64 位各 15 回归、隔离双覆盖、39 文件解包 hash 核验通过。无 Wails DTO/UI 变化。 | test-ai 跨身份修正封包夹具的命名参数转发及版本元数据，理由为 NoBuild 被误当资产目录；作用域仅打包链路。最终包与限制见 docs/v0.46.7-package-validation-20260909.md；后续宽表长测转 FB-055。 |
+| FB-053 | test-ai | test | closed | 最终短测 `fb052-final-20260909` 在重复事件探针失败，双向各写入 16,002，8 次 CRUD、两端 Agent 停机和 ADD/DROP 已执行；未到最终摘要与全场景门禁，不能宣称通过。原规则与 Agent 已恢复。 | 失败根因转 FB-054 批内幂等；review-ai 已确认选择性 NACK 保序问题修复。后续长测按用户最新要求改为 7 小时、真实 UPDATE、50 列宽表，先制作安装包再设计，暂不启动。 |
+| FB-052 | backend-ai | bug | closed | Server Canal 批量日志、连续 append_only 发布、64 条 confirm 窗口及失败源回滚已实现；CRUD/DDL 逐事件确认屏障与选择性 NACK 回归已通过 review-ai 复核。最终独立追加写分发段空表约 513.21/s、百万历史约 306.73/s，对照提升约 14.5/9.0 倍；不是端到端长期指标。无 Wails DTO/UI 变化。 | 纳入 v0.46.7；短测另发现的批内幂等由 FB-054 处理，长期性能验收留待新 7 小时测试，不把旧失败长测改写为通过。 |
+| FB-051 | test-ai | test | closed | 正式双向长测 `overnight-20260908-184000` 在约 3 小时 3 分后失败：Edge -> Server `388,401/388,401`，Server -> Edge `388,401/204,484`，首次 Edge Agent 停机恢复 10 分钟内未追平，后续正式场景未执行。 | 编排器自动恢复原规则和双端 Agent；检查时清理 9 条精确闭合的测试下行残留，恢复探针约 1.50 秒通过。失败结论和吞吐证据见 `docs/v0.46.6-real-bidirectional-overnight-report-20260909.md`，性能缺陷转 FB-052。 |
+| FB-050 | test-ai | test | closed | `192.168.10.105` 的 v0.46.6 正式安装与异机验收完成：注册版本、8 步安装摘要、包内 SyncAgent hash、MCP 32 工具、配置/规则保留、MySQL 与本地/中心 RabbitMQ、安装路径 Agent 启动及 SSH 断开驻留均通过。 | 安装版 20 条隔离单行 Edge -> Server 探针：min 48.015ms、P50 94.728ms、P95 127.240ms、max 195.698ms、avg 98.403ms；源/目标/apply/SUCCESS event 各 20，双端队列与错误为 0。 |
+| FB-049 | test-ai | bug | closed | v0.46.5 单行真实链路延迟 5.13-11.44 秒。已修复 `retry_interval_seconds=10` 被错误复用为空闲轮询，以及 Canal 1000ms 长轮询两个等待点；正常 Worker 轮询和 Canal 长轮询均为 100ms，错误退避语义不变。无 DTO/UI 变更。 | v0.46.6 正式包内二进制 20 条隔离探针：min 62.569ms、P50 79.745ms、P95 141.854ms、max 142.122ms、avg 91.896ms；源/目标/apply/SUCCESS event 各 20，双端队列与错误为 0。详见 `docs/v0.46.6-real-latency-report-20260908.md`。 |
+| FB-048 | test-ai | test | closed | v0.46.5 异机 Edge -> 本机模拟 Server 高压力测试完成：在线递增 1,000/10,000/50,000 行，Server 停机积压恢复 20,000 行。 | 四档源表、中心表、apply/event log 精确 81,000；50,000 行 110.567 秒排空，20,000 停机积压 35.216 秒恢复。最终队列、失败 ACK、错误和失败事件均为 0，详见 `docs/v0.46.5-real-stress-report-20260908.md`。 |
+| FB-047 | test-ai | release | closed | v0.46.5 覆盖升级及真实链路验收完成：异机安装摘要通过，配置/身份/规则保留，远端二进制 hash 与 staging 一致并暴露 32 工具；Edge 和本机模拟 Server 均运行 v0.46.5。 | 远端 Agent PID `7324`，本机 Server PID `9688`；两条探针分别在 5.13 秒和中心重启后 11.44 秒到达，最终队列、失败 ACK、近期错误和边缘失败事件均为 0。 |
+| FB-046 | frontend-ai | task | open | 后端和本机三节点测试已完成数据库治理与列结构同步：MCP 32 工具含结构化查询、受控数据写入和加列/删列；Canal 仅自动同步 `ADD COLUMN` / `DROP COLUMN`，绝不自动建表/删表。跨身份原因：`SyncRule.schema_sync` 已加入稳定 DTO，需要 Rules UI 显式呈现。 | frontend-ai 后续在 Rules 页补 `schema_sync.add_columns/drop_columns` 三语开关与删列风险提示；后端门禁要求非 `SERVER_TO_EDGE` 删列规则恰好一个 `source_node_id`。 |
+| FB-045 | backend-ai | bug | closed | Schema 演进 E2E 发现 `append_only INSERT IGNORE` 会把超宽值静默截断后 ACK；已改为普通 `INSERT`，重放幂等继续由 `sync_apply_log.event_id` 保证，业务约束错误不再被吞掉。 | 单元测试和真实窄列 E2E 通过：目标过窄时 row/apply log 为 0、入口队列为 1；扩列后完整原值恢复。既有 v0.46.4 安装包不含本修复，外部分发前须生成下一版本安装包。 |
+| FB-044 | test-ai | test | closed | 真实业务 Schema 演进 E2E 已覆盖运行中建表、加列、删列、删表重建、源/目标结构不一致、列排除、普通列/主键列映射、CRUD、跨 DDL 混合批次和失败恢复。 | 22 项核心场景结果、生产迁移顺序与剩余覆盖见 `docs/schema-evolution-e2e-report-20260908.md`；测试规则已移除，测试表保留为只读证据。 |
 | FB-038 | backend-ai | release | closed | v0.46.3 内网安装包：新装使用无节点/MySQL/同步规则预设的空白引导配置；NodeBridge 解锁、退出和自有 RabbitMQ 密码统一为 `1234`；托管 RabbitMQ 账号按 `mode/node.id` 生成并在配置落盘前同步修改服务用户；升级迁移旧自有密码但保留 MySQL、Canal 和已有规则；UI 脱敏密码测试及 MCP 保存后可选重启已修复。 | 最终包已被 FB-039 的覆盖安装修订版取代；原包不得继续分发。 |
-| FB-039 | backend-ai | test | open | v0.46.3 覆盖安装：NSIS 复制前精确停止安装目录内旧 NodeBridge/SyncAgent；本机真实两轮 NSIS 覆盖测试已通过，运行中旧 SyncAgent 被停止，二进制更新且配置/规则保留。 | 最终发布包 `build/NodeBridge-beta-v0.46.3-20260907.exe`，SHA256 `DD6852F3BA87550C8C1C708A52B8507875562E322EA3FE114DB4B8A6CAB1D6F9`；最终覆盖证据 `.cache/nsis-upgrade/20260907-174932-107/`，15 项回归证据 `.cache/installer-regression/d1f5e525f97a40f5a461b26205344d03/`。目标边缘机 TCP/22 在线但在 SSH banner 前主动断开，恢复后上传执行真实覆盖升级并核对 RabbitMQ/MCP。 |
+| FB-039 | backend-ai | test | closed | v0.46.3 覆盖安装及其 v0.46.4 后续修订均通过本机真实两轮 NSIS 覆盖、运行中进程停止、二进制更新、配置/规则保留和异机安装验证。 | v0.46.4 覆盖证据 `.cache/nsis-upgrade/20260908-103134-154/upgrade-evidence.json`；15 项回归证据 `.cache/installer-regression/74fced7aa7a54c689fe31bcf6784fd2d/`。边缘机安装摘要版本、步骤和退出码均通过。 |
+| FB-040 | test-ai | test | closed | 本机模拟中心 `192.168.10.103` 与边缘 `192.168.10.105` 的真实 MySQL -> Canal -> RabbitMQ -> Apply -> MySQL 链路已通过。 | 单条初测约 25.91 秒，10 条批量约 16.83 秒；v0.46.4 安装版最终探针约 8.32 秒。中心队列 ready/unacked、失败 ACK 和近 10 分钟同步错误均为 0。 |
+| FB-041 | backend-ai | bug | closed | 修复受管 Canal 配置目录与 destination 不一致：统一使用规范化节点 ID，写入 `canal/conf/<destination>/instance.properties`，激活唯一 destination 并清理旧根目录实例。 | 单元测试、全量门禁、安装器回归及真实边缘自动 CDC 传输通过；纳入 v0.46.4。 |
+| FB-042 | backend-ai | bug | closed | Windows 后台 SyncAgent 使用新进程组并脱离 OpenSSH job，SSH stdio MCP 会话结束后 Agent 保持运行。 | 远端临时二进制和 v0.46.4 安装版均实测通过；无前端 DTO 变化。 |
+| FB-043 | backend-ai | bug | closed | Edge 迁移补齐 `sync_ack_log`，新增 schema 契约测试；`nodebridge_failed_events` 在边缘节点可正常返回空列表。 | 已在目标边缘库迁移并由 v0.46.4 全量门禁和安装版 MCP 复测通过；无前端 DTO 变化。 |
 | FB-037 | backend-ai | release | closed | 发布文档：补充一主多边缘部署、Windows/Mac SSH 公钥授权与 MCP 配置手册，更新根 README，并提交、推送、创建 GitHub Release。 | 已发布 v0.46.3 prerelease：`https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.46.3`。资产大小和 SHA256 digest 已通过 GitHub API 与本地文件核对。 |
 | FB-036 | backend-ai | bug | closed | v0.46.1 安装后普通运行的 `admin\xx` 仅有 ProgramData/NodeBridge Write 权限，原子替换 config.yaml 因缺少 delete-child 权限返回 Access denied。已在目标机按 SID 授予 Modify 并验证替换；安装器新增当前安装账户继承 Modify ACL。 | 目标机 MCP SSH 真实握手、26 工具、overview 和 save_config_patch 通过；Windows Codex 已全局注册。最终 v0.46.2 包 `build/NodeBridge-beta-v0.46.2-20260907.exe`，SHA256 `620208E9B275EAFA1DA2C856C1BFE774F996A5A00FD402DAC6304A7EC3D6BA14`，32/64 位各 13 项回归、解包、资产和 preflight 通过。Mac 私钥仍须在 Mac 本机生成后追加公钥。 |
 | FB-035 | backend-ai | bug | closed | v0.46.1 修复 NSIS 32 位 PowerShell 漏查 x64 Erlang/RabbitMQ：Sysnative 启动、ProgramW6432 检测、原生参数转义、进程句柄保留与安装后探测；日志按次写到独立 ProgramData/NodeBridgeInstallerLogs。无前端 API 变更。 | 32/64 位各 12 项安装器回归、Go test/vet/lint、五个资产 hash、包内 MCP 26 工具 smoke 通过。交付 build/NodeBridge-beta-v0.46.1-20260907.exe；真实异机安装/卸载与 SSH 仍待 FB-034 验收，未在宿主机运行系统组件安装。 |
 | FB-033 | review-ai | task | closed | Windows 第二任务：按用户授权交付 MCP v0.46 全配置实验室版。26 个工具覆盖全部配置字段/凭据/规则/自启动、真实诊断、重试、拓扑和同步进程；SSH stdio 支持 Windows/Mac 客户端，保留加密/校验/脱敏。 | 已修复协议错误、日志 limit、缺失 rules 清空风险、并发 patch 覆盖、跨进程 Agent 识别/独占锁和原子落盘；go test/vet/linter、Wails 构建、包内 EXE/中文/空格路径 smoke 通过。安装包 build/NodeBridge-beta-v0.46.0-20260907.exe，SHA256 0017615A0EB455A2DD8920075775B0913077412480D868AC8FD2DC3D518BB5B8。真实异机验收交给 test-ai FB-034。 |
-| FB-034 | test-ai | test | open | MCP v0.46 真实内网异机验收：Windows 控制端已通过 SSH 公钥连接边缘机 `192.168.10.102`；真实 initialize、26 工具、配置保存、MySQL/RabbitMQ 探测和规则清空通过。 | 已按现场账号配置 `127.0.0.1:3306/scada_edge` 并创建 UTF8MB4 空库，MySQL/RabbitMQ 均 running；当前 `sync-rule.yaml` 与旧 `sync-rules.yaml` 均清空，队列为 0，Agent 保持 stopped。下一步验证 Mac 公钥、Agent 启停/重连、首次无 UI 配置及安装器二次安装/卸载（关联 FB-032）。 |
+| FB-034 | test-ai | test | open | MCP v0.46.4 Windows 内网异机验收完成：SSH 公钥连接、initialize、27 工具、配置/规则、MySQL/RabbitMQ 探测、Agent 启停与断开后驻留、真实数据链路均通过。 | Windows 部分已闭环；仅剩在 Mac 本机生成私钥、追加公钥并验证 SSH MCP 重连。 |
 | FB-001 | backend-ai | question | closed | 前端需要显式配置状态，避免长期通过空 `mode/node.id/mysql.database` 推断首次配置。 | 已在 `GetOverview` 增加 `config_loaded/config_path/rules_path/node_id/node_name`。 |
 | FB-002 | backend-ai | question | closed | Wails 绑定生成 `Not found: time.Time` 警告。 | Wails UI DTO 时间字段已改为 RFC3339 string。 |
 | FB-003 | backend-ai | question | closed | 安装后 `SyncAgent.exe` 固定查找路径与优雅 shutdown 协议未冻结。 | 已冻结查找顺序并实现 stop-file 优雅停止；前端只展示 `GetAgentProcessStatus()` 和操作结果。 |
@@ -114,6 +278,37 @@
 ```
 
 ## Activity Log
+
+- 2026-09-11 11:10 | review-ai | plan | FB-101首次对齐及全功能MCP实施方案交付；用户要求可选非全自动，已定义默认关闭/手动批准/不隐式触发及T11。后端、前端、测试与业务边界确认分别登记FB-102至105。仅文档，无稳定DTO/运行代码/现场变更，不执行安装或长测。 | closed
+
+- 2026-09-11 09:48 | backend-ai | answer | FB-095按先方案/报告/再修复交付，原表有界复现后确认日志UPSERT尾部锁放大，FB-096源码修复及真实双事务/回滚/重放/test/vet/lint通过。未出包部署、不追加长测；FB-094原超时与整链路验收open。无UI/DTO影响，现场已恢复。 | closed
+
+- 2026-09-10 10:11 | test-ai | test | 093438完整1800.925秒及全部门禁/恢复通过，formal-ready绑定E61/WorkspaceServer及原配置。100650七小时10:07:37启动，实际runner33492/producer29224及相隔139.794秒增长快照验证；awake5388active。用户要求的稳定启动已满足，七小时最终结果仍open（FB-083），FB-072概览统计及FB-073纯空闲复核仍open。 | open
+
+- 2026-09-10 09:36 | test-ai | test | FB-082边缘安装6348结束成功，解密全文/规则保留，新MCP启动16060、诊断2GiB通过；中心42184工作区E61/8GiB。093438前置功能通过、完整1800秒运行中，awake4940已核验active。FB-081实现关闭，压力及长测准入仍open。 | open
+
+- 2026-09-10 09:31 | test-ai | decision | 从backend-ai接回FB-082，v0.46.12最终包门禁完成；中心不安装，边缘包已上传，配置/规则已备份。准备实际升级和完整短测，不将隔离性能收益宣称为P99通过。 | open
+
+- 2026-09-10 09:20 | backend-ai | decision | 接手FB-081事件日志多行SQL；test-ai诊断回归及全量test/vet/lint已通过。100万历史基准在准备阶段因DSN30秒读超时失败，临时库已核验清除，不将其当产品失败；零历史完整混合/回放基准通过，证明日志往返成本，仍需完整真实负载验证。 | open
+
+- 2026-09-10 09:12 | test-ai | test | 083751在最终延迟核验失败，账本及全部业务字段通过；两端wait_free/log_waits增量均0。09:07:09恢复passed，Agent39956/15820、规则hash及业务队列0核验，awake7644已released并退出。FB-077未解决转FB-080继续归因；无新长测。 | open
+
+- 2026-09-10 08:40 | test-ai | decision | FB-079测试脚本新增显式WorkspaceServer模式及模式/路径绑定准入，Installed默认保留；越界/旧进程/hash/边缘注册/证明误用回归、原子写及全量test/vet/lint通过。FB-078解除安装阻塞；runner54264运行新1800秒，awake7644确认active，最长09:14:08或原规则恢复即释放。 | open
+
+- 2026-09-09 20:50 | test-ai | diagnostic | 原一路202640恢复失败，首次取得同时间段缓存耗尽、SQL日志执行占用和Canal缓冲背压证据；全场景未完成，1570条隔离并恢复双端。等待MySQL内存对照确认。SQL观察器为只读测试代码；另修成功单元测试误用50ms期限，30次及全量test/vet/lint通过。 | blocked
+
+- 2026-09-09 20:20 | test-ai | diagnostic | FB-071隔离50万历史宽UPDATE分发364.91/s，40 INSERT/20 UPDATE交错246.50/s，日志/顺序/50列通过；新增FB-073空闲位点反馈证据，产品与MySQL配置未改。全量test/vet/lint通过。 | running
+
+- 2026-09-09 20:07 | test-ai | test | FB-071原一路195000完成600秒全门禁和恢复，P95 Edge404/Server625ms；不满足1800秒准入。缓存wait_free增量0；隔离驱动基准两模式均>490事件/秒，继续大历史对照，未改产品DSN或MySQL参数 | running
+
+- 2026-09-09 19:50 | test-ai | test | FB-071四路192354中心恢复超时，36900 INSERT/18450 UPDATE每端；原现场与一路配置恢复，500条confirm隔离。补测试MySQL缓存/刷盘计数，下一轮10分钟只作诊断，不签发30分钟准入 | running
+
+- 2026-09-09 17:32 | test-ai | answer | 接收backend-ai的FB-067只读MCP诊断、非唯一覆盖索引幂等迁移及包内schema，完成v0.46.9完整门禁；原始超时唯一根因不追认。FB-068等待双端正式安装，新硬门禁要求实装路径/版本/hash及至少30分钟准入，FB-066 open、FB-055 blocked | closed
+
+- 2026-09-09 16:40 | test-ai | test | 检查发现正式run在16:34:10因snapshot超时失败，恢复passed；双向流水24980行、版本观察无回退但未做最终全量。撤销准入并实测Start拒绝，FB-055 blocked、FB-066 open；未改产品或重开长测 | blocked
+
+- 2026-09-09 16:16 | test-ai | test | FB-057至065完成修复、最终v0.46.8包及真实准入：160102完整600.494秒、每端21420 INSERT/13290 UPDATE、50列/账本/版本观察/场景/延迟/恢复全部通过；43个样本的全部P95亦低于2秒，旧失败记录原样保留 | closed
+- 2026-09-09 16:16 | test-ai | test | FB-055正式wide7h_0909_161239于16:13:22开始、计划23:13:22结束；runner72756/producer52756及双Agent存活，两次相隔78秒快照确认源/目标持续推进且无失败ACK/事件；临时唤醒PID10724生效，不改电源方案，不提前宣称七小时通过 | running
 
 Activity Log 是历史流水，可能保留当时的 `open` 状态；当前真实待办以 Active Board 为准。
 
@@ -426,4 +621,30 @@ Activity Log 是历史流水，可能保留当时的 `open` 状态；当前真�
 - 2026-09-07 17:24 | backend-ai | answer | FB-038 完成 v0.46.3 功能修订：空白新装配置/空规则，节点派生 RabbitMQ 账号与服务密码原子迁移，中心边缘账号 MCP 工具，旧版自有密码升级迁移，UI 脱敏测试和 MCP 保存后重启；该阶段初始包已由 FB-039 覆盖安装修订包取代，不得分发；全量门禁及包内 27 工具 smoke 通过 | closed
 - 2026-09-07 16:34 | test-ai | test | FB-034 Windows 控制端真实 SSH MCP 通过；目标 Edge MySQL 改为 `127.0.0.1:3306/scada_edge` 并创建 UTF8MB4 空库，MySQL/RabbitMQ 探测 running；当前和旧版规则文件均清空、队列为 0、Agent 保持 stopped | open
 - 2026-09-07 17:52 | backend-ai | test | FB-039 最终发布包哈希校正为 `DD6852F3BA87550C8C1C708A52B8507875562E322EA3FE114DB4B8A6CAB1D6F9`；重新执行真实双 NSIS 覆盖和 15 项安装器回归均通过。目标边缘机 TCP/22 可连但在 SSH banner 前断开，真实异机覆盖待 SSH 恢复 | open
+- 2026-09-08 09:11 | test-ai | test | FB-034 重装后边缘机 IP 更新为 `192.168.10.105`；SSH MCP initialize、v0.46.3/27 工具、配置摘要和实时探测通过。MySQL/本机 RabbitMQ running；中心 RabbitMQ 仍为示例 `192.168.1.10:5672` 且超时，Agent stopped | open
+- 2026-09-08 09:34 | test-ai | test | FB-040 本机 `192.168.10.103` 以跳过系统组件方式安装 v0.46.3，复用 Docker MySQL/RabbitMQ并新增 Canal，配置为 `server-001`；中心全组件和 Agent running，边缘已改指中心且 RabbitMQ 双连接 running。最小业务数据链路待验收 | open
+- 2026-09-08 10:44 | backend-ai | answer | FB-039 至 FB-043 收口：v0.46.4 修复 Canal destination 路径、SSH 后台进程驻留和 Edge `sync_ack_log`；Go/前端/安装器全门禁通过，远端安装摘要通过，最终安装版自动数据探针 8.32 秒到达，队列和错误均为 0 | closed
+- 2026-09-08 10:44 | backend-ai | answer | FB-034 Windows 异机 MCP、Agent 驻留及数据链路均完成；保留 open 仅跟踪 Mac 本机密钥和 SSH MCP 重连 | open
 - 2026-09-07 17:59 | backend-ai | release | FB-037 已完成：提交并推送 main，创建并推送 `v0.46.3` 标签，GitHub prerelease 及 Windows 安装包上传成功；API 核对资产状态、大小和 SHA256 digest 通过 | closed
+- 2026-09-08 11:22 | test-ai | test | FB-040 按边缘新部署状态复测：SSH stdio MCP `initialize`/27 工具/配置/规则/依赖通过，MCP 启动边缘 Agent PID 4948；探针 `1788837621242` 在 10.58 秒后到达当前 PC 中心库，两端 Agent/CDC/MySQL/RabbitMQ running，队列与失败事件为 0。Edge v0.46.4 -> Server v0.46.3 跨版本链路通过，中心升级未执行 | closed
+- 2026-09-08 12:03 | test-ai | test | FB-044 Schema 演进 E2E 完成：22 项核心场景覆盖 DDL 边界、结构不匹配保留/恢复、列排除与映射、CRUD、主键映射、删表重建和跨 DDL 批次；规则已恢复，最终探针 17.18 秒通过，报告已生成 | closed
+- 2026-09-08 12:03 | backend-ai | answer | FB-045 修复 append-only `INSERT IGNORE` 静默截断：改为普通 `INSERT`，单元测试、全量 test/vet/lint 和真实窄列阻塞/扩列完整恢复通过；v0.46.4 旧包不含修复 | closed
+- 2026-09-08 13:59 | backend-ai | answer | FB-046 后端与测试完成：新增 5 个结构化 MCP 数据治理工具、写入审计和行数/计划确认；Canal/SyncEvent/Mapper/Apply 支持规则授权的单列 ADD/DROP，禁止自动建表/删表。隔离 Edge A 3307/5673/Canal 11121 -> Server 3309/5675 -> Edge B 3308/5674 E2E 连续两次通过 INSERT、ADD、UPDATE 新列、DROP，最终队列为 0；Rules UI 三语开关移交 frontend-ai | open
+- 2026-09-08 14:15 | backend-ai | release | FB-047 v0.46.5 安装包已生成并移交 test-ai：SHA256 `FAC49E2B0B2705C64178F14796A921FF9B4A752C79B2B80507C69293F3C07297`；包内 SyncAgent MCP 32 工具真实进程冒烟通过，NSIS 两轮隔离覆盖验证旧进程停止、二进制更新、配置和规则保留。等待用户完成异机安装后验收 Edge -> 本机模拟 Server 链路 | open
+- 2026-09-08 14:50 | test-ai | test | FB-047 异机 v0.46.5 安装摘要、配置/规则保留、32 工具和 SyncAgent hash 通过；MCP 启动 Edge Agent PID 7324，本机模拟 Server 受控重启为 PID 9688。重启前后两条真实探针分别 5.13 秒、11.44 秒到达，最终队列/失败 ACK/近期错误/边缘失败事件均为 0 | closed
+- 2026-09-08 14:55 | test-ai | test | FB-048 启动 v0.46.5 异机高压力测试：独立 ID 区间在线递增 61,000 行，加 Server 停机积压恢复 20,000 行；核对精确行数、apply log、队列、错误和进程恢复 | open
+- 2026-09-08 15:35 | test-ai | test | FB-048 完成：在线 1k/10k/50k 与 Server 停机积压 20k 全部通过；总计 81,000 行在 Edge、中心、apply log、SUCCESS event log 精确一致，50k 有效速率 452.22 行/秒，20k 恢复速率 567.92 行/秒，最终队列/失败 ACK/错误/失败事件全为 0 | closed
+- 2026-09-08 15:48 | backend-ai | bug | FB-049 启动：确认 5-12 秒并非内网 RTT，而是 `retry_interval_seconds=10` 被错误复用为空闲轮询；修复范围限于 Worker 配置语义和回归测试，随后切换 test-ai 做真实异机延迟分布验证 | open
+- 2026-09-08 15:53 | test-ai | test | FB-049 后端修复已通过 `go test ./...`、`go vet ./...`、`golangci-lint`；SHA256 `436B362D82E0646882F0DB07EF4821A5849B1678ACB9BA8995DB37D5527F2289` 的临时二进制已启动为远端 Edge PID 10848、本机 Server PID 52448，开始单行延迟分布验证 | open
+- 2026-09-08 16:27 | test-ai | release | FB-049 完成：先拆分 Worker 空闲/错误间隔将 20 条 P50 降至约 0.81 秒，再把 Canal 1000ms 长轮询收紧为 100ms；最终 v0.46.6 包内二进制 20 条 min/P50/P95/max 为 62.569/79.745/141.854/142.122ms，数据与日志各 20、队列和错误为 0。安装包 SHA256 `71E8D3BAD677E44ECB1A5D874DCA0FAF947B8BA21CC3C89F6B746DFDE922CAC9`，Go 门禁、package smoke、32 工具 MCP 与 NSIS 双覆盖通过 | closed
+- 2026-09-08 17:10 | test-ai | test | FB-050 完成：目标 `192.168.10.105` 正式注册为 v0.46.6，安装摘要 8 步通过，安装目录 SyncAgent hash 与 staging 一致；MCP 32 工具、配置/规则/依赖、PID 5040 SSH 断开驻留通过。安装版 20 条 min/P50/P95/max 为 48.015/94.728/127.240/195.698ms，四类数据各 20、队列和错误为 0 | closed
+- 2026-09-08 17:28 | test-ai | test | FB-051 启动：设计真实 Edge/Server 约 13 小时无人值守双向跨夜长测，采用隔离表与成对方向规则，后台 runner 持久记录心跳、阶段、计数、队列、故障注入和最终一致性，并在结束时自动恢复原规则和 Agent | running
+- 2026-09-08 18:41 | test-ai | test | FB-051 加速 smoke `smoke-20260908-183400` 全部通过：双向各 882 行源/目标计数与 CRC 摘要一致，双侧错误和三条中心队列均为 0，两次 Agent 停机恢复、双向 ADD/DROP、重复事件幂等及现场恢复均通过。正式任务 `overnight-20260908-184000` 已启动为 PID `1780`，计划运行至 2026-09-09 07:40:17 +08:00；连续心跳、双向首批与初始累计各 1,801 行已确认，随后停止主动监控 | running
+- 2026-09-09 08:46 | test-ai | test | FB-051 正式长测在约 3 小时 3 分后失败：Edge -> Server 388,401/388,401，Server -> Edge 388,401/204,484，首次 Edge 停机恢复 10 分钟未追平；双侧错误为 0，中心下行队列长期为 0/1。原规则/Agent 自动恢复，9 条测试残留已清理，恢复探针约 1.50 秒通过。报告已生成，Server CDC 逐事件日志与 confirm 吞吐问题转 FB-052 | closed
+- 2026-09-09 10:00 | backend-ai | answer | FB-052/FB-054：批量分发、确认保序、失败源回滚和批内幂等修复完成；选择性 NACK 审阅闭合，全量 Go 门禁通过；无新增前端 DTO/UI 需求 | closed
+- 2026-09-09 10:00 | test-ai | test | FB-053 最终短测失败如实归档并转 FB-054；v0.46.7 包内 4+4 重放、32/64 位安装回归、NSIS 双覆盖与实际解包通过；跨身份修正封包夹具 NoBuild 命名参数与版本元数据。原双端规则保留，Server 旧版从备份路径运行 | closed
+- 2026-09-09 10:00 | test-ai | decision | FB-055 七小时宽表方案与 schema 设计完成，强调真实 UPDATE、50 列填充/更新/比较、独立生产时钟和提交账本；未实现完整新编排器、未升级边缘机、未启动长测 | open
+- 2026-09-09 13:17 | test-ai | test | FB-056 用户安装 v0.46.7 后连通验收通过：安装 hash/注册版本/8 步摘要、SSH MCP 32 工具、MySQL 与两端 RabbitMQ、20 条真实同步及精确数据/日志核验通过；启动 Edge Agent PID 1516，SSH 断开后保持运行；Go test/vet/lint 通过 | closed
+- 2026-09-09 13:17 | test-ai | question | FB-057 安装实包为 v0.46.7，overview/MCP 仍硬编码显示 v0.46.6，转 backend-ai 统一版本来源；不影响本次连通结论，未现场改代码或配置 | open
+- 2026-09-09 14:10 | test-ai | test | FB-055 新50列短测各11460 INSERT+5730 UPDATE后受控停止；十分钟未完成，正式七小时未启动。已登记FB-058数字精度、FB-059真实双向版本回退，夹具缺失门禁保持WIP，正式Start已加拒绝保护 | blocked
+- 2026-09-09 14:10 | test-ai | test | 原规则hash与Agent路径恢复，642条本run残留经逐条身份检查/confirm后移至持久隔离队列，正常队列0；恢复上传探针3/3、80.786-116.356ms通过。全量Go test/vet/lint（0 issues）、PS parser及拒绝门禁通过。产品修复/重打包待用户答复，不把单元门禁当作宽表验收通过 | blocked

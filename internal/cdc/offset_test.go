@@ -2,9 +2,25 @@ package cdc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 )
+
+func TestCheckpointDispositionIsNotPersistedInOffsetJSON(t *testing.T) {
+	original := Offset{ReaderName: "server-001", BinlogFile: "binlog.1", BinlogPos: 40, SkipCheckpoint: true}
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored Offset
+	if err := json.Unmarshal(data, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if restored.SkipCheckpoint || restored.ReaderName != original.ReaderName || restored.BinlogPos != original.BinlogPos {
+		t.Fatalf("transient checkpoint disposition leaked: %+v", restored)
+	}
+}
 
 func TestMemoryOffsetStoreSaveLoad(t *testing.T) {
 	store := NewMemoryOffsetStore()

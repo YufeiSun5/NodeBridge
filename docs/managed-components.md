@@ -2,7 +2,7 @@
 
 ## 目标
 
-安装程序可以默认安装 NodeBridge 需要的组件，但必须只管理 NodeBridge 自己创建的资源。客户已有 MySQL、RabbitMQ、Canal 可以配置使用，NodeBridge 不擅自修改或删除。
+从0.46.15起，安装程序默认复用已有组件，只有在向导中明确选择安装系统组件（或传 /InstallSystemComponents）后才进入组件安装流程。复用模式跳过组件安装、受管密码迁移和拓扑配置，保留已有配置及资源归属；全新复用安装创建external配置。此为半自动选择，不自动识别Docker或验证连接。客户已有 MySQL、RabbitMQ、Canal 可以配置使用，NodeBridge 不擅自修改或删除。
 
 ## 资源归属
 
@@ -73,6 +73,7 @@ cdc:
 - 不修改客户已有 Canal config dir 或 destination。
 - 不把 Docker 作为交付组件；Docker 仅用于开发测试。
 - 敏感字段仍通过 DPAPI 或等价机制加密保存。
+- MCP 远程连接使用已有 SSH 服务承载 stdio。本安装包不安装 SSH/VPN，不创建 MCP HTTP 监听、token、专用任务或防火墙规则；SSH 服务由操作员独立管理。
 
 ## V0.31 Alpha 执行器
 

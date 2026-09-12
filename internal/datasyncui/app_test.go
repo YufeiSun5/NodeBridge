@@ -176,7 +176,7 @@ func TestTestRabbitMQSplitsLocalAndServer(t *testing.T) {
 	}
 }
 
-func TestSyncRulesRoundTripPersists(t *testing.T) {
+func TestDraftSyncRulesRoundTripPersists(t *testing.T) {
 	app, _, rulesPath := newTempApp(t)
 	unlockTestAdmin(t, app)
 	saved, err := app.SaveSyncRules(uiapi.SaveSyncRulesRequest{Rules: []rules.SyncRule{
@@ -184,9 +184,9 @@ func TestSyncRulesRoundTripPersists(t *testing.T) {
 			ID:             "device",
 			DatabaseName:   "scada_edge",
 			TableName:      "device_config",
-			Direction:      rules.DirectionBidirectional,
-			ConflictPolicy: rules.ConflictLastWriteWin,
-			Enable:         true,
+			Direction:      rules.DirectionEdgeToServer,
+			ConflictPolicy: rules.ConflictNone,
+			Enable:         false,
 			PrimaryKeys:    []string{"id"},
 		},
 	}})

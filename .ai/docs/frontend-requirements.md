@@ -78,6 +78,7 @@ DataSync 前端第一阶段只做本地管理端，不实现同步核心逻辑�
 - Set AutoStart 必须要求管理解锁。
 - Set MCP Server 必须要求管理解锁。
 - MCP Server 开关必须调用 `GetMCPServerStatus` / `SetMCPServerEnabled`。
+- MCP 远程连接沿用 SSH + stdio，不提供 VPN/token 设置。按用户决定撤回未发布的远程专用 UI。
 - 启用 MCP Server 开关必须要求管理解锁，并如实显示 `configured` / `unsupported` / `error` 状态。
 
 必须禁止：

@@ -57,3 +57,13 @@ func TestRuntimeStoreKeepsLogRing(t *testing.T) {
 		t.Fatalf("unexpected logs %+v", logs)
 	}
 }
+
+func TestRuntimeStoreRedactsErrorsBeforeRetention(t *testing.T) {
+	store := NewRuntimeStore()
+	store.SetErrorRedactor(func(string) string { return "safe diagnostic" })
+	store.RecordError("worker", errors.New("secret"))
+	snapshot := store.Snapshot()
+	if snapshot.Workers[0].LastError != "safe diagnostic" || snapshot.Logs[0].Message != "safe diagnostic" {
+		t.Fatalf("unredacted retention: %+v", snapshot)
+	}
+}

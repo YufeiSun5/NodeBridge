@@ -224,6 +224,28 @@ func TestRuleSetValidateRejectsInvalidSourceNodeID(t *testing.T) {
 	}
 }
 
+func TestRuleSetValidateRequiresScopedDropColumnSource(t *testing.T) {
+	for _, sourceNodeIDs := range [][]string{nil, {"edge-001", "edge-002"}} {
+		set := rules.RuleSet{Rules: []rules.SyncRule{{
+			DatabaseName: "scada_edge", TableName: "device_config",
+			Direction: rules.DirectionBidirectional, SourceNodeIDs: sourceNodeIDs,
+			PrimaryKeys: []string{"id"}, SchemaSync: rules.SchemaSync{DropColumns: true},
+		}}}
+		if err := set.Validate(); err == nil {
+			t.Fatalf("expected DROP COLUMN scope error for %+v", sourceNodeIDs)
+		}
+	}
+
+	serverRule := rules.RuleSet{Rules: []rules.SyncRule{{
+		DatabaseName: "scada_center", TableName: "device_config",
+		Direction: rules.DirectionServerToEdge, PrimaryKeys: []string{"id"},
+		SchemaSync: rules.SchemaSync{DropColumns: true},
+	}}}
+	if err := serverRule.Validate(); err != nil {
+		t.Fatalf("SERVER_TO_EDGE drop should not require source scope: %v", err)
+	}
+}
+
 func TestRuleSetValidateRejectsInvalidDispatchTarget(t *testing.T) {
 	set := rules.RuleSet{Rules: []rules.SyncRule{
 		{

@@ -18,6 +18,8 @@ func DSN(cfg appconfig.MySQLConfig) string {
 	mysqlCfg.Addr = net.JoinHostPort(cfg.Host, fmt.Sprint(cfg.Port))
 	mysqlCfg.DBName = cfg.Database
 	mysqlCfg.ParseTime = true
+	// The fixed UTF-8 charset allows driver escaping without per-query prepares.
+	mysqlCfg.InterpolateParams = true
 	mysqlCfg.Loc = time.Local
 	mysqlCfg.Params = map[string]string{"charset": "utf8mb4"}
 	return mysqlCfg.FormatDSN()

@@ -2,6 +2,7 @@ package rabbitmq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/rabbitmq/amqp091-go"
@@ -17,11 +18,19 @@ type PeekedMessage struct {
 	Headers     amqp091.Table
 }
 
-func PeekMessages(ctx context.Context, getter QueueGetter, queueName string, limit int) ([]PeekedMessage, error) {
+func PeekMessages(ctx context.Context, getter QueueGetter, queueName string, limit int) (result []PeekedMessage, err error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	result := make([]PeekedMessage, 0, limit)
+	result = make([]PeekedMessage, 0, limit)
+	held := make([]amqp091.Delivery, 0, limit)
+	defer func() {
+		for _, delivery := range held {
+			if nackErr := delivery.Nack(false, true); nackErr != nil {
+				err = errors.Join(err, fmt.Errorf("requeue peeked message from %s: %w", queueName, nackErr))
+			}
+		}
+	}()
 	for len(result) < limit {
 		if err := ctx.Err(); err != nil {
 			return result, err
@@ -33,15 +42,12 @@ func PeekMessages(ctx context.Context, getter QueueGetter, queueName string, lim
 		if !ok {
 			return result, nil
 		}
+		held = append(held, delivery)
 		result = append(result, PeekedMessage{
 			Body:        append([]byte(nil), delivery.Body...),
 			ContentType: delivery.ContentType,
 			Headers:     delivery.Headers,
 		})
-		// Peek, then return. / 只看后放回。 / 見たら戻す。
-		if err := delivery.Nack(false, true); err != nil {
-			return result, fmt.Errorf("requeue peeked message from %s: %w", queueName, err)
-		}
 	}
 	return result, nil
 }

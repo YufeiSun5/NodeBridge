@@ -14,7 +14,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/YufeiSun5/NodeBridge/internal/agentlog"
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
+	"github.com/YufeiSun5/NodeBridge/internal/buildinfo"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
 	"github.com/YufeiSun5/NodeBridge/internal/uiapi"
 )
@@ -85,6 +87,13 @@ func (s StaticService) QueueStatus(context.Context) (any, error) {
 }
 
 func (s StaticService) SyncRules(context.Context) (any, error) {
+	if strings.TrimSpace(s.RulesPath) != "" {
+		set, revision, err := rules.LoadFileWithRevision(s.RulesPath)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"rules": set.Rules, "saved_revision": revision}, nil
+	}
 	current, err := s.currentRules()
 	if err != nil {
 		return nil, err
@@ -194,7 +203,8 @@ func (s StaticService) SaveSyncRules(ctx context.Context, args json.RawMessage) 
 		return nil, fmt.Errorf("rules_path is required")
 	}
 	var req struct {
-		Rules []rules.SyncRule `json:"rules"`
+		Rules            []rules.SyncRule `json:"rules"`
+		ExpectedRevision string           `json:"expected_revision"`
 	}
 	if err := json.Unmarshal(args, &req); err != nil {
 		return nil, err
@@ -203,17 +213,20 @@ func (s StaticService) SaveSyncRules(ctx context.Context, args json.RawMessage) 
 	if req.Rules == nil {
 		return nil, fmt.Errorf("rules array is required; use [] to remove all rules")
 	}
-	if err := rules.SaveFile(s.RulesPath, set); err != nil {
+	revision, err := rules.SaveFileCAS(s.RulesPath, set, req.ExpectedRevision)
+	if err != nil {
 		s.audit("reject_sync_rules", map[string]any{"rules_path": s.RulesPath, "reason": err.Error(), "rule_count": len(req.Rules)})
 		return nil, err
 	}
 	s.audit("save_sync_rules", map[string]any{"rules_path": s.RulesPath, "rule_count": len(req.Rules)})
 	return map[string]any{
-		"ok":         true,
-		"status":     "saved",
-		"rules_path": s.RulesPath,
-		"rule_count": len(req.Rules),
-		"rules":      req.Rules,
+		"ok":             true,
+		"status":         "saved",
+		"rules_path":     s.RulesPath,
+		"rule_count":     len(req.Rules),
+		"rules":          req.Rules,
+		"saved_revision": revision,
+		"activation":     "restart_required",
 	}, nil
 }
 
@@ -317,7 +330,7 @@ func (s Server) call(ctx context.Context, method string, params json.RawMessage)
 		}
 		return map[string]any{
 			"protocolVersion": version,
-			"serverInfo":      map[string]string{"name": "nodebridge", "version": "0.46.3"},
+			"serverInfo":      map[string]string{"name": "nodebridge", "version": buildinfo.Version},
 			"capabilities":    map[string]any{"tools": map[string]any{}, "resources": map[string]any{}},
 		}, nil
 	case "ping":
@@ -483,7 +496,14 @@ func inputSchemaForTool(name string) map[string]any {
 			"type":     "object",
 			"required": []string{"rules"},
 			"properties": map[string]any{
-				"rules": map[string]any{"type": "array", "items": map[string]any{"type": "object"}},
+				"expected_revision": map[string]any{"type": "string", "description": "Required when replacing an existing file. Use saved_revision from nodebridge_sync_rules; stale revisions are rejected."},
+				"rules": map[string]any{"type": "array", "items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"delete_mode":     map[string]any{"type": "string", "enum": []string{"HARD", "SOFT"}, "description": "Missing legacy value means SOFT. HARD only applies source DELETE events, not extra target rows."},
+						"conflict_policy": map[string]any{"type": "string", "description": "Only NONE is supported for enabled rules; SERVER_WIN and LAST_WRITE_WIN cannot be enabled."},
+					},
+				}},
 			},
 		}
 	case "nodebridge_failed_events", "nodebridge_logs":
@@ -786,39 +806,9 @@ func readLogTail(path string, limit int) []string {
 	if strings.TrimSpace(path) == "" {
 		return []string{}
 	}
-	f, err := os.Open(path)
+	lines, err := agentlog.Tail(path, limit)
 	if err != nil {
 		return []string{"log unavailable: " + err.Error()}
 	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return []string{"log unavailable: " + err.Error()}
-	}
-	const maxTail = 1024 * 1024
-	start := max(int64(0), info.Size()-maxTail)
-	data, err := io.ReadAll(io.NewSectionReader(f, start, maxTail))
-	if err != nil {
-		return []string{"log unavailable: " + err.Error()}
-	}
-	if start > 0 {
-		if i := bytes.IndexByte(data, '\n'); i >= 0 {
-			data = data[i+1:]
-		}
-	}
-	if limit <= 0 || limit > 500 {
-		limit = 100
-	}
-	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
-	out := make([]string, 0, 100)
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			out = append(out, line)
-		}
-	}
-	if len(out) > limit {
-		out = out[len(out)-limit:]
-	}
-	return out
+	return lines
 }

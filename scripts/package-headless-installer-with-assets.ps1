@@ -1,4 +1,5 @@
 param(
+    [string]$Version = "0.46.15",
     [string]$OfflineAssetsDir = "",
     [string]$ErlangFile = "otp_win64_27.3.4.11.exe",
     [string]$JavaFile = "OpenJDK-jre.zip",
@@ -17,8 +18,6 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
-$version = "0.46.3"
-
 if ($OfflineAssetsDir -eq "") {
     $OfflineAssetsDir = Join-Path $root ".cache/offline-assets"
 }
@@ -49,9 +48,11 @@ function Copy-OptionalAsset {
     return $false
 }
 
-$packageArgs = @("-NoZip", "-RefreshConfig")
-if ($NoBuild) {
-    $packageArgs += "-NoBuild"
+$packageArgs = @{
+    Version = $Version
+    NoZip = $true
+    RefreshConfig = $true
+    NoBuild = $NoBuild
 }
 & (Join-Path $root "scripts/package-headless-installer-test.ps1") @packageArgs
 if ($LASTEXITCODE -ne 0) {
@@ -73,6 +74,7 @@ $catalogArgs = @{
     ErlangVersion = $ErlangVersion
     RabbitMQVersion = $RabbitMQVersion
     CanalVersion = $CanalVersion
+    BundleVersion = $Version
 }
 if ($hasJava) {
     $catalogArgs["JavaFile"] = $JavaFile
@@ -87,7 +89,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "prepare-installer-assets-catalog failed with exit code $LASTEXITCODE"
 }
 
-& (Join-Path $bundleRoot "scripts/headless-installer-test.ps1")
+& (Join-Path $bundleRoot "scripts/headless-installer-test.ps1") -BundleVersion $Version
 if ($LASTEXITCODE -ne 0) {
     throw "headless installer preflight failed with exit code $LASTEXITCODE"
 }

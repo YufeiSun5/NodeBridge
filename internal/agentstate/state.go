@@ -7,15 +7,19 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/YufeiSun5/NodeBridge/internal/atomicfile"
 )
 
 var ErrRunning = errors.New("agent already running for this configuration")
 
 type State struct {
-	PID        int    `json:"pid"`
-	Executable string `json:"executable"`
-	StartedAt  string `json:"started_at"`
-	StopFile   string `json:"stop_file"`
+	PID           int    `json:"pid"`
+	Executable    string `json:"executable"`
+	StartedAt     string `json:"started_at"`
+	StopFile      string `json:"stop_file"`
+	RulesPath     string `json:"rules_path,omitempty"`
+	RulesRevision string `json:"rules_revision,omitempty"`
 }
 
 func paths(config string) (string, string) {
@@ -75,4 +79,29 @@ func Read(config string) (*State, error) {
 		return nil, err
 	}
 	return &state, nil
+}
+
+func PublishRules(config, rulesPath, revision string) error {
+	_, path := paths(config)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var state State
+	if err := json.Unmarshal(data, &state); err != nil {
+		return err
+	}
+	if state.PID != os.Getpid() {
+		return errors.New("only the running agent can publish its rules revision")
+	}
+	state.RulesPath, err = filepath.Abs(rulesPath)
+	if err != nil {
+		return err
+	}
+	state.RulesRevision = revision
+	data, err = json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	return atomicfile.Write(path, data, 0o600)
 }

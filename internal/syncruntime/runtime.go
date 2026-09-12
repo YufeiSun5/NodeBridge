@@ -35,12 +35,25 @@ type DownlinkDispatcher interface {
 	Dispatch(ctx context.Context, evt event.SyncEvent, targetNodeID string) error
 }
 
+type DownlinkRequest struct {
+	Event        event.SyncEvent
+	TargetNodeID string
+}
+
+type BatchDownlinkDispatcher interface {
+	DispatchBatch(ctx context.Context, requests []DownlinkRequest) error
+}
+
 type EventLogStore interface {
 	UpsertEventLog(ctx context.Context, record syncstore.EventLogRecord) error
 }
 
 type EventLogBatchStore interface {
 	UpsertEventLogs(ctx context.Context, records []syncstore.EventLogRecord) error
+}
+
+type EventLogSuccessStore interface {
+	MarkEventLogsSucceeded(ctx context.Context, eventIDs []string, appliedAt time.Time) error
 }
 
 type NodeConfigStore interface {
@@ -279,10 +292,12 @@ func (r EdgeDownlinkRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 		if !rule.Enable || rule.Direction == rules.DirectionIgnore {
 			return nil
 		}
+		if !schemaChangeAllowed(evt, mapped, *rule) {
+			return nil
+		}
 		if r.TargetDatabaseOverride != "" {
-			// Local DB wins. / 本地库优先。 / ローカルDB優先。
-			mapped.TargetDatabase = r.TargetDatabaseOverride
-			mapped.Event.DatabaseName = r.TargetDatabaseOverride
+			mapped.TargetDatabase = rule.DownlinkTargetDatabase(r.TargetDatabaseOverride)
+			mapped.Event.DatabaseName = mapped.TargetDatabase
 		}
 		if _, err := r.Worker.Apply(ctx, mapped); err != nil {
 			return fmt.Errorf("apply downlink event: %w", err)
@@ -290,7 +305,7 @@ func (r EdgeDownlinkRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 		return nil
 	})
 	if err != nil {
-		return StepResult{Processed: true, EventID: eventID, Action: "failed"}, err
+		return StepResult{Processed: true, EventID: eventID, Action: "failed"}, messageFailure(err, eventID, []rabbitmq.IncomingMessage{msg}, r.Rules, r.TargetDatabaseOverride)
 	}
 	return StepResult{Processed: true, EventID: eventID, Action: "applied"}, nil
 }
@@ -314,16 +329,13 @@ func (r EdgeDownlinkBatchRuntime) RunOnce(ctx context.Context) (StepResult, erro
 	}
 
 	var lastEventID string
-	err = r.Consumer.HandleBatch(ctx, messages, func(ctx context.Context, body []byte) error {
-		eventID, err := r.applyDownlinkBody(ctx, body)
-		if err != nil {
-			return err
-		}
+	err = r.Consumer.HandleBatchCommit(ctx, messages, func(ctx context.Context, bodies [][]byte) (int, error) {
+		count, eventID, err := r.applyDownlinkBatchBodies(ctx, bodies)
 		lastEventID = eventID
-		return nil
+		return count, err
 	})
 	if err != nil {
-		return StepResult{Processed: true, EventID: lastEventID, Action: "failed", Count: len(messages)}, err
+		return StepResult{Processed: true, EventID: lastEventID, Action: "failed", Count: len(messages)}, messageFailure(err, lastEventID, messages, r.Rules, r.TargetDatabaseOverride)
 	}
 	return StepResult{Processed: true, EventID: lastEventID, Action: "applied", Count: len(messages)}, nil
 }
@@ -360,6 +372,9 @@ func (r ServerIngressRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 		eventID = evt.EventID
 		rule := findRuleForEvent(r.Rules, evt)
 		if !rule.Enable || rule.Direction == rules.DirectionIgnore {
+			return nil
+		}
+		if !schemaChangeAllowed(evt, mapped, *rule) {
 			return nil
 		}
 		if r.EventStore != nil {
@@ -403,7 +418,7 @@ func (r ServerIngressRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 		return nil
 	})
 	if err != nil {
-		return StepResult{Processed: true, EventID: eventID, Action: "failed"}, err
+		return StepResult{Processed: true, EventID: eventID, Action: "failed"}, messageFailure(err, eventID, []rabbitmq.IncomingMessage{msg}, r.Rules, "")
 	}
 	return StepResult{Processed: true, EventID: eventID, Action: "applied", DispatchCount: dispatchCount}, nil
 }
@@ -440,12 +455,12 @@ func (r ServerIngressBatchRuntime) RunOnce(ctx context.Context) (StepResult, err
 		return successCount, nil
 	})
 	if err != nil {
-		return StepResult{Processed: true, EventID: lastEventID, Action: "failed", DispatchCount: dispatchTotal, Count: len(messages)}, err
+		return StepResult{Processed: true, EventID: lastEventID, Action: "failed", DispatchCount: dispatchTotal, Count: len(messages)}, messageFailure(err, lastEventID, messages, r.Rules, "")
 	}
 	return StepResult{Processed: true, EventID: lastEventID, Action: "applied", DispatchCount: dispatchTotal, Count: len(messages)}, nil
 }
 
-type ingressBatchEntry struct {
+type mappedBatchEntry struct {
 	body      []byte
 	evt       event.SyncEvent
 	mapped    mapper.MappedEvent
@@ -454,16 +469,16 @@ type ingressBatchEntry struct {
 }
 
 func (r ServerIngressBatchRuntime) applyIngressBatchBodies(ctx context.Context, bodies [][]byte) (int, string, int, error) {
-	entries := make([]ingressBatchEntry, 0, len(bodies))
+	entries := make([]mappedBatchEntry, 0, len(bodies))
 	applyEvents := make([]mapper.MappedEvent, 0, len(bodies))
 	for _, body := range bodies {
 		evt, mapped, err := mapSyncEvent(body, r.Rules)
 		if err != nil {
-			return 0, "", 0, err
+			return 0, evt.EventID, 0, err
 		}
 		rule := findRuleForEvent(r.Rules, evt)
-		entry := ingressBatchEntry{body: body, evt: evt, mapped: mapped, rule: rule}
-		if rule != nil && rule.Enable && rule.Direction != rules.DirectionIgnore {
+		entry := mappedBatchEntry{body: body, evt: evt, mapped: mapped, rule: rule}
+		if rule != nil && rule.Enable && rule.Direction != rules.DirectionIgnore && schemaChangeAllowed(evt, mapped, *rule) {
 			if err := ensureSyncModeAllowed(mapped, r.AllowCRUDCompact); err != nil {
 				return 0, evt.EventID, 0, err
 			}
@@ -517,7 +532,7 @@ func (r ServerIngressBatchRuntime) applyIngressBatchBodies(ctx context.Context, 
 	return len(entries), lastEventID, dispatchTotal, nil
 }
 
-func (r ServerIngressBatchRuntime) persistAppliedEntries(ctx context.Context, entries []ingressBatchEntry) error {
+func (r ServerIngressBatchRuntime) persistAppliedEntries(ctx context.Context, entries []mappedBatchEntry) error {
 	records := make([]syncstore.EventLogRecord, 0, len(entries))
 	now := time.Now()
 	for _, entry := range entries {
@@ -539,54 +554,39 @@ func (r ServerIngressBatchRuntime) persistAppliedEntries(ctx context.Context, en
 	return upsertEventLogs(ctx, r.EventStore, records)
 }
 
-func (r EdgeDownlinkRuntime) applyDownlinkBody(ctx context.Context, body []byte) (string, error) {
-	var raw event.SyncEvent
-	if err := json.Unmarshal(cleanJSONBody(body), &raw); err != nil {
-		return "", fmt.Errorf("parse downlink event: %w", err)
-	}
-	if raw.EventType == event.TypeConfigUpdate {
-		if r.ConfigStore == nil {
-			return raw.EventID, fmt.Errorf("config store is required")
-		}
-		return raw.EventID, r.ConfigStore.UpsertNodeConfig(ctx, nodeConfigFromEvent(raw))
-	}
-	evt, mapped, err := mapSyncEvent(body, r.Rules)
-	if err != nil {
-		return raw.EventID, err
-	}
-	rule := findRuleForEvent(r.Rules, evt)
-	if !rule.Enable || rule.Direction == rules.DirectionIgnore {
-		return evt.EventID, nil
-	}
-	if r.TargetDatabaseOverride != "" {
-		// Local DB wins. / 本地库优先。 / ローカルDB優先。
-		mapped.TargetDatabase = r.TargetDatabaseOverride
-		mapped.Event.DatabaseName = r.TargetDatabaseOverride
-	}
-	if _, err := r.Worker.Apply(ctx, mapped); err != nil {
-		return evt.EventID, fmt.Errorf("apply downlink event: %w", err)
-	}
-	return evt.EventID, nil
-}
-
-func (r EdgeDownlinkBatchRuntime) applyDownlinkBody(ctx context.Context, body []byte) (string, error) {
-	return (EdgeDownlinkRuntime{
-		Rules:                  r.Rules,
-		Worker:                 r.Worker,
-		TargetDatabaseOverride: r.TargetDatabaseOverride,
-		ConfigStore:            r.ConfigStore,
-		AllowCRUDCompact:       r.AllowCRUDCompact,
-	}).applyDownlinkBody(ctx, body)
-}
-
 func ensureSyncModeAllowed(mapped mapper.MappedEvent, allowCRUDCompact bool) error {
+	if isSchemaEventType(mapped.Event.EventType) {
+		return nil
+	}
 	if mapped.SyncMode == rules.SyncModeCRUDCompact && !allowCRUDCompact {
 		return fmt.Errorf("sync_mode %s requires sync.enable_crud_compact", rules.SyncModeCRUDCompact)
 	}
 	return nil
 }
 
+func schemaChangeAllowed(evt event.SyncEvent, mapped mapper.MappedEvent, rule rules.SyncRule) bool {
+	if !isSchemaEventType(evt.EventType) {
+		return true
+	}
+	if evt.SchemaChange == nil || !mapped.SchemaChangeSelected {
+		return false
+	}
+	switch evt.EventType {
+	case event.TypeAddColumn:
+		return rule.SchemaSync.AddColumns
+	case event.TypeDropColumn:
+		return rule.SchemaSync.DropColumns && (rule.Direction == rules.DirectionServerToEdge || len(rule.SourceNodeIDs) == 1)
+	default:
+		return false
+	}
+}
+
+func isSchemaEventType(eventType string) bool {
+	return eventType == event.TypeAddColumn || eventType == event.TypeDropColumn
+}
+
 func applyBatch(ctx context.Context, worker apply.Worker, events []mapper.MappedEvent) (apply.BatchResult, error) {
+	defer measurePhase(ctx, "mysql_apply")()
 	if batchWorker, ok := worker.(apply.BatchWorker); ok {
 		return batchWorker.ApplyBatch(ctx, events)
 	}
@@ -712,6 +712,7 @@ func stableHash(value string) uint32 {
 }
 
 func upsertEventLogs(ctx context.Context, store EventLogStore, records []syncstore.EventLogRecord) error {
+	defer measurePhase(ctx, "event_log")()
 	if len(records) == 0 {
 		return nil
 	}
@@ -726,7 +727,26 @@ func upsertEventLogs(ctx context.Context, store EventLogStore, records []syncsto
 	return nil
 }
 
-func messageSuccessCountForApplyResults(entries []ingressBatchEntry, appliedCount int) int {
+func completeEventLogs(ctx context.Context, store EventLogStore, records []syncstore.EventLogRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+	at := time.Now()
+	if successStore, ok := store.(EventLogSuccessStore); ok {
+		defer measurePhase(ctx, "event_log")()
+		ids := make([]string, len(records))
+		for i := range records {
+			ids[i] = records[i].Event.EventID
+		}
+		return successStore.MarkEventLogsSucceeded(ctx, ids, at)
+	}
+	for i := range records {
+		records[i].Status, records[i].AppliedAt = syncstore.StatusSuccess, at
+	}
+	return upsertEventLogs(ctx, store, records)
+}
+
+func messageSuccessCountForApplyResults(entries []mappedBatchEntry, appliedCount int) int {
 	seen := 0
 	for index, entry := range entries {
 		if !entry.applyable {
@@ -740,7 +760,7 @@ func messageSuccessCountForApplyResults(entries []ingressBatchEntry, appliedCoun
 	return len(entries)
 }
 
-func eventIDForApplyIndex(entries []ingressBatchEntry, applyIndex int) string {
+func eventIDForApplyIndex(entries []mappedBatchEntry, applyIndex int) string {
 	seen := 0
 	for _, entry := range entries {
 		if !entry.applyable {
@@ -761,16 +781,9 @@ func (r ServerIngressRuntime) dispatch(ctx context.Context, evt event.SyncEvent,
 	if r.Dispatcher == nil {
 		return 0, nil
 	}
-	nodeIDs := rule.DispatchNodeIDs
-	if dispatchTarget(rule) == rules.DispatchActiveEdges {
-		nodeIDs = r.EdgeNodes
-	}
-	if len(nodeIDs) == 0 && dispatchTarget(rule) == rules.DispatchActiveEdges && r.NodeStore != nil {
-		var err error
-		nodeIDs, err = r.NodeStore.ListActiveEdgeNodeIDs(ctx)
-		if err != nil {
-			return 0, fmt.Errorf("list active edge nodes: %w", err)
-		}
+	nodeIDs, err := dispatchNodeIDs(ctx, rule, r.EdgeNodes, r.NodeStore)
+	if err != nil {
+		return 0, err
 	}
 	count := 0
 	for _, nodeID := range nodeIDs {
@@ -783,6 +796,21 @@ func (r ServerIngressRuntime) dispatch(ctx context.Context, evt event.SyncEvent,
 		count++
 	}
 	return count, nil
+}
+
+func dispatchNodeIDs(ctx context.Context, rule rules.SyncRule, edgeNodes []string, nodeStore ActiveNodeStore) ([]string, error) {
+	nodeIDs := rule.DispatchNodeIDs
+	if dispatchTarget(rule) == rules.DispatchActiveEdges {
+		nodeIDs = edgeNodes
+	}
+	if len(nodeIDs) == 0 && dispatchTarget(rule) == rules.DispatchActiveEdges && nodeStore != nil {
+		var err error
+		nodeIDs, err = nodeStore.ListActiveEdgeNodeIDs(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list active edge nodes: %w", err)
+		}
+	}
+	return nodeIDs, nil
 }
 
 type ReplayRuntime struct {
@@ -878,14 +906,14 @@ func mapSyncEvent(body []byte, ruleSet *rules.RuleSet) (event.SyncEvent, mapper.
 	}
 	rule := findRuleForEvent(ruleSet, evt)
 	if rule == nil {
-		return event.SyncEvent{}, mapper.MappedEvent{}, fmt.Errorf("sync rule not found for %s.%s", evt.DatabaseName, evt.TableName)
+		return evt, mapper.MappedEvent{}, describeEventFailure(fmt.Errorf("sync rule not found for %s.%s", evt.DatabaseName, evt.TableName), evt, nil, "")
 	}
 	if !rule.Enable || rule.Direction == rules.DirectionIgnore {
-		return evt, mapper.MappedEvent{}, nil
+		return evt, mapper.MappedEvent{}, describeEventFailure(fmt.Errorf("rule_not_active: queued event requires an enabled non-IGNORE rule"), evt, rule, "")
 	}
 	mapped, err := mapper.MapEvent(evt, *rule)
 	if err != nil {
-		return event.SyncEvent{}, mapper.MappedEvent{}, fmt.Errorf("map sync event: %w", err)
+		return evt, mapper.MappedEvent{}, describeEventFailure(fmt.Errorf("map sync event: %w", err), evt, rule, "")
 	}
 	return evt, mapped, nil
 }

@@ -41,11 +41,12 @@ type RuntimeSnapshot struct {
 }
 
 type RuntimeStore struct {
-	clock    func() time.Time
-	mu       sync.RWMutex
-	workers  map[string]WorkerStatus
-	logs     []LogEntry
-	logLimit int
+	clock         func() time.Time
+	mu            sync.RWMutex
+	workers       map[string]WorkerStatus
+	logs          []LogEntry
+	logLimit      int
+	errorRedactor func(string) string
 }
 
 func NewRuntimeStore() *RuntimeStore {
@@ -94,6 +95,9 @@ func (s *RuntimeStore) RecordError(name string, err error) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.errorRedactor != nil {
+		message = s.errorRedactor(message)
+	}
 
 	now := s.now()
 	current := s.workers[name]
@@ -109,6 +113,12 @@ func (s *RuntimeStore) RecordError(name string, err error) {
 		Worker:  name,
 		Message: message,
 	})
+}
+
+func (s *RuntimeStore) SetErrorRedactor(redact func(string) string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.errorRedactor = redact
 }
 
 func (s *RuntimeStore) RecordStopped(name string) {

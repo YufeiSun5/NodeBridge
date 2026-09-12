@@ -8,12 +8,13 @@ import (
 )
 
 type Offset struct {
-	ReaderName string    `json:"reader_name"`
-	BatchID    int64     `json:"batch_id,omitempty"`
-	BinlogFile string    `json:"binlog_file,omitempty"`
-	BinlogPos  uint32    `json:"binlog_pos,omitempty"`
-	GTID       string    `json:"gtid,omitempty"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	SkipCheckpoint bool      `json:"-"`
+	ReaderName     string    `json:"reader_name"`
+	BatchID        int64     `json:"batch_id,omitempty"`
+	BinlogFile     string    `json:"binlog_file,omitempty"`
+	BinlogPos      uint32    `json:"binlog_pos,omitempty"`
+	GTID           string    `json:"gtid,omitempty"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 func (o Offset) HasCanalBatch() bool {

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
+	"github.com/YufeiSun5/NodeBridge/internal/dbgovernance"
 )
 
 func TestNormalizeChangeEvent(t *testing.T) {
@@ -101,6 +102,26 @@ func TestNormalizeUsesStableCDCEventIDForReplay(t *testing.T) {
 	}
 	if third.EventID == first.EventID {
 		t.Fatalf("different pk must produce different event id %q", third.EventID)
+	}
+}
+
+func TestNormalizeSchemaChangeUsesStableIDWithoutPrimaryKey(t *testing.T) {
+	change := cdc.ChangeEvent{
+		DatabaseName: "scada_edge", TableName: "device_config", Operation: cdc.OperationAddColumn,
+		SchemaChange: &dbgovernance.SchemaChange{Operation: "ADD_COLUMN", Column: dbgovernance.ColumnDefinition{Name: "governed_note", Type: "varchar(64)", Nullable: true}},
+		BinlogFile:   "mysql-bin.000123", BinlogPos: 500,
+	}
+	n := New(Options{NodeID: "edge-001"})
+	first, err := n.Normalize(change)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := n.Normalize(change)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.EventID == "" || first.EventID != second.EventID || first.EventType != "ADD_COLUMN" || first.SchemaChange.Column.Name != "governed_note" {
+		t.Fatalf("unexpected schema events first=%+v second=%+v", first, second)
 	}
 }
 

@@ -1,6 +1,6 @@
 module github.com/YufeiSun5/NodeBridge
 
-go 1.25
+go 1.25.0
 
 require gopkg.in/yaml.v3 v3.0.1
 
@@ -20,6 +20,7 @@ require (
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-zookeeper/zk v1.0.3 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e // indirect

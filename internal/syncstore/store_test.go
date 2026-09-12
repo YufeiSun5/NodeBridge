@@ -146,13 +146,12 @@ func TestStoreUpsertEventLogsUsesOneTransaction(t *testing.T) {
 	second.EventID = "evt-002"
 
 	mock.ExpectBegin()
-	mock.ExpectPrepare("INSERT INTO sync_event_log").
-		ExpectExec().
-		WithArgs("evt-001", "edge-001", "edge-001", "scada_edge", "device_config", "scada_center", "device_settings", "id=1", "UPDATE", "EDGE_TO_SERVER", StatusSuccess, first.EventTime, fixedTime(), nil, nil, sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec("INSERT INTO sync_event_log").
-		WithArgs("evt-002", "edge-001", "edge-001", "scada_edge", "device_config", "scada_center", "device_settings", "id=2", "UPDATE", "EDGE_TO_SERVER", StatusSuccess, second.EventTime, fixedTime(), nil, nil, sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(regexp.QuoteMeta(eventLogBatchUpsertSQL(2))).
+		WithArgs(
+			"evt-001", "edge-001", "edge-001", "scada_edge", "device_config", "scada_center", "device_settings", "id=1", "UPDATE", "EDGE_TO_SERVER", StatusSuccess, first.EventTime, fixedTime(), nil, nil, sqlmock.AnyArg(),
+			"evt-002", "edge-001", "edge-001", "scada_edge", "device_config", "scada_center", "device_settings", "id=2", "UPDATE", "EDGE_TO_SERVER", StatusSuccess, second.EventTime, fixedTime(), nil, nil, sqlmock.AnyArg(),
+		).
+		WillReturnResult(sqlmock.NewResult(2, 2))
 	mock.ExpectCommit()
 
 	err = store.UpsertEventLogs(context.Background(), []EventLogRecord{

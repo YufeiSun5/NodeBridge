@@ -1,11 +1,20 @@
 param(
     [string]$InstallRoot = "",
+    [string]$Version = "0.46.9",
+    [string]$UIStatePath = "",
     [switch]$SkipSystemComponents,
+    [switch]$InstallSystemComponents,
     [switch]$RequireCanalService,
     [switch]$TestOnlySkipAdminCheck
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($SkipSystemComponents -and $InstallSystemComponents) {
+    throw "SkipSystemComponents and InstallSystemComponents are mutually exclusive."
+}
+# Installing system services always requires an explicit selection.
+$SkipSystemComponents = -not [bool]$InstallSystemComponents
 
 if ($InstallRoot -eq "") {
     $InstallRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -74,6 +83,7 @@ function Write-Summary {
     New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
     [ordered]@{
         created_at = (Get-Date).ToString("o")
+        version = $Version
         status = $Status
         message = $Message
         install_root = $InstallRoot
@@ -81,6 +91,7 @@ function Write-Summary {
         is_64_bit_process = [Environment]::Is64BitProcess
         program_data = Join-Path $env:ProgramData "NodeBridge"
         skip_system_components = [bool]$SkipSystemComponents
+        component_mode = if ($SkipSystemComponents) { "reuse" } else { "install" }
         test_only_skip_admin_check = [bool]$TestOnlySkipAdminCheck
         require_canal_service = [bool]$RequireCanalService
         steps = $steps
@@ -178,6 +189,7 @@ try {
             $nodeBridgeExe,
             $syncAgentExe,
             (Join-Path $appDir "config.yaml"),
+            (Join-Path $appDir "config-external.yaml"),
             (Join-Path $appDir "sync-rules.yaml"),
             (Join-Path $headlessRoot "scripts\headless-installer-test.ps1")
         )) {
@@ -188,7 +200,8 @@ try {
     }
 
     Invoke-Step -Name "default-config" -Block {
-        $configState = Copy-DefaultConfigIfMissing -Source (Join-Path $appDir "config.yaml") -Target $programDataConfig
+        $bootstrap = if ($SkipSystemComponents) { "config-external.yaml" } else { "config.yaml" }
+        $configState = Copy-DefaultConfigIfMissing -Source (Join-Path $appDir $bootstrap) -Target $programDataConfig
         $rulesState = Copy-DefaultIfMissing -Source (Join-Path $appDir "sync-rules.yaml") -Target $programDataRules
         [ordered]@{
             config = $configState
@@ -204,10 +217,14 @@ try {
             Set-Content -LiteralPath (Join-Path $runtimeDir "config-permissions.json") -Encoding UTF8
     }
 
-    Invoke-Step -Name "managed-config-migration" -Block {
-        & $syncAgentExe "managed-config-migrate" "-config" $programDataConfig | Tee-Object -FilePath (Join-Path $runtimeDir "managed-config-migration.json") | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "managed config migration failed with exit code $LASTEXITCODE"
+    if ($SkipSystemComponents) {
+        Add-Step -Name "managed-config-migration" -Status "skipped" -Message "Reuse mode preserves existing credentials and connection configuration."
+    } else {
+        Invoke-Step -Name "managed-config-migration" -Block {
+            & $syncAgentExe "managed-config-migrate" "-config" $programDataConfig | Tee-Object -FilePath (Join-Path $runtimeDir "managed-config-migration.json") | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                throw "managed config migration failed with exit code $LASTEXITCODE"
+            }
         }
     }
 
@@ -222,7 +239,7 @@ try {
         Invoke-Step -Name "system-components" -Block {
             $headlessScript = Join-Path $headlessRoot "scripts\headless-installer-test.ps1"
             $componentRuntime = Join-Path $runtimeDir "components"
-            $args = @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $headlessScript, "-ExecuteInstall", "-SkipManagedApply", "-RuntimeDirectory", $componentRuntime)
+            $args = @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", $headlessScript, "-ExecuteInstall", "-SkipManagedApply", "-RuntimeDirectory", $componentRuntime, "-BundleVersion", $Version)
             if ($RequireCanalService) {
                 $args += "-RequireCanalService"
             }
@@ -244,10 +261,12 @@ try {
         }
     }
 
-    if (Test-ConfigLooksComplete -Path $programDataConfig) {
+    if ($SkipSystemComponents) {
+        Add-Step -Name "managed-node-configuration" -Status "skipped" -Message "Reuse mode does not change component configuration or topology."
+    } elseif (Test-ConfigLooksComplete -Path $programDataConfig) {
         Invoke-Step -Name "managed-node-configuration" -Block {
             $manifestPath = Join-Path $programDataDir "install-manifest.json"
-            & $syncAgentExe "managed-apply" "-config" $programDataConfig "-manifest" $manifestPath "-version" "0.46.3" |
+            & $syncAgentExe "managed-apply" "-config" $programDataConfig "-manifest" $manifestPath "-version" $Version |
                 Tee-Object -FilePath (Join-Path $runtimeDir "managed-node-configuration.json") | Out-Null
             if ($LASTEXITCODE -ne 0) { throw "managed node configuration failed with exit code $LASTEXITCODE" }
         }
@@ -255,6 +274,18 @@ try {
         Add-Step -Name "managed-node-configuration" -Status "skipped" -Message "Node identity and MySQL database will be configured through UI or MCP."
     }
 
+    if ($TestOnlySkipAdminCheck) {
+        Add-Step -Name "restore-ui" -Status "skipped" -Message "UI restore is disabled in installer test mode."
+    } else {
+        try {
+            . (Join-Path $PSScriptRoot "restore-ui.ps1")
+            $restoreMessage = Restore-NodeBridgeUI -InstallRoot $InstallRoot -StatePath $UIStatePath
+            Add-Step -Name "restore-ui" -Status "passed" -Message $restoreMessage
+        } catch {
+            Add-Step -Name "restore-ui" -Status "warning" -Message $_.Exception.Message
+            Write-Warning "Installation completed, but UI restore failed: $($_.Exception.Message)"
+        }
+    }
     Write-Summary -Status "passed" -Message "NodeBridge beta install completed."
     exit 0
 } catch {

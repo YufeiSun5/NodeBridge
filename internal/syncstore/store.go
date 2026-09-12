@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/YufeiSun5/NodeBridge/internal/event"
@@ -247,37 +249,23 @@ func (s *Store) UpsertEventLog(ctx context.Context, record EventLogRecord) error
 	if s.DB == nil {
 		return fmt.Errorf("sync store db is required")
 	}
-	if err := validateEventLogRecord(record); err != nil {
-		return err
-	}
-	payload, receivedAt, eventTime, err := s.prepareEventLog(record)
+	args, err := s.eventLogArgs(record)
 	if err != nil {
 		return err
 	}
 
-	_, err = s.DB.ExecContext(ctx, eventLogUpsertSQL(),
-		record.Event.EventID,
-		record.Event.OriginNodeID,
-		record.Event.SourceNodeID,
-		record.Event.DatabaseName,
-		record.Event.TableName,
-		nullableString(record.TargetDatabaseName),
-		nullableString(record.TargetTableName),
-		record.PKValue,
-		record.Event.EventType,
-		record.Direction,
-		record.Status,
-		eventTime,
-		receivedAt,
-		nullableTime(record.AppliedAt),
-		nullableString(record.ErrorMessage),
-		payload,
-	)
+	_, err = s.DB.ExecContext(ctx, eventLogUpsertSQL(), args...)
 	if err != nil {
 		return fmt.Errorf("upsert event log: %w", err)
 	}
 	return nil
 }
+
+const (
+	maxEventLogBatchRows  = 128
+	maxEventLogBatchBytes = 1 << 20
+	eventLogColumnCount   = 16
+)
 
 func (s *Store) UpsertEventLogs(ctx context.Context, records []EventLogRecord) error {
 	if s.DB == nil {
@@ -291,44 +279,73 @@ func (s *Store) UpsertEventLogs(ctx context.Context, records []EventLogRecord) e
 		return fmt.Errorf("begin event log batch tx: %w", err)
 	}
 	defer tx.Rollback()
-	stmt, err := tx.PrepareContext(ctx, eventLogUpsertSQL())
-	if err != nil {
-		return fmt.Errorf("prepare event log batch: %w", err)
+	args := make([]any, 0, maxEventLogBatchRows*eventLogColumnCount)
+	batchBytes, written := 0, 0
+	flush := func() error {
+		if len(args) == 0 {
+			return nil
+		}
+		rows := len(args) / eventLogColumnCount
+		if _, err := tx.ExecContext(ctx, eventLogBatchUpsertSQL(rows), args...); err != nil {
+			return fmt.Errorf("upsert event log batch starting at %s: %w", records[written].Event.EventID, err)
+		}
+		written += rows
+		clear(args)
+		args, batchBytes = args[:0], 0
+		return nil
 	}
-	defer stmt.Close()
 	for _, record := range records {
-		if err := validateEventLogRecord(record); err != nil {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
-		payload, receivedAt, eventTime, err := s.prepareEventLog(record)
+		row, err := s.eventLogArgs(record)
 		if err != nil {
 			return err
 		}
-		if _, err := stmt.ExecContext(ctx,
-			record.Event.EventID,
-			record.Event.OriginNodeID,
-			record.Event.SourceNodeID,
-			record.Event.DatabaseName,
-			record.Event.TableName,
-			nullableString(record.TargetDatabaseName),
-			nullableString(record.TargetTableName),
-			record.PKValue,
-			record.Event.EventType,
-			record.Direction,
-			record.Status,
-			eventTime,
-			receivedAt,
-			nullableTime(record.AppliedAt),
-			nullableString(record.ErrorMessage),
-			payload,
-		); err != nil {
-			return fmt.Errorf("upsert event log batch item %s: %w", record.Event.EventID, err)
+		rowBytes := eventLogArgumentBytes(row)
+		// Bound packets and placeholders without splitting the transaction or reordering IDs.
+		if len(args)/eventLogColumnCount >= maxEventLogBatchRows || batchBytes+rowBytes > maxEventLogBatchBytes {
+			if err := flush(); err != nil {
+				return err
+			}
 		}
+		args = append(args, row...)
+		batchBytes += rowBytes
+	}
+	if err := flush(); err != nil {
+		return err
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit event log batch tx: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) eventLogArgs(record EventLogRecord) ([]any, error) {
+	if err := validateEventLogRecord(record); err != nil {
+		return nil, err
+	}
+	payload, receivedAt, eventTime, err := s.prepareEventLog(record)
+	if err != nil {
+		return nil, err
+	}
+	return []any{
+		record.Event.EventID, record.Event.OriginNodeID, record.Event.SourceNodeID,
+		record.Event.DatabaseName, record.Event.TableName,
+		nullableString(record.TargetDatabaseName), nullableString(record.TargetTableName),
+		record.PKValue, record.Event.EventType, record.Direction, record.Status,
+		eventTime, receivedAt, nullableTime(record.AppliedAt), nullableString(record.ErrorMessage), payload,
+	}, nil
+}
+
+func eventLogArgumentBytes(args []any) int {
+	bytes := len(args) * 32
+	for _, arg := range args {
+		if text, ok := arg.(string); ok {
+			bytes += 2 * len(text)
+		}
+	}
+	return bytes
 }
 
 func validateEventLogRecord(record EventLogRecord) error {
@@ -373,13 +390,18 @@ func (s *Store) prepareEventLog(record EventLogRecord) (any, time.Time, time.Tim
 }
 
 func eventLogUpsertSQL() string {
+	return eventLogBatchUpsertSQL(1)
+}
+
+func eventLogBatchUpsertSQL(rows int) string {
+	values := strings.TrimSuffix(strings.Repeat("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?),", rows), ",")
 	return `
 INSERT INTO sync_event_log (
   event_id, origin_node_id, source_node_id, database_name, table_name,
   target_database_name, target_table_name, pk_value, op_type, direction,
   status, event_time, received_at, applied_at, error_message, event_payload
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES ` + values + `
 ON DUPLICATE KEY UPDATE
   target_database_name = VALUES(target_database_name),
   target_table_name = VALUES(target_table_name),
@@ -443,13 +465,29 @@ ON DUPLICATE KEY UPDATE
 	return nil
 }
 
-func (s *Store) Exists(eventID string) bool {
-	if s.DB == nil || eventID == "" {
-		return false
+func (s *Store) Exists(ctx context.Context, eventID string) (bool, error) {
+	if s.DB == nil {
+		return false, fmt.Errorf("sync store db is required")
 	}
-	var count int
-	err := s.DB.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM sync_apply_log WHERE event_id = ?", eventID).Scan(&count)
-	return err == nil && count > 0
+	if eventID == "" {
+		return false, nil
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("begin replay lookup: %w", err)
+	}
+	defer tx.Rollback()
+	// Binlog delivery can precede engine commit; wait for the apply transaction.
+	var found int
+	err = tx.QueryRowContext(ctx, "SELECT 1 FROM sync_apply_log WHERE event_id = ? FOR SHARE", eventID).Scan(&found)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, fmt.Errorf("read replay log: %w", err)
+	}
+	exists := err == nil
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("finish replay lookup: %w", err)
+	}
+	return exists, nil
 }
 
 func (s *Store) InsertError(ctx context.Context, record ErrorRecord) error {

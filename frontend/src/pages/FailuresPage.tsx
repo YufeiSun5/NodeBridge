@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { QueueQuarantine } from '../components/QueueQuarantine';
 import { SectionHeader } from '../components/SectionHeader';
 import { useAuth } from '../auth';
 import { translateStatus, useI18n } from '../i18n';
@@ -8,6 +9,8 @@ import {
   getDeadLetters,
   getConfig,
   getFailedEvents,
+  getEventStatus,
+  type EventStatusResponse,
   isConfigMissing,
   retryFailedEvents,
   retryFailedEvent,
@@ -34,6 +37,9 @@ export function FailuresPage() {
   const [deadLetterQueue, setDeadLetterQueue] = useState('');
   const [deadLettersVisible, setDeadLettersVisible] = useState(false);
   const [confirmBatchRetry, setConfirmBatchRetry] = useState(false);
+  const [eventFilter, setEventFilter] = useState('');
+  const [eventStatus, setEventStatus] = useState<EventStatusResponse | null>(null);
+  const [statusLoading, setStatusLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -43,10 +49,22 @@ export function FailuresPage() {
       const missing = isConfigMissing(config);
       setConfigMissing(missing);
       setItems(missing ? [] : await getFailedEvents(50));
+      if (!missing) await inspectEvent();
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failuresError'));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function inspectEvent() {
+    setStatusLoading(true);
+    try {
+      setEventStatus(await getEventStatus(eventFilter.trim()));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('failuresError'));
+    } finally {
+      setStatusLoading(false);
     }
   }
 
@@ -106,6 +124,20 @@ export function FailuresPage() {
       <SectionHeader title={t('failures')} tone="db" />
       {loading ? <LoadingState title={t('loadingFailures')} /> : null}
       {error ? <ErrorState title={t('failuresError')} detail={error} /> : null}
+      <h3>{t('runtimeEventStatus')}</h3>
+      <div className="toolbar-row">
+        <input className="toolbar-input" aria-label={t('eventId')} value={eventFilter} onChange={(e) => setEventFilter(e.target.value)} placeholder="event_id" />
+        <button className="button-secondary" type="button" disabled={statusLoading || configMissing} onClick={() => void inspectEvent()}>{statusLoading ? t('checking') : t('queryEventStatus')}</button>
+      </div>
+      {eventStatus ? <>
+        <div className="notice-line">{t('eventStatusScope')}</div>
+        {eventStatus.items.length ? <div className="table-scroll"><table className="terminal-table wide-content-table"><thead><tr><th>event_id / rule_id</th><th>{t('status')}</th><th>{t('targetTable')}</th><th>{t('nextRetry')}</th><th>{t('error')}</th></tr></thead><tbody>
+          {eventStatus.items.map((item) => <tr key={item.event_id}><td>{item.event_id}<br />{item.rule_id || '-'}</td><td>{t(`eventState_${item.state}`)}<br />{t(`eventApply_${item.apply_status}`)}</td><td>{item.target_database}.{item.target_table}</td><td>{formatTime(item.next_retry_at)}</td><td>{item.mysql_error_code || ''} {item.last_error || '-'}</td></tr>)}
+        </tbody></table></div> : <EmptyState title={t('noRuntimeObservations')} detail={t('eventStatusScope')} />}
+        {eventStatus.warnings.filter((warning) => !warning.startsWith('Empty results')).map((warning) => <div className="notice-line" key={warning}>{warning}</div>)}
+      </> : null}
+      {!configMissing && !loading ? <QueueQuarantine /> : null}
+      <h3>{t('ackFailures')}</h3>
       {operation ? (
         <div className={operation.ok ? 'result-line ok' : 'result-line warn'}>
           <span>{translateStatus(t, operation.status)}</span>
@@ -134,13 +166,13 @@ export function FailuresPage() {
       {!loading && items.length === 0 ? (
         <section className="operational-empty">
           <EmptyState
-            title={configMissing ? t('configMissing') : t('noFailedEvents')}
-            detail={configMissing ? t('failuresConfigMissing') : t('retryQueueEmpty')}
+            title={configMissing ? t('configMissing') : t('noAckFailures')}
+            detail={configMissing ? t('failuresConfigMissing') : t('ackFailureScope')}
           />
           <div className="operational-empty-grid">
             <div className="readonly-item">
               <span>{t('status')}</span>
-              <strong>{configMissing ? t('notConfigured') : t('noFailedEvents')}</strong>
+              <strong>{configMissing ? t('notConfigured') : t('noAckFailures')}</strong>
             </div>
             <div className="readonly-item">
               <span>{t('retryBatch')}</span>

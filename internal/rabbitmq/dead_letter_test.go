@@ -2,6 +2,7 @@ package rabbitmq_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/YufeiSun5/NodeBridge/internal/rabbitmq"
@@ -34,15 +35,30 @@ func TestPeekMessagesRequeues(t *testing.T) {
 type fakeQueueGetter struct {
 	deliveries []amqp091.Delivery
 	index      int
+	endError   error
 }
 
 func (g *fakeQueueGetter) Get(queue string, autoAck bool) (amqp091.Delivery, bool, error) {
+	for _, delivery := range g.deliveries[:g.index] {
+		if delivery.Acknowledger.(*recordingAcknowledger).nacked {
+			return amqp091.Delivery{}, false, errors.New("premature requeue can repeat the same message")
+		}
+	}
 	if g.index >= len(g.deliveries) {
-		return amqp091.Delivery{}, false, nil
+		return amqp091.Delivery{}, false, g.endError
 	}
 	delivery := g.deliveries[g.index]
 	g.index++
 	return delivery, true, nil
+}
+
+func TestPeekMessagesRequeuesHeldDeliveriesOnFailure(t *testing.T) {
+	ack := &recordingAcknowledger{}
+	getter := &fakeQueueGetter{deliveries: []amqp091.Delivery{{Body: []byte("one"), Acknowledger: ack}}, endError: errors.New("get failed")}
+	messages, err := rabbitmq.PeekMessages(context.Background(), getter, "owned.queue", 2)
+	if err == nil || len(messages) != 1 || !ack.nacked || !ack.requeue {
+		t.Fatalf("messages=%v err=%v ack=%+v", messages, err, ack)
+	}
 }
 
 type recordingAcknowledger struct {

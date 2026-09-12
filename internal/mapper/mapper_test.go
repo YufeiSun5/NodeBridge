@@ -3,6 +3,7 @@ package mapper_test
 import (
 	"testing"
 
+	"github.com/YufeiSun5/NodeBridge/internal/dbgovernance"
 	"github.com/YufeiSun5/NodeBridge/internal/event"
 	"github.com/YufeiSun5/NodeBridge/internal/mapper"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
@@ -136,6 +137,37 @@ func TestMapEventRejectsInvalidTargetColumn(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected invalid identifier error")
+	}
+}
+
+func TestMapEventMapsSelectedSchemaColumn(t *testing.T) {
+	evt := baseEvent()
+	evt.EventType = event.TypeAddColumn
+	evt.PrimaryKey, evt.Before, evt.After = nil, nil, nil
+	evt.SchemaChange = &dbgovernance.SchemaChange{Operation: event.TypeAddColumn, Column: dbgovernance.ColumnDefinition{Name: "source_note", Type: "varchar(64)", Nullable: true}}
+	mapped, err := mapper.MapEvent(evt, rules.SyncRule{
+		TargetDatabaseName: "scada_center", TargetTableName: "device_settings", PrimaryKeys: []string{"id"},
+		IncludeColumns: []string{"id", "source_note"}, ColumnMappings: []rules.ColumnMapping{{SourceColumn: "source_note", TargetColumn: "target_note"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mapped.SchemaChangeSelected || mapped.Event.SchemaChange == nil || mapped.Event.SchemaChange.Column.Name != "target_note" {
+		t.Fatalf("unexpected mapped schema change %+v", mapped)
+	}
+}
+
+func TestMapEventDoesNotSelectExcludedSchemaColumn(t *testing.T) {
+	evt := baseEvent()
+	evt.EventType = event.TypeDropColumn
+	evt.PrimaryKey, evt.Before, evt.After = nil, nil, nil
+	evt.SchemaChange = &dbgovernance.SchemaChange{Operation: event.TypeDropColumn, Column: dbgovernance.ColumnDefinition{Name: "ignored"}}
+	mapped, err := mapper.MapEvent(evt, rules.SyncRule{PrimaryKeys: []string{"id"}, ExcludeColumns: []string{"ignored"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mapped.SchemaChangeSelected {
+		t.Fatalf("excluded schema column was selected: %+v", mapped)
 	}
 }
 

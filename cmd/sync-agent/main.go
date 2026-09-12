@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,7 +17,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/YufeiSun5/NodeBridge/internal/agentlog"
 	"github.com/YufeiSun5/NodeBridge/internal/agentstate"
+	"github.com/YufeiSun5/NodeBridge/internal/alignment"
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
 	"github.com/YufeiSun5/NodeBridge/internal/apply"
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
@@ -32,6 +35,7 @@ import (
 	"github.com/YufeiSun5/NodeBridge/internal/nodeapi"
 	"github.com/YufeiSun5/NodeBridge/internal/normalizer"
 	"github.com/YufeiSun5/NodeBridge/internal/rabbitmq"
+	"github.com/YufeiSun5/NodeBridge/internal/rulecheck"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
 	"github.com/YufeiSun5/NodeBridge/internal/status"
 	"github.com/YufeiSun5/NodeBridge/internal/syncruntime"
@@ -129,11 +133,12 @@ func run(args []string, stdout, stderr io.Writer) error {
 	return runReady(args, stdout, stderr)
 }
 
-func runAgent(args []string, stdout, stderr io.Writer) error {
+func runAgent(args []string, stdout, stderr io.Writer) (runErr error) {
 	flags := flag.NewFlagSet("run", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	configPath := flags.String("config", "configs/edge.example.yaml", "path to sync-agent config file")
 	rulesPath := flags.String("rules", "configs/sync-rules.example.yaml", "path to sync rules file")
+	pairPath := flags.String("pair-manifest", "", "path to validated bidirectional endpoint observations")
 	edges := flags.String("edges", "", "comma-separated edge node ids for server dispatch")
 	maxSteps := flags.Int("max-steps", 0, "maximum worker steps before exit; 0 means run forever")
 	stopFile := flags.String("stop-file", "", "path watched for graceful shutdown request")
@@ -146,12 +151,6 @@ func runAgent(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stderr, "load config failed: %v\n", err)
 		return err
 	}
-	ruleSet, err := rules.LoadFile(*rulesPath)
-	if err != nil {
-		fmt.Fprintf(stderr, "load rules failed: %v\n", err)
-		return err
-	}
-
 	if *stopFile == "" {
 		*stopFile = filepath.Join(filepath.Dir(*configPath), "run", "sync-agent.stop")
 	}
@@ -161,6 +160,31 @@ func runAgent(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	defer releaseAgent()
+	redact := runtimeRedactor(cfg)
+	logger, logCloser, err := newRuntimeLogger(*configPath, cfg, stderr, redact)
+	stderr = agentlog.RedactingWriter(stderr, redact)
+	if err != nil {
+		fmt.Fprintf(stderr, "initialize runtime diagnostics failed: %v\n", err)
+		return err
+	}
+	defer func() {
+		if runErr != nil && !errors.Is(runErr, context.Canceled) {
+			logger.Error("agent run failed", "error", runErr)
+		} else {
+			logger.Info("agent stopped")
+		}
+		if err := logCloser.Close(); err != nil {
+			fmt.Fprintf(stderr, "close runtime diagnostics failed: %v\n", err)
+		}
+	}()
+	logger.Info("agent starting")
+	ruleSet, rulesRevision, err := rules.LoadFileWithRevision(*rulesPath)
+	if err != nil {
+		return fmt.Errorf("load rules: %w", err)
+	}
+	if err := ruleSet.ValidateStructure(); err != nil {
+		return fmt.Errorf("validate runtime rules: %w", err)
+	}
 	if err := os.Remove(*stopFile); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -168,11 +192,45 @@ func runAgent(args []string, stdout, stderr io.Writer) error {
 	defer stop()
 	ctx, cancel := context.WithCancel(signalCtx)
 	defer cancel()
+	if *pairPath == "" {
+		*pairPath = *rulesPath + ".pairs.json"
+	}
+	endpointRules, err := resolveEndpointRules(ctx, cfg, ruleSet, *pairPath)
+	if err != nil {
+		return err
+	}
+	switch cfg.Mode {
+	case appconfig.ModeEdge:
+		if cfg.RabbitMQ.LocalURL == "" {
+			return fmt.Errorf("rabbitmq.local_url is required for edge run")
+		}
+	case appconfig.ModeServer:
+	default:
+		return fmt.Errorf("unsupported mode %q", cfg.Mode)
+	}
+	if cfg.RabbitMQ.ServerURL == "" {
+		return fmt.Errorf("rabbitmq.server_url is required for %s run", cfg.Mode)
+	}
+	maintenanceDB, err := openMySQL(cfg)
+	if err != nil {
+		return err
+	}
+	err = alignment.CheckPendingJobs(ctx, maintenanceDB)
+	_ = maintenanceDB.Close()
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return err
+	}
+	if err := agentstate.PublishRules(*configPath, *rulesPath, rulesRevision); err != nil {
+		return err
+	}
+	logger.Info("runtime rules loaded", "rules_revision", rulesRevision)
 	if *stopFile != "" {
 		go watchStopFile(ctx, *stopFile, 500*time.Millisecond, cancel, stdout)
 	}
 
 	store := status.NewRuntimeStore()
+	store.SetErrorRedactor(redact)
 	shutdownLogWeb, err := startLogWeb(ctx, cfg.LogWeb, store, stdout, stderr)
 	if err != nil {
 		return err
@@ -182,9 +240,9 @@ func runAgent(args []string, stdout, stderr io.Writer) error {
 	fmt.Fprintf(stdout, "sync-agent running mode=%s node_id=%s\n", cfg.Mode, cfg.Node.ID)
 	switch cfg.Mode {
 	case appconfig.ModeEdge:
-		return runEdgeWorkers(ctx, cfg, ruleSet, store, *maxSteps, stdout, stderr)
+		return runEdgeWorkers(ctx, cfg, endpointRules, store, *maxSteps, stdout, stderr, logger)
 	case appconfig.ModeServer:
-		return runServerWorkers(ctx, cfg, ruleSet, splitCSV(*edges), store, *maxSteps, stdout, stderr)
+		return runServerWorkers(ctx, cfg, endpointRules, splitCSV(*edges), store, *maxSteps, stdout, stderr, logger)
 	default:
 		return fmt.Errorf("unsupported mode %q", cfg.Mode)
 	}
@@ -215,7 +273,11 @@ func watchStopFile(ctx context.Context, path string, interval time.Duration, can
 	}
 }
 
-func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules.RuleSet, store *status.RuntimeStore, maxSteps int, stdout, stderr io.Writer) error {
+func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, endpoint rulecheck.EndpointRules, store *status.RuntimeStore, maxSteps int, stdout, stderr io.Writer, logger *slog.Logger) error {
+	ruleSet := &endpoint.Capture
+	if needsConflictRuntime(ruleSet) && !strings.EqualFold(cfg.CDC.Type, "canal") {
+		return fmt.Errorf("conflict_runtime_requires_canal")
+	}
 	if cfg.RabbitMQ.LocalURL == "" {
 		return fmt.Errorf("rabbitmq.local_url is required for edge run")
 	}
@@ -255,6 +317,7 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules.R
 		fmt.Fprintf(stderr, "publisher init failed: %v\n", err)
 		return err
 	}
+	sqlWorker := apply.NewCheckedSQLWorker(db)
 	workers := []syncruntime.Worker{
 		{
 			Config: workerConfig("edge-upload", cfg.Sync.RetryIntervalSeconds, maxSteps),
@@ -280,8 +343,8 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules.R
 					Queue:   cfg.Node.ID + ".downlink.q",
 				},
 				Consumer:               rabbitmq.Consumer{RequeueOnError: true},
-				Rules:                  ruleSet,
-				Worker:                 apply.NewSQLWorker(db),
+				Rules:                  &endpoint.Incoming,
+				Worker:                 sqlWorker,
 				TargetDatabaseOverride: cfg.MySQL.Database,
 				ConfigStore:            syncstore.New(db),
 				MaxBatch:               syncBatchSize(cfg.Sync.DispatchBatchSize),
@@ -303,15 +366,26 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules.R
 			fmt.Fprintf(stderr, "cdc publisher init failed: %v\n", err)
 			return err
 		}
-		canalRuntime, err := newCanalUploadRuntime(cfg, ruleSet, cdc.NewMySQLOffsetStore(db), cdcPublisher)
+		canalRuntime, err := newCanalUploadRuntime(cfg, ruleSet, cdc.NewMySQLOffsetStore(db), cdcPublisher, syncstore.New(db))
 		if err != nil {
 			return err
+		}
+		source, recorder, repair, err := attachConflictRuntime(cfg, ruleSet, db, sqlWorker, canalRuntime.Source)
+		if err != nil {
+			return err
+		}
+		canalRuntime.Source, canalRuntime.LocalVersions = source, recorder
+		if repair != nil {
+			workers = append(workers, syncruntime.Worker{Config: workerConfig("conflict-repair", cfg.Sync.RetryIntervalSeconds, maxSteps), Stepper: repair, Status: store})
 		}
 		workers = append(workers, syncruntime.Worker{
 			Config:  workerConfig("edge-cdc-canal", cfg.Sync.RetryIntervalSeconds, maxSteps),
 			Stepper: canalRuntime,
 			Status:  store,
 		})
+	}
+	for i := range workers {
+		workers[i].Logger = logger
 	}
 	group := syncruntime.WorkerGroup{Workers: workers}
 	if err := group.Run(ctx); err != nil && err != context.Canceled {
@@ -321,7 +395,11 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules.R
 	return nil
 }
 
-func runServerWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules.RuleSet, edgeNodeIDs []string, store *status.RuntimeStore, maxSteps int, stdout, stderr io.Writer) error {
+func runServerWorkers(ctx context.Context, cfg *appconfig.Config, endpoint rulecheck.EndpointRules, edgeNodeIDs []string, store *status.RuntimeStore, maxSteps int, stdout, stderr io.Writer, logger *slog.Logger) error {
+	ruleSet := &endpoint.Capture
+	if needsConflictRuntime(ruleSet) && !strings.EqualFold(cfg.CDC.Type, "canal") {
+		return fmt.Errorf("conflict_runtime_requires_canal")
+	}
 	if cfg.RabbitMQ.ServerURL == "" {
 		return fmt.Errorf("rabbitmq.server_url is required for server run")
 	}
@@ -357,6 +435,7 @@ func runServerWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules
 		return err
 	}
 	syncStore := syncstore.New(db)
+	sqlWorker := apply.NewCheckedSQLWorker(db)
 	workers := []syncruntime.Worker{
 		{
 			Config: workerConfig("server-ingress", cfg.Sync.RetryIntervalSeconds, maxSteps),
@@ -366,8 +445,8 @@ func runServerWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules
 					Queue:   "server.cdc.ingress.q",
 				},
 				Consumer:   rabbitmq.Consumer{RequeueOnError: true},
-				Rules:      ruleSet,
-				Worker:     apply.NewSQLWorker(db),
+				Rules:      &endpoint.Incoming,
+				Worker:     sqlWorker,
 				EventStore: syncStore,
 				Dispatcher: syncruntime.RoutingDownlinkDispatcher{
 					Publisher: publisher,
@@ -411,11 +490,22 @@ func runServerWorkers(ctx context.Context, cfg *appconfig.Config, ruleSet *rules
 		if err != nil {
 			return err
 		}
+		source, recorder, repair, err := attachConflictRuntime(cfg, ruleSet, db, sqlWorker, serverCDCRuntime.Source)
+		if err != nil {
+			return err
+		}
+		serverCDCRuntime.Source, serverCDCRuntime.LocalVersions = source, recorder
+		if repair != nil {
+			workers = append(workers, syncruntime.Worker{Config: workerConfig("conflict-repair", cfg.Sync.RetryIntervalSeconds, maxSteps), Stepper: repair, Status: store})
+		}
 		workers = append(workers, syncruntime.Worker{
 			Config:  workerConfig("server-cdc-canal", cfg.Sync.RetryIntervalSeconds, maxSteps),
 			Stepper: serverCDCRuntime,
 			Status:  store,
 		})
+	}
+	for i := range workers {
+		workers[i].Logger = logger
 	}
 	group := syncruntime.WorkerGroup{Workers: workers}
 	if err := group.Run(ctx); err != nil && err != context.Canceled {
@@ -685,9 +775,14 @@ func runPublishChangeOnce(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 
+	db, err := openMySQL(cfg)
+	if err != nil {
+		return fmt.Errorf("open replay apply log: %w", err)
+	}
+	defer db.Close()
 	runtime := syncruntime.CDCUploadRuntime{
 		Source:     cdc.NewStubSource([]cdc.ChangeEvent{change}),
-		Decider:    loop.NewSuppressor(cfg.Node.ID, *ruleSet, nil),
+		Decider:    loop.NewSuppressor(cfg.Node.ID, *ruleSet, syncstore.New(db)),
 		Normalizer: normalizer.New(normalizer.Options{NodeID: cfg.Node.ID, SchemaVersion: 1}),
 		Publisher:  publisher,
 		Exchange:   "edge.upload.x",
@@ -777,7 +872,7 @@ func runCanalPublishOnce(args []string, stdout, stderr io.Writer) error {
 		fmt.Fprintf(stderr, "publisher init failed: %v\n", err)
 		return err
 	}
-	runtime, err := newCanalUploadRuntime(cfg, ruleSet, cdc.NewMySQLOffsetStore(db), publisher)
+	runtime, err := newCanalUploadRuntime(cfg, ruleSet, cdc.NewMySQLOffsetStore(db), publisher, syncstore.New(db))
 	if err != nil {
 		return err
 	}
@@ -864,7 +959,7 @@ func runConsumeOnce(args []string, stdout, stderr io.Writer) error {
 		},
 		Consumer:   rabbitmq.Consumer{RequeueOnError: *requeue},
 		Rules:      ruleSet,
-		Worker:     apply.NewSQLWorker(db),
+		Worker:     apply.NewCheckedSQLWorker(db),
 		EventStore: syncstore.New(db),
 		Dispatcher: dispatcher,
 		EdgeNodes:  edgeNodeIDs,
@@ -1055,7 +1150,7 @@ func runConsumeDownlinkOnce(args []string, stdout, stderr io.Writer) error {
 		},
 		Consumer:               rabbitmq.Consumer{RequeueOnError: *requeue},
 		Rules:                  ruleSet,
-		Worker:                 apply.NewSQLWorker(db),
+		Worker:                 apply.NewCheckedSQLWorker(db),
 		TargetDatabaseOverride: cfg.MySQL.Database,
 		ConfigStore:            syncstore.New(db),
 	}
@@ -1137,7 +1232,7 @@ func runConsumeBatchOnce(args []string, stdout, stderr io.Writer) error {
 		},
 		Consumer:         rabbitmq.Consumer{RequeueOnError: *requeue},
 		Rules:            ruleSet,
-		Worker:           apply.NewSQLWorker(db),
+		Worker:           apply.NewCheckedSQLWorker(db),
 		EventStore:       syncstore.New(db),
 		Dispatcher:       dispatcher,
 		EdgeNodes:        edgeNodeIDs,
@@ -1208,7 +1303,7 @@ func runConsumeDownlinkBatchOnce(args []string, stdout, stderr io.Writer) error 
 		},
 		Consumer:               rabbitmq.Consumer{RequeueOnError: *requeue},
 		Rules:                  ruleSet,
-		Worker:                 apply.NewSQLWorker(db),
+		Worker:                 apply.NewCheckedSQLWorker(db),
 		TargetDatabaseOverride: cfg.MySQL.Database,
 		ConfigStore:            syncstore.New(db),
 		MaxBatch:               *maxBatch,
@@ -2153,6 +2248,9 @@ func runMigrate(args []string, stdout, stderr io.Writer) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+	if *scope != "edge" && *scope != "server" {
+		return errors.New("migration scope must be edge or server")
+	}
 
 	cfg, err := appconfig.LoadFile(*configPath)
 	if err != nil {
@@ -2166,10 +2264,24 @@ func runMigrate(args []string, stdout, stderr io.Writer) error {
 	}
 	defer db.Close()
 
-	dir := filepath.Join("migrations", *scope)
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve migration executable: %w", err)
+	}
+	dir := migrationDirectory(executable, *scope)
 	if err := mysqlconn.RunMigrations(context.Background(), db, dir); err != nil {
 		fmt.Fprintf(stderr, "migrate failed: %v\n", err)
 		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if err := mysqlconn.EnsureApplyDiagnosticIndexes(ctx, db); err != nil {
+		return fmt.Errorf("upgrade apply indexes: %w", err)
+	}
+	if *scope == "server" {
+		if err := mysqlconn.EnsureServerDiagnosticIndexes(ctx, db); err != nil {
+			return fmt.Errorf("upgrade system indexes: %w", err)
+		}
 	}
 	fmt.Fprintf(stdout, "migrations applied scope=%s database=%s\n", *scope, cfg.MySQL.Database)
 	return nil
@@ -2222,7 +2334,7 @@ func runApplyEvent(args []string, stdout, stderr io.Writer) error {
 	}
 	defer db.Close()
 
-	result, err := apply.NewSQLWorker(db).Apply(context.Background(), mapped)
+	result, err := apply.NewCheckedSQLWorker(db).Apply(context.Background(), mapped)
 	if err != nil {
 		fmt.Fprintf(stderr, "apply event failed: %v\n", err)
 		return err
@@ -2303,13 +2415,15 @@ func bodyPreview(body []byte, limit int) string {
 	return string(body[:limit])
 }
 
+const defaultWorkerIdleInterval = 100 * time.Millisecond
+
 func workerConfig(name string, retrySeconds, maxSteps int) syncruntime.WorkerConfig {
 	if retrySeconds <= 0 {
 		retrySeconds = 10
 	}
 	return syncruntime.WorkerConfig{
 		Name:          name,
-		IdleInterval:  time.Duration(retrySeconds) * time.Second,
+		IdleInterval:  defaultWorkerIdleInterval,
 		ErrorInterval: time.Duration(retrySeconds) * time.Second,
 		MaxSteps:      maxSteps,
 	}
@@ -2352,8 +2466,14 @@ func canalConfigFromApp(cfg *appconfig.Config) canalcdc.Config {
 	}
 }
 
-func newCanalUploadRuntime(cfg *appconfig.Config, ruleSet *rules.RuleSet, offsetStore cdc.OffsetStore, publisher syncruntime.EventPublisher) (*syncruntime.CanalUploadRuntime, error) {
+func newCanalUploadRuntime(cfg *appconfig.Config, ruleSet *rules.RuleSet, offsetStore cdc.OffsetStore, publisher syncruntime.EventPublisher, applyLog loop.ApplyLog) (*syncruntime.CanalUploadRuntime, error) {
+	if applyLog == nil {
+		return nil, fmt.Errorf("canal upload apply log is required")
+	}
 	canalConfig := canalConfigFromApp(cfg)
+	if needsConflictRuntime(ruleSet) {
+		canalConfig.Filter = conflictCaptureFilter(canalConfig.Filter, cfg.MySQL.Database)
+	}
 	client, err := canalcdc.NewWithlinClient(canalConfig)
 	if err != nil {
 		return nil, err
@@ -2364,7 +2484,7 @@ func newCanalUploadRuntime(cfg *appconfig.Config, ruleSet *rules.RuleSet, offset
 	}
 	return &syncruntime.CanalUploadRuntime{
 		Source:     adapter,
-		Decider:    loop.NewSuppressor(cfg.Node.ID, *ruleSet, nil),
+		Decider:    loop.NewSuppressor(cfg.Node.ID, *ruleSet, applyLog),
 		Normalizer: normalizer.New(normalizer.Options{NodeID: cfg.Node.ID, SchemaVersion: 1}),
 		Publisher:  publisher,
 		Exchange:   "edge.upload.x",
@@ -2374,6 +2494,9 @@ func newCanalUploadRuntime(cfg *appconfig.Config, ruleSet *rules.RuleSet, offset
 
 func newCanalServerDispatchRuntime(cfg *appconfig.Config, ruleSet *rules.RuleSet, offsetStore cdc.OffsetStore, publisher syncruntime.EventPublisher, store *syncstore.Store, edgeNodeIDs []string) (*syncruntime.ServerCanalDispatchRuntime, error) {
 	canalConfig := canalConfigFromApp(cfg)
+	if needsConflictRuntime(ruleSet) {
+		canalConfig.Filter = conflictCaptureFilter(canalConfig.Filter, cfg.MySQL.Database)
+	}
 	client, err := canalcdc.NewWithlinClient(canalConfig)
 	if err != nil {
 		return nil, err

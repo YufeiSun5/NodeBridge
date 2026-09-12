@@ -69,6 +69,7 @@ func (c *externalAgentController) Start(ctx context.Context, configPath, rulesPa
 		args = append(args, "-stop-file", stopFile)
 	}
 	cmd := exec.CommandContext(ctx, executable, args...)
+	configureBackgroundProcess(cmd)
 	logFile, err := openAgentLog(configPath)
 	if err != nil {
 		c.status = status.AgentError

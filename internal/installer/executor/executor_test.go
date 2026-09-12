@@ -3,7 +3,9 @@ package executor_test
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +35,22 @@ func TestApplyWritesManifestAndCanalConfig(t *testing.T) {
 	cfg.RabbitMQ.ServerURL = ""
 	cfg.RabbitMQ.LocalURL = ""
 	cfg.CDC.ConfigDir = filepath.Join(dir, "canal")
+	cfg.CDC.UseGTID = true
+	cfg.MySQL.Password = `secret\value`
+	confDir := filepath.Join(cfg.CDC.ConfigDir, "conf")
+	if err := os.MkdirAll(confDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(confDir, "canal.properties"), []byte("canal.destinations = example\ncanal.auto.scan = true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	legacyDir := filepath.Join(cfg.CDC.ConfigDir, "nodebridge-edge-001")
+	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyDir, "instance.properties"), []byte("legacy\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	manifestPath := filepath.Join(dir, "install-manifest.json")
 
 	exec := executor.New()
@@ -62,9 +80,35 @@ func TestApplyWritesManifestAndCanalConfig(t *testing.T) {
 	if loaded.InstallID != "install-test" || loaded.Version != "0.31.0" {
 		t.Fatalf("unexpected manifest %+v", loaded)
 	}
-	configPath := filepath.Join(cfg.CDC.ConfigDir, "nodebridge-edge-001", "instance.properties")
-	if _, err := filepath.Abs(configPath); err != nil {
-		t.Fatalf("invalid config path: %v", err)
+	configPath := filepath.Join(cfg.CDC.ConfigDir, "conf", "edge-001", "instance.properties")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read Canal destination config: %v", err)
+	}
+	content := string(data)
+	for _, want := range []string{
+		"canal.instance.gtidon=true",
+		"canal.instance.dbUsername=sync",
+		`canal.instance.dbPassword=secret\\value`,
+		`canal.instance.filter.regex=scada\\..*`,
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("Canal destination config missing %q in %s", want, content)
+		}
+	}
+	rootData, err := os.ReadFile(filepath.Join(confDir, "canal.properties"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootContent := string(rootData)
+	if !strings.Contains(rootContent, "canal.destinations = edge-001") || !strings.Contains(rootContent, "canal.auto.scan = false") {
+		t.Fatalf("Canal root config did not activate destination: %s", rootContent)
+	}
+	if _, err := os.Stat(legacyDir); !os.IsNotExist(err) {
+		t.Fatalf("legacy Canal destination was not removed: %v", err)
+	}
+	if !loaded.OwnsCanalDestination("edge-001") {
+		t.Fatalf("manifest does not own canonical Canal destination: %+v", loaded.ManagedComponents.Canal.Destinations)
 	}
 }
 

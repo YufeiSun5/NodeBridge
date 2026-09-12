@@ -32,7 +32,7 @@ func TestBuildPlanAlreadyReady(t *testing.T) {
 		CanalInstalled: true,
 		ServiceRunning: true,
 		ConfigDirs:     map[string]bool{desired.ConfigDir: true},
-		Destinations:   map[string]bool{"nodebridge-edge-001": true},
+		Destinations:   map[string]bool{"edge-001": true},
 	}
 
 	plan := installer.BuildPlan(current, desired)

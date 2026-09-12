@@ -4,7 +4,7 @@ import { SectionHeader } from '../components/SectionHeader';
 import { SwitchControl } from '../components/SwitchControl';
 import { useAuth } from '../auth';
 import { translateStatus, useI18n } from '../i18n';
-import { getConfig, getNodeOptions, getSyncRules, saveSyncRules, type NodeOptionsResponse, type SyncRule } from '../services/wails';
+import { getConfig, getNodeOptions, getSyncRulesSnapshot, saveSyncRules, preflightSyncRule, type RulePreflightResult, type SyncRulesSnapshot, type NodeOptionsResponse, type SyncRule } from '../services/wails';
 
 function listValue(values?: string[]) {
   return values && values.length > 0 ? values.join(', ') : '-';
@@ -149,6 +149,8 @@ function RulesReadOnly({ rules, t }: { rules: SyncRule[]; t: (key: string) => st
                   hint={dispatchNodesValue(rule, t)}
                 />
                 <ReadOnlyRuleItem label={t('conflict')} value={rule.conflict_policy || '-'} />
+                <ReadOnlyRuleItem label={t('deleteMode')} value={rule.delete_mode || 'SOFT'} />
+                <ReadOnlyRuleItem label={t('initialAlignment')} value={rule.initial_alignment?.policy === 'MANUAL' ? t('initialAlignmentManual') : t('initialAlignmentDisabled')} />
                 <ReadOnlyRuleItem label={t('sourceNodes')} value={sourceNodesValue(rule, t)} />
                 <ReadOnlyRuleItem label={t('selectedTargetNodes')} value={dispatchNodesValue(rule, t)} />
               </div>
@@ -195,6 +197,12 @@ export function RulesPage() {
   const { t } = useI18n();
   const { authState, ensureUnlocked } = useAuth();
   const [rules, setRules] = useState<SyncRule[]>([]);
+  const [snapshot, setSnapshot] = useState<SyncRulesSnapshot>({ rules: [] });
+  const [checking, setChecking] = useState(false);
+  const [checkRule, setCheckRule] = useState('');
+  const [checkSide, setCheckSide] = useState<'source' | 'target'>('target');
+  const [preflight, setPreflight] = useState<RulePreflightResult | null>(null);
+  const [saving, setSaving] = useState(false);
   const [nodeOptions, setNodeOptions] = useState<NodeOptionsResponse>({ items: [], status: 'unknown' });
   const [crudCompactEnabled, setCrudCompactEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -205,8 +213,11 @@ export function RulesPage() {
     setLoading(true);
     setError('');
     try {
-      const [nextRules, nextNodeOptions, nextConfig] = await Promise.all([getSyncRules(), getNodeOptions(), getConfig()]);
-      setRules(nextRules);
+      const [nextRules, nextNodeOptions, nextConfig] = await Promise.all([getSyncRulesSnapshot(), getNodeOptions(), getConfig()]);
+      setRules(nextRules.rules);
+      setSnapshot(nextRules);
+      setCheckRule(nextRules.rules[0]?.id || '');
+      setPreflight(null);
       setNodeOptions(nextNodeOptions);
       setCrudCompactEnabled(Boolean(nextConfig.sync?.enable_crud_compact));
     } catch (err) {
@@ -223,10 +234,29 @@ export function RulesPage() {
       return;
     }
     try {
-      setRules(await saveSyncRules(rules));
+      setSaving(true);
+      const saved = await saveSyncRules(rules, snapshot.saved_revision || '');
+      setRules(saved.rules);
+      setSnapshot(saved);
+      setPreflight(null);
       setMessage(t('rulesSaved'));
     } catch (err) {
       setError(err instanceof Error ? err.message : t('rulesError'));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function checkSavedRule() {
+    setChecking(true);
+    setError('');
+    setPreflight(null);
+    try {
+      setPreflight(await preflightSyncRule(checkRule, checkSide));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('rulesError'));
+    } finally {
+      setChecking(false);
     }
   }
 
@@ -252,11 +282,12 @@ export function RulesPage() {
         table_name: '',
         target_database_name: '',
         target_table_name: '',
-        direction: 'BIDIRECTIONAL',
+        direction: 'EDGE_TO_SERVER',
         sync_mode: 'crud_ordered',
-        dispatch_target: 'AUTO',
+        dispatch_target: 'NONE',
         dispatch_node_ids: [],
-        conflict_policy: 'LAST_WRITE_WIN',
+        conflict_policy: 'NONE',
+        delete_mode: 'HARD',
         enable: true,
         source_node_ids: [],
         primary_keys: [],
@@ -264,6 +295,7 @@ export function RulesPage() {
         include_columns: [],
         exclude_columns: [],
         column_mappings: [],
+        initial_alignment: { policy: 'DISABLED' },
       },
     ]);
   }
@@ -293,7 +325,7 @@ export function RulesPage() {
 
       {authState.unlocked ? (
         <div className="toolbar-row">
-          <button className="button-primary" type="button" onClick={() => void save()}>
+          <button className="button-primary" type="button" disabled={saving || loading} onClick={() => void save()}>
             {t('saveRules')}
           </button>
           <button className="button-tool" type="button" onClick={() => void addRule()}>
@@ -304,6 +336,18 @@ export function RulesPage() {
           </button>
         </div>
       ) : null}
+
+      {snapshot.saved_revision ? <div className="result-line"><span>{t('savedRevision')}</span><code title={snapshot.saved_revision}>{snapshot.saved_revision.slice(0, 12)}</code><span>{t('activeRevision')}</span><code title={snapshot.active_revision}>{snapshot.active_revision?.slice(0, 12) || '-'}</code><strong>{t(`rulesActivation_${snapshot.activation || 'unknown'}`)}</strong></div> : null}
+      {snapshot.rules.length > 0 ? <div className="toolbar-row">
+        <select aria-label={t('savedRule')} value={checkRule} onChange={(e) => setCheckRule(e.target.value)}>{snapshot.rules.map((rule) => <option key={rule.id} value={rule.id}>{rule.id}</option>)}</select>
+        <select aria-label={t('preflightSide')} value={checkSide} onChange={(e) => setCheckSide(e.target.value as 'source' | 'target')}><option value="source">{t('localSource')}</option><option value="target">{t('localTarget')}</option></select>
+        <button className="button-secondary" type="button" disabled={checking || !checkRule} onClick={() => void checkSavedRule()}>{checking ? t('checking') : t('preflightSavedRule')}</button>
+      </div> : null}
+      {preflight ? <section aria-live="polite">
+        <div className={`result-line ${preflight.ok ? 'ok' : 'error'}`}><strong>{preflight.ok ? t('localPreflightPassed') : t('localPreflightFailed')}</strong><span>{preflight.schema.database}.{preflight.schema.table}</span><span>{preflight.checked_permissions.join(', ')}</span></div>
+        {preflight.findings.map((item, index) => <div className="result-line" key={`${item.code}-${index}`}><code>{item.code}</code><span>{item.message}</span></div>)}
+        {preflight.unverified.length ? <div className="result-line"><strong>{t('unverified')}</strong><span>{preflight.unverified.map((key) => t(`preflight_${key}`)).join(' / ')}</span></div> : null}
+      </section> : null}
 
       {!loading && rules.length === 0 ? <EmptyState title={t('noSyncRules')} detail={t('emptyRuleSet')} /> : null}
 
@@ -372,10 +416,20 @@ export function RulesPage() {
                     <Field label={t('direction')}>
                       <select value={rule.direction} onChange={(event) => updateRule(index, { direction: event.target.value })}>
                         <option value="EDGE_TO_SERVER">EDGE_TO_SERVER</option>
-                        <option value="BIDIRECTIONAL">BIDIRECTIONAL</option>
+                        <option value="BIDIRECTIONAL" disabled>BIDIRECTIONAL ({t('unsupportedPolicy')})</option>
                         <option value="SERVER_TO_EDGE">SERVER_TO_EDGE</option>
                         <option value="IGNORE">IGNORE</option>
                       </select>
+                    </Field>
+                    <Field label={t('initialAlignment')}>
+                      <SwitchControl checked={rule.initial_alignment?.policy === 'MANUAL'} label={rule.initial_alignment?.policy === 'MANUAL' ? t('initialAlignmentManual') : t('initialAlignmentDisabled')} onChange={(checked) => updateRule(index, { initial_alignment: { policy: checked ? 'MANUAL' : 'DISABLED' } })} />
+                    </Field>
+                    <Field label={t('deleteMode')}>
+                      <select value={rule.delete_mode || 'SOFT'} onChange={(event) => updateRule(index, { delete_mode: event.target.value as 'HARD' | 'SOFT' })}>
+                        <option value="HARD">HARD</option>
+                        <option value="SOFT">SOFT</option>
+                      </select>
+                      <DefaultHint tone={rule.delete_mode === 'HARD' ? 'warn' : 'info'}>{t(rule.delete_mode === 'HARD' ? 'deleteHardWarning' : 'deleteSoftWarning')}</DefaultHint>
                     </Field>
                     <Field label={t('syncMode')}>
                       <select
@@ -420,8 +474,8 @@ export function RulesPage() {
                         onChange={(event) => updateRule(index, { conflict_policy: event.target.value })}
                       >
                         <option value="NONE">NONE</option>
-                        <option value="SERVER_WIN">SERVER_WIN</option>
-                        <option value="LAST_WRITE_WIN">LAST_WRITE_WIN</option>
+                        <option value="SERVER_WIN" disabled>SERVER_WIN ({t('unsupportedPolicy')})</option>
+                        <option value="LAST_WRITE_WIN" disabled>LAST_WRITE_WIN ({t('unsupportedPolicy')})</option>
                       </select>
                     </Field>
                     <Field label={t('sourceNodes')} className="wide-field">

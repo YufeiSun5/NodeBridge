@@ -143,6 +143,9 @@ func TestMCPLabToolCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	tools := s.Tools()
+	if len(tools) < 39 {
+		t.Fatalf("expected legacy tools plus capabilities and remediation tools, got %d", len(tools))
+	}
 	seen := map[string]bool{}
 	for _, tool := range tools {
 		name := tool["name"].(string)
@@ -150,8 +153,23 @@ func TestMCPLabToolCatalog(t *testing.T) {
 			t.Fatal("duplicate tool " + name)
 		}
 		seen[name] = true
+		if name == "nodebridge_save_sync_rules" {
+			encoded, err := json.Marshal(tool["inputSchema"])
+			if err != nil || !strings.Contains(string(encoded), `"expected_revision"`) {
+				t.Fatal("CAS revision missing from overridden MCP schema", err)
+			}
+		}
 	}
-	for _, name := range []string{"nodebridge_start_agent", "nodebridge_stop_agent", "nodebridge_mysql_schema", "nodebridge_apply_managed_install", "nodebridge_ensure_server_edge_user"} {
+	for _, name := range []string{
+		"nodebridge_start_agent", "nodebridge_stop_agent", "nodebridge_mysql_schema",
+		"nodebridge_mysql_diagnostics",
+		"nodebridge_mysql_query", "nodebridge_mysql_mutation_plan", "nodebridge_mysql_mutation_apply",
+		"nodebridge_mysql_schema_change_plan", "nodebridge_mysql_schema_change_apply",
+		"nodebridge_apply_managed_install", "nodebridge_ensure_server_edge_user",
+		"nodebridge_capabilities",
+		"nodebridge_rule_preflight", "nodebridge_event_status",
+		"nodebridge_queue_event_plan", "nodebridge_queue_event_apply", "nodebridge_queue_event_audit",
+	} {
 		if !seen[name] {
 			t.Fatal("missing " + name)
 		}
@@ -249,10 +267,10 @@ func TestMCPServerCanProvisionEdgeAccount(t *testing.T) {
 func TestMCPRequiredMutationArgument(t *testing.T) {
 	called := false
 	tool := bindTool("startup", "", true, func(req uiapi.SetAutoStartRequest) (any, error) { called = true; return req, nil })
-	if _, err := tool.call(json.RawMessage(`{}`)); err == nil || called {
+	if _, err := tool.call(context.Background(), json.RawMessage(`{}`)); err == nil || called {
 		t.Fatal("missing enabled changed startup")
 	}
-	if _, err := tool.call(json.RawMessage(`{"enabled":false}`)); err != nil || !called {
+	if _, err := tool.call(context.Background(), json.RawMessage(`{"enabled":false}`)); err != nil || !called {
 		t.Fatal("explicit false was rejected")
 	}
 }

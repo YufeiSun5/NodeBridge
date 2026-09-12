@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
+	"github.com/YufeiSun5/NodeBridge/internal/dbgovernance"
 )
 
 type Config struct {
@@ -41,6 +42,7 @@ type RowChange struct {
 	PrimaryKey   map[string]any
 	Before       map[string]any
 	After        map[string]any
+	SchemaChange *dbgovernance.SchemaChange
 	BinlogFile   string
 	BinlogPos    uint32
 	EventTime    time.Time
@@ -51,9 +53,16 @@ func ConvertRowChange(row RowChange) (cdc.ChangeEvent, error) {
 		return cdc.ChangeEvent{}, fmt.Errorf("database and table are required")
 	}
 	switch row.Operation {
-	case cdc.OperationInsert, cdc.OperationUpdate, cdc.OperationDelete:
+	case cdc.OperationInsert, cdc.OperationUpdate, cdc.OperationDelete, cdc.OperationAddColumn, cdc.OperationDropColumn:
 	default:
 		return cdc.ChangeEvent{}, fmt.Errorf("unsupported canal operation %q", row.Operation)
+	}
+	isSchemaOperation := row.Operation == cdc.OperationAddColumn || row.Operation == cdc.OperationDropColumn
+	if isSchemaOperation != (row.SchemaChange != nil) {
+		return cdc.ChangeEvent{}, fmt.Errorf("canal operation %q and schema change payload do not match", row.Operation)
+	}
+	if row.SchemaChange != nil && string(row.Operation) != row.SchemaChange.Operation {
+		return cdc.ChangeEvent{}, fmt.Errorf("canal operation %q does not match schema change operation %q", row.Operation, row.SchemaChange.Operation)
 	}
 	return cdc.ChangeEvent{
 		DatabaseName: row.DatabaseName,
@@ -62,10 +71,19 @@ func ConvertRowChange(row RowChange) (cdc.ChangeEvent, error) {
 		PrimaryKey:   clone(row.PrimaryKey),
 		Before:       clone(row.Before),
 		After:        clone(row.After),
+		SchemaChange: cloneSchemaChange(row.SchemaChange),
 		BinlogFile:   row.BinlogFile,
 		BinlogPos:    row.BinlogPos,
 		EventTime:    row.EventTime,
 	}, nil
+}
+
+func cloneSchemaChange(change *dbgovernance.SchemaChange) *dbgovernance.SchemaChange {
+	if change == nil {
+		return nil
+	}
+	cloned := *change
+	return &cloned
 }
 
 type Client interface {
@@ -175,6 +193,9 @@ func (a *Adapter) Commit(ctx context.Context, offset cdc.Offset) error {
 		if !IsBatchNotExistError(err) {
 			return err
 		}
+	}
+	if offset.SkipCheckpoint {
+		return nil
 	}
 	if err := a.Store.Save(ctx, offset); err != nil {
 		return err

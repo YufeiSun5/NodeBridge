@@ -90,7 +90,7 @@ func DefaultDesiredState(nodeID string) DesiredState {
 		ManagedResourceID: "nodebridge",
 		Destinations: []DestinationSpec{
 			{
-				Name:          "nodebridge-" + nodeID,
+				Name:          nodeID,
 				MySQLHost:     "127.0.0.1",
 				MySQLPort:     3306,
 				MySQLUsername: "sync_user",

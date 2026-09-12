@@ -24,6 +24,7 @@ type AMQPBatchGetSource struct {
 }
 
 func (s AMQPBatchGetSource) GetBatch(ctx context.Context, max int, flushInterval time.Duration) ([]rabbitmq.IncomingMessage, error) {
+	defer measurePhase(ctx, "broker_get")()
 	if max <= 0 {
 		max = DefaultBatchSize
 	}

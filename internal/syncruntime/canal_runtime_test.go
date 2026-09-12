@@ -32,7 +32,7 @@ func TestCanalUploadRuntimePublishesThenCommits(t *testing.T) {
 	if result.Action != "published" || result.EventID != "evt-001" || result.DispatchCount != 1 {
 		t.Fatalf("unexpected result %+v", result)
 	}
-	if !source.started || !source.committed {
+	if !source.started || !source.committed || source.committedOffset.SkipCheckpoint {
 		t.Fatalf("expected start and commit, got %+v", source)
 	}
 	if len(publisher.requests) != 1 {
@@ -107,7 +107,7 @@ func TestCanalUploadRuntimeSuppressesAndCommits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunOnce returned error: %v", err)
 	}
-	if result.Action != "suppressed" || !source.committed {
+	if result.Action != "suppressed" || !source.committed || !source.committedOffset.SkipCheckpoint {
 		t.Fatalf("unexpected result=%+v committed=%t", result, source.committed)
 	}
 }
@@ -122,7 +122,7 @@ func TestCanalUploadRuntimeCommitsEmptyCanalBatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunOnce returned error: %v", err)
 	}
-	if result.Action != "committed-empty" || !source.committed {
+	if result.Action != "committed-empty" || !source.committed || !source.committedOffset.SkipCheckpoint {
 		t.Fatalf("unexpected result=%+v committed=%t", result, source.committed)
 	}
 }
@@ -229,11 +229,22 @@ func TestServerCanalDispatchRuntimeDispatchesThenCommits(t *testing.T) {
 	if result.Action != "dispatched" || result.EventID != "evt-server-001" || result.DispatchCount != 2 {
 		t.Fatalf("unexpected result %+v", result)
 	}
-	if !source.started || !source.committed {
+	if !source.started || !source.committed || source.committedOffset.SkipCheckpoint {
 		t.Fatalf("expected start and commit, got %+v", source)
 	}
 	if len(dispatcher.targets) != 2 {
 		t.Fatalf("expected two dispatches, got %+v", dispatcher.targets)
+	}
+}
+
+func TestServerCanalBusinessCheckpointWithoutActiveEdges(t *testing.T) {
+	source := &fakeCanalBatchSource{changes: []cdc.ChangeEvent{sampleServerChange()}, offset: cdc.Offset{BatchID: 1}}
+	result, err := (&ServerCanalDispatchRuntime{
+		Source: source, Normalizer: fakeNormalizer{event: sampleServerEvent()},
+		Rules: sampleServerRules(), Dispatcher: &fakeDispatcher{},
+	}).RunOnce(context.Background())
+	if err != nil || result.DispatchCount != 0 || !source.committed || source.committedOffset.SkipCheckpoint {
+		t.Fatalf("business checkpoint lost without active edges: result=%+v err=%v offset=%+v", result, err, source.committedOffset)
 	}
 }
 
@@ -254,7 +265,7 @@ func TestServerCanalDispatchRuntimeSuppressesThenCommits(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunOnce returned error: %v", err)
 	}
-	if result.Action != "suppressed" || result.DispatchCount != 0 || !source.committed {
+	if result.Action != "suppressed" || result.DispatchCount != 0 || !source.committed || !source.committedOffset.SkipCheckpoint {
 		t.Fatalf("unexpected result=%+v committed=%t", result, source.committed)
 	}
 	if len(dispatcher.targets) != 0 {
@@ -270,7 +281,7 @@ func TestServerCanalDispatchRuntimeCommitsEmptyCanalBatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunOnce returned error: %v", err)
 	}
-	if result.Action != "committed-empty" || !source.committed {
+	if result.Action != "committed-empty" || !source.committed || !source.committedOffset.SkipCheckpoint {
 		t.Fatalf("unexpected result=%+v committed=%t", result, source.committed)
 	}
 }
@@ -288,17 +299,18 @@ func TestServerCanalDispatchRuntimeReconnectsAfterFetchError(t *testing.T) {
 }
 
 type fakeCanalBatchSource struct {
-	changes    []cdc.ChangeEvent
-	offset     cdc.Offset
-	err        error
-	startErr   error
-	fetchErr   error
-	commitErr  error
-	started    bool
-	stopped    bool
-	startCount int
-	stopCount  int
-	committed  bool
+	changes         []cdc.ChangeEvent
+	offset          cdc.Offset
+	err             error
+	startErr        error
+	fetchErr        error
+	commitErr       error
+	started         bool
+	stopped         bool
+	startCount      int
+	stopCount       int
+	committed       bool
+	committedOffset cdc.Offset
 }
 
 func (s *fakeCanalBatchSource) Start(ctx context.Context) error {
@@ -325,6 +337,7 @@ func (s *fakeCanalBatchSource) FetchChangesOnce(ctx context.Context) ([]cdc.Chan
 
 func (s *fakeCanalBatchSource) Commit(ctx context.Context, offset cdc.Offset) error {
 	s.committed = true
+	s.committedOffset = offset
 	if s.commitErr != nil {
 		return s.commitErr
 	}

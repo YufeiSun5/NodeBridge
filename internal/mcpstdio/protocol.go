@@ -36,6 +36,10 @@ func (s StaticService) RecordAudit(action string, success bool) {
 	s.audit(action, map[string]any{"success": success})
 }
 
+func (s StaticService) RecordAuditDetails(action string, detail map[string]any) {
+	s.audit(action, detail)
+}
+
 func (s Server) CallTool(ctx context.Context, name string, args json.RawMessage) (any, error) {
 	return s.callTool(ctx, name, args)
 }

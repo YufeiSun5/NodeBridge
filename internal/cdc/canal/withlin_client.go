@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
+	"github.com/YufeiSun5/NodeBridge/internal/rowvalue"
 	withlinclient "github.com/withlin/canal-go/client"
 	withlinprotocol "github.com/withlin/canal-go/protocol"
 	withlinentry "github.com/withlin/canal-go/protocol/entry"
@@ -24,11 +25,17 @@ type WithlinConnector interface {
 }
 
 type WithlinClient struct {
-	Config    Config
-	TimeoutMS int64
-	UnitMS    int32
-	connector WithlinConnector
+	Config           Config
+	TimeoutMS        int64
+	UnitMS           int32
+	connector        WithlinConnector
+	connectorFactory func() WithlinConnector
 }
+
+const (
+	defaultFetchTimeoutMillis int64 = 100
+	millisecondTimeUnit       int32 = 2
+)
 
 func NewWithlinClient(config Config) (*WithlinClient, error) {
 	if err := config.Validate(); err != nil {
@@ -38,12 +45,15 @@ func NewWithlinClient(config Config) (*WithlinClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	connector := withlinclient.NewSimpleCanalConnector(host, port, config.Username, config.Password, config.Destination, 60000, int32(time.Hour/time.Millisecond))
+	factory := func() WithlinConnector {
+		return withlinclient.NewSimpleCanalConnector(host, port, config.Username, config.Password, config.Destination, 60000, int32(time.Hour/time.Millisecond))
+	}
 	return &WithlinClient{
-		Config:    config,
-		TimeoutMS: 1000,
-		UnitMS:    2,
-		connector: connector,
+		Config:           config,
+		TimeoutMS:        defaultFetchTimeoutMillis,
+		UnitMS:           millisecondTimeUnit,
+		connector:        factory(),
+		connectorFactory: factory,
 	}, nil
 }
 
@@ -54,19 +64,33 @@ func NewWithlinClientWithConnector(config Config, connector WithlinConnector) (*
 	if connector == nil {
 		return nil, fmt.Errorf("withlin connector is required")
 	}
-	return &WithlinClient{Config: config, TimeoutMS: 1000, UnitMS: 2, connector: connector}, nil
+	return &WithlinClient{Config: config, TimeoutMS: defaultFetchTimeoutMillis, UnitMS: millisecondTimeUnit, connector: connector}, nil
 }
 
 func (c *WithlinClient) Connect(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return c.connector.Connect()
+	if c.connector == nil && c.connectorFactory != nil {
+		c.connector = c.connectorFactory()
+	}
+	if c.connector == nil {
+		return fmt.Errorf("canal connector unavailable")
+	}
+	err := c.connector.Connect()
+	if err != nil && c.connectorFactory != nil {
+		_ = c.connector.DisConnection()
+		c.connector = nil
+	}
+	return err
 }
 
 func (c *WithlinClient) Subscribe(ctx context.Context, destination string) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if c.connector == nil {
+		return fmt.Errorf("canal connector unavailable")
 	}
 	filter := c.Config.Filter
 	if filter == "" {
@@ -78,6 +102,9 @@ func (c *WithlinClient) Subscribe(ctx context.Context, destination string) error
 func (c *WithlinClient) Fetch(ctx context.Context, batchSize int) ([]RowChange, cdc.Offset, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, cdc.Offset{}, err
+	}
+	if c.connector == nil {
+		return nil, cdc.Offset{}, fmt.Errorf("canal connector unavailable")
 	}
 	timeout := c.TimeoutMS
 	unit := c.UnitMS
@@ -99,6 +126,9 @@ func (c *WithlinClient) Ack(ctx context.Context, offset cdc.Offset) error {
 	if !offset.HasCanalBatch() {
 		return nil
 	}
+	if c.connector == nil {
+		return fmt.Errorf("canal connector unavailable")
+	}
 	return c.connector.Ack(offset.BatchID)
 }
 
@@ -114,7 +144,15 @@ func (c *WithlinClient) Close(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return c.connector.DisConnection()
+	if c.connector == nil {
+		return nil
+	}
+	err := c.connector.DisConnection()
+	// The upstream connector retains its closed socket; reconnect needs a new instance.
+	if c.connectorFactory != nil {
+		c.connector = nil
+	}
+	return err
 }
 
 func ConvertWithlinMessage(msg *withlinprotocol.Message) ([]RowChange, cdc.Offset, error) {
@@ -140,6 +178,18 @@ func ConvertWithlinMessage(msg *withlinprotocol.Message) ([]RowChange, cdc.Offse
 			return nil, cdc.Offset{}, fmt.Errorf("parse canal row change: %w", err)
 		}
 		if rowChange.GetIsDdl() {
+			change, recognized, err := ParseAlterColumnSQL(header.GetSchemaName(), header.GetTableName(), rowChange.GetSql())
+			if err != nil {
+				return nil, cdc.Offset{}, fmt.Errorf("parse Canal column DDL: %w", err)
+			}
+			if recognized {
+				operation := cdc.Operation(change.Operation)
+				rows = append(rows, RowChange{
+					DatabaseName: header.GetSchemaName(), TableName: header.GetTableName(), Operation: operation,
+					SchemaChange: change, BinlogFile: header.GetLogfileName(), BinlogPos: uint32(header.GetLogfileOffset()),
+					EventTime: time.UnixMilli(header.GetExecuteTime()),
+				})
+			}
 			continue
 		}
 		operation, err := mapWithlinOperation(rowChange.GetEventType())
@@ -147,13 +197,25 @@ func ConvertWithlinMessage(msg *withlinprotocol.Message) ([]RowChange, cdc.Offse
 			continue
 		}
 		for _, rowData := range rowChange.GetRowDatas() {
+			before, err := columnsToMap(rowData.GetBeforeColumns())
+			if err != nil {
+				return nil, cdc.Offset{}, err
+			}
+			after, err := columnsToMap(rowData.GetAfterColumns())
+			if err != nil {
+				return nil, cdc.Offset{}, err
+			}
+			primaryKey, err := primaryKeyFor(operation, rowData)
+			if err != nil {
+				return nil, cdc.Offset{}, err
+			}
 			rows = append(rows, RowChange{
 				DatabaseName: header.GetSchemaName(),
 				TableName:    header.GetTableName(),
 				Operation:    operation,
-				PrimaryKey:   primaryKeyFor(operation, rowData),
-				Before:       columnsToMap(rowData.GetBeforeColumns()),
-				After:        columnsToMap(rowData.GetAfterColumns()),
+				PrimaryKey:   primaryKey,
+				Before:       before,
+				After:        after,
 				BinlogFile:   header.GetLogfileName(),
 				BinlogPos:    uint32(header.GetLogfileOffset()),
 				EventTime:    time.UnixMilli(header.GetExecuteTime()),
@@ -176,7 +238,7 @@ func mapWithlinOperation(eventType withlinentry.EventType) (cdc.Operation, error
 	}
 }
 
-func primaryKeyFor(operation cdc.Operation, rowData *withlinentry.RowData) map[string]any {
+func primaryKeyFor(operation cdc.Operation, rowData *withlinentry.RowData) (map[string]any, error) {
 	columns := rowData.GetAfterColumns()
 	if operation == cdc.OperationDelete {
 		columns = rowData.GetBeforeColumns()
@@ -184,31 +246,48 @@ func primaryKeyFor(operation cdc.Operation, rowData *withlinentry.RowData) map[s
 	result := make(map[string]any)
 	for _, column := range columns {
 		if column.GetIsKey() {
-			result[column.GetName()] = columnValue(column)
+			value, err := columnValue(column)
+			if err != nil {
+				return nil, err
+			}
+			result[column.GetName()] = value
 		}
 	}
 	if len(result) == 0 {
-		return nil
+		return nil, nil
 	}
-	return result
+	return result, nil
 }
 
-func columnsToMap(columns []*withlinentry.Column) map[string]any {
+func columnsToMap(columns []*withlinentry.Column) (map[string]any, error) {
 	if len(columns) == 0 {
-		return nil
+		return nil, nil
 	}
 	result := make(map[string]any, len(columns))
 	for _, column := range columns {
-		result[column.GetName()] = columnValue(column)
+		value, err := columnValue(column)
+		if err != nil {
+			return nil, err
+		}
+		result[column.GetName()] = value
 	}
-	return result
+	return result, nil
 }
 
-func columnValue(column *withlinentry.Column) any {
+func columnValue(column *withlinentry.Column) (any, error) {
 	if column.GetIsNull() {
-		return nil
+		return nil, nil
 	}
-	return column.GetValue()
+	switch column.GetSqlType() {
+	case -2, -3, -4, 2004: // JDBC BINARY, VARBINARY, LONGVARBINARY, BLOB.
+		value, err := rowvalue.FromCanal(column.GetValue())
+		if err != nil {
+			return nil, fmt.Errorf("canal column %s: %w", column.GetName(), err)
+		}
+		return value, nil
+	default:
+		return column.GetValue(), nil
+	}
 }
 
 func splitAddress(address string) (string, int, error) {

@@ -96,6 +96,7 @@ export interface SyncRule {
   dispatch_target?: string;
   dispatch_node_ids?: string[];
   sync_mode?: string;
+  delete_mode?: 'HARD' | 'SOFT';
   conflict_policy: string;
   enable: boolean;
   primary_keys: string[];
@@ -103,6 +104,16 @@ export interface SyncRule {
   include_columns: string[];
   exclude_columns: string[];
   column_mappings?: ColumnMapping[];
+  schema_sync?: { add_columns: boolean; drop_columns: boolean };
+  initial_alignment?: { policy?: 'DISABLED' | 'MANUAL' };
+}
+
+export interface CapabilitiesResponse {
+  version: string;
+  transport: string;
+  features: { id: string; supported: boolean; modes?: string[]; message?: string }[];
+  tools?: { name: string; required_scope?: string; available: boolean; read_only: boolean }[];
+  lab_full_access: boolean;
 }
 
 export interface NodeOptionDTO {
@@ -238,8 +249,13 @@ type BackendApp = {
   SaveConfig?: (req: { config: ConfigDTO }) => Promise<ConfigDTO>;
   TestMySQL?: (req: MySQLConfig) => Promise<TestResult>;
   TestRabbitMQ?: (req: RabbitMQConfig) => Promise<TestResult>;
-  GetSyncRules?: () => Promise<{ rules: SyncRule[] }>;
-  SaveSyncRules?: (req: { rules: SyncRule[] }) => Promise<{ rules: SyncRule[] }>;
+  GetSyncRules?: () => Promise<SyncRulesSnapshot>;
+  SaveSyncRules?: (req: { rules: SyncRule[]; expected_revision: string }) => Promise<SyncRulesSnapshot>;
+  PreflightSyncRule?: (req: { rule_id: string; side: 'source' | 'target' }) => Promise<RulePreflightResult>;
+  GetEventStatus?: (req: { event_id?: string; rule_id?: string; limit?: number }) => Promise<EventStatusResponse>;
+  PlanQueueEventQuarantine?: (req: { queue: string; rule_id: string; event_id: string }) => Promise<QueueAuditReceipt>;
+  ApplyQueueEventQuarantine?: (req: { plan_id: string; confirm: boolean }) => Promise<QueueAuditReceipt>;
+  GetQueueEventAudit?: (req: { plan_id: string }) => Promise<QueueAuditReceipt>;
   GetNodeOptions?: () => Promise<{ items: NodeOptionDTO[]; status: string; message?: string }>;
   GetQueueStatus?: () => Promise<{ queues: QueueStatusDTO[] }>;
   GetFailedEvents?: (req: { limit: number }) => Promise<{ items: FailedEventDTO[] }>;
@@ -263,6 +279,7 @@ type BackendApp = {
   UnlockAdmin?: (req: { password: string }) => Promise<OperationResult>;
   LockAdmin?: () => Promise<OperationResult>;
   GetAuthState?: () => Promise<AuthState>;
+  GetCapabilities?: () => Promise<CapabilitiesResponse>;
 };
 
 declare global {
@@ -417,12 +434,76 @@ export async function getSyncRules(): Promise<SyncRule[]> {
   return (await app()?.GetSyncRules?.())?.rules || [];
 }
 
-export async function saveSyncRules(rules: SyncRule[]): Promise<SyncRule[]> {
+export interface SyncRulesSnapshot {
+  rules: SyncRule[];
+  saved_revision?: string;
+  active_revision?: string;
+  activation?: string;
+}
+
+export interface RulePreflightResult {
+  rule_id: string;
+  side: string;
+  ok: boolean;
+  schema: { database: string; table: string; engine: string; primary_keys: string[] };
+  findings: { code: string; severity: string; message: string }[];
+  checked_permissions: string[];
+  unverified: string[];
+}
+
+export interface EventStatusResponse {
+  items: { event_id: string; rule_id?: string; state: string; apply_status: string; applied_at?: string; target_database?: string; target_table?: string; source_database?: string; source_table?: string; binlog_file?: string; binlog_pos?: number; last_error?: string; mysql_error_code?: number; next_retry_at?: string }[];
+  warnings: string[];
+  complete: boolean;
+  scope: string;
+}
+
+export interface QueueAuditReceipt {
+  plan: { plan_id: string; node_id: string; source_queue: string; target_queue: string; rule_id: string; rule_revision: string; config_revision: string; event_id: string; fingerprint: string; expires_at: string };
+  state: string;
+  updated_at: string;
+}
+
+export async function planQueueEventQuarantine(queue: string, rule_id: string, event_id: string): Promise<QueueAuditReceipt> {
+  const fn = app()?.PlanQueueEventQuarantine;
+  if (!fn) throw new Error('Wails PlanQueueEventQuarantine binding is not available');
+  return fn({ queue, rule_id, event_id });
+}
+
+export async function applyQueueEventQuarantine(plan_id: string): Promise<QueueAuditReceipt> {
+  const fn = app()?.ApplyQueueEventQuarantine;
+  if (!fn) throw new Error('Wails ApplyQueueEventQuarantine binding is not available');
+  return fn({ plan_id, confirm: true });
+}
+
+export async function getQueueEventAudit(plan_id: string): Promise<QueueAuditReceipt> {
+  const fn = app()?.GetQueueEventAudit;
+  if (!fn) throw new Error('Wails GetQueueEventAudit binding is not available');
+  return fn({ plan_id });
+}
+
+export async function getEventStatus(event_id = '', rule_id = ''): Promise<EventStatusResponse> {
+  const fn = app()?.GetEventStatus;
+  if (!fn) throw new Error('Wails GetEventStatus binding is not available');
+  return fn({ event_id, rule_id, limit: 20 });
+}
+
+export async function getSyncRulesSnapshot(): Promise<SyncRulesSnapshot> {
+  return (await app()?.GetSyncRules?.()) || { rules: [] };
+}
+
+export async function preflightSyncRule(rule_id: string, side: 'source' | 'target'): Promise<RulePreflightResult> {
+  const fn = app()?.PreflightSyncRule;
+  if (!fn) throw new Error('Wails PreflightSyncRule binding is not available');
+  return fn({ rule_id, side });
+}
+
+export async function saveSyncRules(rules: SyncRule[], expected_revision: string): Promise<SyncRulesSnapshot> {
   const fn = app()?.SaveSyncRules;
   if (!fn) {
     throw new Error('Wails SaveSyncRules binding is not available');
   }
-  return (await fn({ rules })).rules || [];
+  return fn({ rules, expected_revision });
 }
 
 export async function getNodeOptions(): Promise<NodeOptionsResponse> {
@@ -547,6 +628,12 @@ export async function getMCPServerStatus(): Promise<MCPServerStatus> {
       restart_resets: false,
     }
   );
+}
+
+export async function getCapabilities(): Promise<CapabilitiesResponse> {
+  const fn = app()?.GetCapabilities;
+  if (!fn) throw new Error('Wails GetCapabilities binding is not available');
+  return fn();
 }
 
 export async function setMCPServerEnabled(enabled: boolean): Promise<MCPServerStatus> {

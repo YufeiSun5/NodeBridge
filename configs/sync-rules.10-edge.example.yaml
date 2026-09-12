@@ -1,5 +1,5 @@
 rules:
-  # Same schema, multi-master. / 同结构多主。 / 同一構造のマルチマスター。
+  # Disabled: multi-writer arbitration is not implemented.
   - id: device-config-bidirectional
     database_name: scada_edge
     table_name: device_config
@@ -8,7 +8,7 @@ rules:
     direction: BIDIRECTIONAL
     dispatch_target: ACTIVE_EDGES
     conflict_policy: LAST_WRITE_WIN
-    enable: true
+    enable: false
     primary_keys: [id]
 
   - id: point-config-bidirectional
@@ -19,7 +19,7 @@ rules:
     direction: BIDIRECTIONAL
     dispatch_target: ACTIVE_EDGES
     conflict_policy: LAST_WRITE_WIN
-    enable: true
+    enable: false
     primary_keys: [id]
 
   # Server-origin changes. / 中心本地变更。 / 中央側の変更。
@@ -31,7 +31,7 @@ rules:
     direction: SERVER_TO_EDGE
     dispatch_target: ACTIVE_EDGES
     conflict_policy: LAST_WRITE_WIN
-    enable: true
+    enable: false
     primary_keys: [id]
 
   - id: server-point-config-downlink
@@ -42,7 +42,7 @@ rules:
     direction: SERVER_TO_EDGE
     dispatch_target: ACTIVE_EDGES
     conflict_policy: LAST_WRITE_WIN
-    enable: true
+    enable: false
     primary_keys: [id]
 
   # Edge summary tables share source name `data_all`; server tables are node-scoped.

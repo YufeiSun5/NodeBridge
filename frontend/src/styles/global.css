@@ -1036,7 +1036,7 @@ label {
 
 .rule-card-head {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 10px;
   align-items: center;
   padding-bottom: 8px;
@@ -1074,6 +1074,14 @@ label {
   gap: 10px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-normal);
+}
+
+.rule-card-head > div {
+  min-width: 0;
+}
+
+.rule-card-head button {
+  white-space: nowrap;
 }
 
 .rule-readonly-state {
@@ -1159,12 +1167,13 @@ label {
 
 .rule-section-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   gap: 10px;
   align-items: stretch;
 }
 
 .rule-section {
+  min-width: 0;
   min-height: 172px;
   height: 100%;
   background: var(--bg-subtle);
@@ -1178,15 +1187,21 @@ label {
 }
 
 .rule-field-grid.two-col {
-  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .rule-field-grid.routing-grid {
-  grid-template-columns: repeat(3, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr));
 }
 
 .rule-field {
+  min-width: 0;
   gap: 4px;
+}
+
+.rule-card .rule-danger-hint {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .rule-field input,
@@ -1772,4 +1787,27 @@ label {
   border-radius: 4px;
   background: var(--bg-primary);
   color: var(--sync);
+}
+
+.queue-quarantine {
+  min-width: 0;
+  padding-block: 12px;
+  border-block: 1px solid var(--border-normal);
+}
+
+.queue-quarantine .toolbar-input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.queue-audit-details {
+  display: grid;
+  grid-template-columns: minmax(80px, 120px) minmax(0, 1fr);
+  gap: 6px 12px;
+  font-size: 12px;
+}
+
+.queue-audit-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }

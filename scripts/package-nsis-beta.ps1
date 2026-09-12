@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "0.46.3",
+    [string]$Version = "0.46.16",
     [string]$DateStamp = "",
     [string]$MakensisPath = "",
     [switch]$NoBuild,
@@ -84,15 +84,17 @@ $stagingRoot = Join-Path $buildRoot "NodeBridge-beta-v$Version-$DateStamp"
 $outputExe = Join-Path $root "build/NodeBridge-beta-v$Version-$DateStamp.exe"
 $summaryPath = Join-Path $buildRoot "package-nsis-beta-summary.json"
 
+& (Join-Path $root "scripts/build-installer-art.ps1")
+
 if (-not $NoBuild) {
     & (Join-Path $root "scripts/package-smoke.ps1") -SkipNodeBridgeLaunch -RefreshConfig
     Assert-LastExit "package-smoke"
 }
 
 if (-not $SkipHeadlessPackage) {
-    $headlessArgs = @()
-    if ($NoBuild) {
-        $headlessArgs += "-NoBuild"
+    $headlessArgs = @{
+        Version = $Version
+        NoBuild = $NoBuild
     }
     & (Join-Path $root "scripts/package-headless-installer-with-assets.ps1") @headlessArgs
     Assert-LastExit "package-headless-installer-with-assets"
@@ -120,7 +122,9 @@ Copy-Required -Source $syncAgentExe -Target (Join-Path $appDir "SyncAgent.exe")
 Copy-Required -Source (Join-Path $root "scripts/mcp-lab-client-config.ps1") -Target (Join-Path $appDir "mcp-lab-client-config.ps1")
 Copy-Required -Source (Join-Path $root "build/appicon.ico") -Target (Join-Path $appDir "NodeBridge.ico")
 Copy-Required -Source (Join-Path $root "configs/installer-bootstrap.yaml") -Target (Join-Path $appDir "config.yaml")
+Copy-Required -Source (Join-Path $root "configs/installer-external-bootstrap.yaml") -Target (Join-Path $appDir "config-external.yaml")
 Copy-Required -Source (Join-Path $root "configs/sync-rules.empty.yaml") -Target (Join-Path $appDir "sync-rules.yaml")
+Copy-Tree -Source (Join-Path $root "migrations") -Target (Join-Path $appDir "migrations")
 
 foreach ($doc in @(
     "docs/managed-components.md",
@@ -129,7 +133,7 @@ foreach ($doc in @(
     "docs/trial-runbook.md",
     "docs/lan-deployment-guide.md",
     "docs/mcp-service.md",
-    "docs/test-credentials.md"
+    "docs/mcp-business-ai-handoff.md"
 )) {
     $source = Join-Path $root $doc
     if (Test-Path -LiteralPath $source) {
@@ -147,6 +151,7 @@ if (Test-Path -LiteralPath $headlessRuntime) {
 New-Item -ItemType Directory -Force -Path $headlessRuntime | Out-Null
 
 Copy-Required -Source (Join-Path $root "installer/nsis/scripts/install.ps1") -Target (Join-Path $stagingRoot "install.ps1")
+Copy-Required -Source (Join-Path $root "installer/nsis/scripts/restore-ui.ps1") -Target (Join-Path $stagingRoot "restore-ui.ps1")
 Copy-Required -Source (Join-Path $root "installer/nsis/scripts/uninstall.ps1") -Target (Join-Path $stagingRoot "uninstall.ps1")
 
 $readme = @"
@@ -156,6 +161,13 @@ Version: $Version
 Date: $DateStamp
 
 Run `NodeBridge-beta-v$Version-$DateStamp.exe` as administrator.
+
+The component mode page defaults to reusing existing Docker/native/external services.
+Reuse skips system installers, managed password migration, and component configuration.
+For a new native environment, explicitly choose Install local system components.
+Silent installation also defaults to reuse. Use /InstallSystemComponents to opt in;
+/SkipSystemComponents remains supported. Do not combine both flags.
+No automatic Docker discovery or connection validation is performed by this choice.
 
 Installed app:
 
@@ -195,7 +207,7 @@ if (-not $SkipNSIS) {
     if (Test-Path -LiteralPath $outputExe) {
         Remove-Item -LiteralPath $outputExe -Force
     }
-    & $makensis "/DVERSION=$Version" "/DSTAGING_DIR=$stagingRoot" "/DOUTPUT_EXE=$outputExe" $nsiPath
+    & $makensis /INPUTCHARSET UTF8 "/DVERSION=$Version" "/DSTAGING_DIR=$stagingRoot" "/DOUTPUT_EXE=$outputExe" $nsiPath
     Assert-LastExit "makensis"
     $nsisStatus = "built"
     $nsisMessage = $outputExe

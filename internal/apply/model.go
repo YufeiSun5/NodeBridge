@@ -7,10 +7,11 @@ import (
 )
 
 type Result struct {
-	EventID        string
-	SourceTable    string
-	TargetTable    string
-	AlreadyApplied bool
+	ConflictDecision string
+	EventID          string
+	SourceTable      string
+	TargetTable      string
+	AlreadyApplied   bool
 }
 
 type Worker interface {

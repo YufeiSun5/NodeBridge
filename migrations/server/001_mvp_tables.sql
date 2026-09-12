@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS sync_event_log (
   event_payload LONGTEXT NULL,
   UNIQUE KEY uk_event_id (event_id),
   KEY idx_table_pk (table_name, pk_value),
+  KEY idx_table_status (table_name, status),
   KEY idx_origin_node (origin_node_id),
   KEY idx_received_at (received_at)
 );
@@ -135,6 +136,7 @@ CREATE TABLE IF NOT EXISTS sync_apply_log (
   applied_at DATETIME(3) NOT NULL,
   UNIQUE KEY uk_event_id (event_id),
   KEY idx_table_pk (table_name, pk_value),
+  KEY idx_table_op (table_name, op_type),
   KEY idx_applied_at (applied_at)
 );
 

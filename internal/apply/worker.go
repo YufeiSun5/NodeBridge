@@ -10,16 +10,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/YufeiSun5/NodeBridge/internal/dbgovernance"
 	"github.com/YufeiSun5/NodeBridge/internal/event"
 	"github.com/YufeiSun5/NodeBridge/internal/mapper"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
+	"github.com/go-sql-driver/mysql"
 )
 
 const maxStatementPlaceholders = 60000
 
 type SQLWorker struct {
-	DB    *sql.DB
-	Clock func() time.Time
+	CaptureFence CaptureFence
+	DB           *sql.DB
+	Clock        func() time.Time
+	CheckSchema  bool
 }
 
 func NewSQLWorker(db *sql.DB) *SQLWorker {
@@ -41,6 +45,17 @@ func (w *SQLWorker) ApplyBatch(ctx context.Context, events []mapper.MappedEvent)
 	if len(events) == 0 {
 		return BatchResult{}, nil
 	}
+	if containsSchemaEvent(events) || containsConflictEvent(events) {
+		results := make([]Result, 0, len(events))
+		for _, evt := range events {
+			result, err := w.Apply(ctx, evt)
+			if err != nil {
+				return BatchResult{Results: results}, err
+			}
+			results = append(results, result)
+		}
+		return BatchResult{Results: results}, nil
+	}
 
 	tx, err := w.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -56,6 +71,17 @@ func (w *SQLWorker) ApplyBatch(ctx context.Context, events []mapper.MappedEvent)
 	existing, err := existingApplyLogs(ctx, tx, events)
 	if err != nil {
 		return BatchResult{}, err
+	}
+	if w.CheckSchema {
+		fresh := make([]mapper.MappedEvent, 0, len(events))
+		for _, evt := range events {
+			if !existing[evt.Event.EventID] {
+				fresh = append(fresh, evt)
+			}
+		}
+		if err := checkTargetSchemas(ctx, tx, fresh); err != nil {
+			return BatchResult{}, err
+		}
 	}
 	if canApplyAppendOnlyUnordered(events, existing) {
 		results, err := applyAppendOnlyUnorderedBatch(ctx, tx, events, existing, w.Clock())
@@ -132,6 +158,12 @@ func (w *SQLWorker) Apply(ctx context.Context, mapped mapper.MappedEvent) (Resul
 	if err := validateMappedEvent(mapped); err != nil {
 		return Result{}, err
 	}
+	if mapped.ConflictPolicy == rules.ConflictLastWriteWin {
+		return w.applyConflict(ctx, mapped)
+	}
+	if isSchemaEvent(mapped) {
+		return w.applySchemaChange(ctx, mapped)
+	}
 
 	tx, err := w.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -149,6 +181,40 @@ func (w *SQLWorker) Apply(ctx context.Context, mapped mapper.MappedEvent) (Resul
 	return result, nil
 }
 
+func (w *SQLWorker) applySchemaChange(ctx context.Context, mapped mapper.MappedEvent) (Result, error) {
+	result := Result{EventID: mapped.Event.EventID, SourceTable: mapped.SourceTable, TargetTable: mapped.TargetTable}
+	var applied int
+	if err := w.DB.QueryRowContext(ctx, "SELECT COUNT(1) FROM sync_apply_log WHERE event_id = ?", mapped.Event.EventID).Scan(&applied); err != nil {
+		return Result{}, fmt.Errorf("query schema apply log: %w", err)
+	}
+	if applied > 0 {
+		result.AlreadyApplied = true
+		return result, nil
+	}
+	change := mapped.Event.SchemaChange
+	request := dbgovernance.SchemaChangeRequest{Operation: change.Operation, Table: mapped.TargetTable, Column: change.Column}
+	service := dbgovernance.New(w.DB, mapped.TargetDatabase)
+	plan, err := service.PlanSchemaChange(ctx, request)
+	if err != nil {
+		return Result{}, fmt.Errorf("plan schema apply: %w", err)
+	}
+	if _, err := service.ApplySchemaChange(ctx, dbgovernance.SchemaChangeApplyRequest{Change: request, PlanID: plan.PlanID, Confirm: true}); err != nil {
+		return Result{}, fmt.Errorf("apply schema event: %w", err)
+	}
+	tx, err := w.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return Result{}, fmt.Errorf("begin schema apply log tx: %w", err)
+	}
+	defer tx.Rollback()
+	if err := insertApplyLog(ctx, tx, mapped, w.Clock()); err != nil {
+		return Result{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Result{}, fmt.Errorf("commit schema apply log: %w", err)
+	}
+	return result, nil
+}
+
 func (w *SQLWorker) applyOne(ctx context.Context, tx *sql.Tx, mapped mapper.MappedEvent) (Result, error) {
 	applied, err := alreadyApplied(ctx, tx, mapped.Event.EventID)
 	if err != nil {
@@ -162,6 +228,11 @@ func (w *SQLWorker) applyOne(ctx context.Context, tx *sql.Tx, mapped mapper.Mapp
 	if applied {
 		result.AlreadyApplied = true
 		return result, nil
+	}
+	if w.CheckSchema {
+		if err := checkTargetSchemas(ctx, tx, []mapper.MappedEvent{mapped}); err != nil {
+			return Result{}, err
+		}
 	}
 
 	if err := applyMappedInTx(ctx, tx, mapped, w.Clock()); err != nil {
@@ -181,7 +252,11 @@ func applyMappedInTx(ctx context.Context, tx *sql.Tx, mapped mapper.MappedEvent,
 	case event.TypeUpdate:
 		err = applyUpdate(ctx, tx, mapped)
 	case event.TypeDelete:
-		err = applySoftDelete(ctx, tx, mapped, now)
+		if mapped.DeleteMode == rules.DeleteHard {
+			err = applyHardDelete(ctx, tx, mapped)
+		} else {
+			err = applySoftDelete(ctx, tx, mapped, now)
+		}
 	default:
 		err = fmt.Errorf("unsupported event type %q", mapped.Event.EventType)
 	}
@@ -230,7 +305,7 @@ func existingApplyLogs(ctx context.Context, tx *sql.Tx, events []mapper.MappedEv
 	existing := make(map[string]bool, len(events))
 	ids := make([]string, 0, len(events))
 	for _, evt := range events {
-		if evt.Event.EventID == "" || existing[evt.Event.EventID] {
+		if _, seen := existing[evt.Event.EventID]; evt.Event.EventID == "" || seen {
 			continue
 		}
 		existing[evt.Event.EventID] = false
@@ -279,27 +354,29 @@ func rollbackSavepoint(ctx context.Context, tx *sql.Tx, savepoint string) error 
 }
 
 func applyInsert(ctx context.Context, tx *sql.Tx, mapped mapper.MappedEvent) error {
+	mapped = replayWrite(mapped)
 	if len(mapped.TargetAfter) == 0 {
 		return errors.New("insert event after image is empty")
 	}
 	columns := sortedKeys(mapped.TargetAfter)
-	assignments := make([]string, 0, len(columns))
 	placeholders := make([]string, 0, len(columns))
 	args := make([]any, 0, len(columns))
 	for _, column := range columns {
-		assignments = append(assignments, quoteIdentifier(column)+" = VALUES("+quoteIdentifier(column)+")")
 		placeholders = append(placeholders, "?")
 		args = append(args, mapped.TargetAfter[column])
 	}
 
 	query := fmt.Sprintf(
-		"INSERT INTO %s (%s) VALUES (%s) ON DUPLICATE KEY UPDATE %s",
+		"INSERT INTO %s (%s) VALUES (%s)",
 		qualifiedTable(mapped.TargetDatabase, mapped.TargetTable),
 		quoteJoin(columns),
 		strings.Join(placeholders, ", "),
-		strings.Join(assignments, ", "),
 	)
 	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		var duplicate *mysql.MySQLError
+		if errors.As(err, &duplicate) && duplicate.Number == 1062 {
+			return fmt.Errorf("unique_key_conflict: insert rejected without changing existing rows: %w", err)
+		}
 		return fmt.Errorf("apply insert: %w", err)
 	}
 	return nil
@@ -337,6 +414,7 @@ func applyAppendOnlyInsertChunk(ctx context.Context, tx *sql.Tx, events []mapper
 		if !isAppendOnlyInsert(evt) {
 			return fmt.Errorf("append_only batch rejects %s event %s", evt.Event.EventType, evt.Event.EventID)
 		}
+		evt = replayWrite(evt)
 		if !sameStringSlice(columns, sortedKeys(evt.TargetAfter)) {
 			return errors.New("append_only batch requires identical target columns")
 		}
@@ -347,7 +425,7 @@ func applyAppendOnlyInsertChunk(ctx context.Context, tx *sql.Tx, events []mapper
 	}
 
 	query := fmt.Sprintf(
-		"INSERT IGNORE INTO %s (%s) VALUES %s",
+		"INSERT INTO %s (%s) VALUES %s",
 		qualifiedTable(events[0].TargetDatabase, events[0].TargetTable),
 		quoteJoin(columns),
 		strings.Join(valueParts, ", "),
@@ -359,12 +437,13 @@ func applyAppendOnlyInsertChunk(ctx context.Context, tx *sql.Tx, events []mapper
 }
 
 func applyUpdate(ctx context.Context, tx *sql.Tx, mapped mapper.MappedEvent) error {
+	mapped = replayWrite(mapped)
 	if len(mapped.TargetAfter) == 0 {
 		return errors.New("update event after image is empty")
 	}
 	setColumns := nonPrimaryColumns(mapped.TargetAfter, mapped.TargetPrimaryKey)
 	if len(setColumns) == 0 {
-		return errors.New("update event has no non-primary columns")
+		return requireTargetRow(ctx, tx, mapped)
 	}
 
 	setParts := make([]string, 0, len(setColumns))
@@ -380,8 +459,69 @@ func applyUpdate(ctx context.Context, tx *sql.Tx, mapped mapper.MappedEvent) err
 	args = append(args, whereArgs...)
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s", qualifiedTable(mapped.TargetDatabase, mapped.TargetTable), strings.Join(setParts, ", "), where)
-	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+	result, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
 		return fmt.Errorf("apply update: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("read update affected rows: %w", err)
+	}
+	if count > 1 {
+		return fmt.Errorf("multiple_target_rows: update matched %d changed rows", count)
+	}
+	if count == 0 {
+		return requireTargetRow(ctx, tx, mapped)
+	}
+	return nil
+}
+
+func requireTargetRow(ctx context.Context, tx *sql.Tx, mapped mapper.MappedEvent) error {
+	where, args, err := wherePrimaryKey(mapped.TargetPrimaryKey)
+	if err != nil {
+		return err
+	}
+	rows, err := tx.QueryContext(ctx, "SELECT 1 FROM "+qualifiedTable(mapped.TargetDatabase, mapped.TargetTable)+" WHERE "+where+" LIMIT 2 FOR UPDATE", args...)
+	if err != nil {
+		return fmt.Errorf("check update target: %w", err)
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if count == 0 {
+		return fmt.Errorf("target_row_missing: %s.%s event %s", mapped.TargetDatabase, mapped.TargetTable, mapped.Event.EventID)
+	}
+	if count != 1 {
+		return errors.New("multiple_target_rows: rule key does not identify a single target row")
+	}
+	return nil
+}
+
+func applyHardDelete(ctx context.Context, tx *sql.Tx, mapped mapper.MappedEvent) error {
+	if mapped.TrackDeleteReplay {
+		if err := stampDeleteReplay(ctx, tx, mapped); err != nil {
+			return err
+		}
+	}
+	where, args, err := wherePrimaryKey(mapped.TargetPrimaryKey)
+	if err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, "DELETE FROM "+qualifiedTable(mapped.TargetDatabase, mapped.TargetTable)+" WHERE "+where, args...)
+	if err != nil {
+		return fmt.Errorf("apply hard delete: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count > 1 {
+		return fmt.Errorf("multiple_target_rows: delete matched %d rows", count)
 	}
 	return nil
 }
@@ -395,12 +535,25 @@ func applySoftDelete(ctx context.Context, tx *sql.Tx, mapped mapper.MappedEvent,
 	args = append(args, whereArgs...)
 
 	query := fmt.Sprintf(
-		"UPDATE %s SET `is_deleted` = ?, `deleted_at` = ?, `deleted_by_node` = ?, `updated_by_node` = ?, `last_event_id` = ? WHERE %s",
+		"UPDATE %s SET %s = ?, %s = ?, %s = ?, %s = ?, %s = ? WHERE %s",
 		qualifiedTable(mapped.TargetDatabase, mapped.TargetTable),
+		quoteIdentifier(mapped.TargetColumn("is_deleted")),
+		quoteIdentifier(mapped.TargetColumn("deleted_at")),
+		quoteIdentifier(mapped.TargetColumn("deleted_by_node")),
+		quoteIdentifier(mapped.TargetColumn("updated_by_node")),
+		quoteIdentifier(mapped.TargetColumn("last_event_id")),
 		where,
 	)
-	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+	result, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
 		return fmt.Errorf("apply soft delete: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count > 1 {
+		return fmt.Errorf("multiple_target_rows: soft delete matched %d rows", count)
 	}
 	return nil
 }
@@ -521,10 +674,11 @@ func isCompactUpdate(mapped mapper.MappedEvent) bool {
 func compactUpdateGroup(events []mapper.MappedEvent, existing map[string]bool, start int) []mapper.MappedEvent {
 	first := events[start]
 	group := []mapper.MappedEvent{first}
+	seen := map[string]bool{first.Event.EventID: true}
 	firstKey := compactPrimaryKey(first)
 	for i := start + 1; i < len(events); i++ {
 		next := events[i]
-		if existing[next.Event.EventID] || !isCompactUpdate(next) {
+		if existing[next.Event.EventID] || seen[next.Event.EventID] || !isCompactUpdate(next) {
 			break
 		}
 		if next.TargetDatabase != first.TargetDatabase || next.TargetTable != first.TargetTable {
@@ -533,6 +687,7 @@ func compactUpdateGroup(events []mapper.MappedEvent, existing map[string]bool, s
 		if compactPrimaryKey(next) != firstKey {
 			break
 		}
+		seen[next.Event.EventID] = true
 		group = append(group, next)
 	}
 	return group
@@ -584,6 +739,8 @@ func canApplyAppendOnlyUnordered(events []mapper.MappedEvent, existing map[strin
 
 func applyAppendOnlyUnorderedBatch(ctx context.Context, tx *sql.Tx, events []mapper.MappedEvent, existing map[string]bool, now time.Time) ([]Result, error) {
 	results := make([]Result, 0, len(events))
+	// Keep tentative IDs local until this batch or savepoint succeeds.
+	seen := make(map[string]bool, len(events))
 	groups := make(map[string][]mapper.MappedEvent)
 	groupOrder := make([]string, 0)
 	for _, evt := range events {
@@ -592,11 +749,12 @@ func applyAppendOnlyUnorderedBatch(ctx context.Context, tx *sql.Tx, events []map
 			SourceTable: evt.SourceTable,
 			TargetTable: evt.TargetTable,
 		}
-		if existing[evt.Event.EventID] {
+		if existing[evt.Event.EventID] || seen[evt.Event.EventID] {
 			result.AlreadyApplied = true
 			results = append(results, result)
 			continue
 		}
+		seen[evt.Event.EventID] = true
 		key := appendOnlyGroupKey(evt)
 		if _, ok := groups[key]; !ok {
 			groupOrder = append(groupOrder, key)
@@ -617,6 +775,32 @@ func appendOnlyGroupKey(mapped mapper.MappedEvent) string {
 }
 
 func validateMappedEvent(mapped mapper.MappedEvent) error {
+	if mapped.ConflictPolicy != "" && mapped.ConflictPolicy != rules.ConflictNone && mapped.ConflictPolicy != rules.ConflictLastWriteWin {
+		return errors.New("unsupported conflict_policy")
+	}
+	if !isSchemaEvent(mapped) {
+		if len(mapped.TargetPrimaryKey) == 0 || len(mapped.TargetKeyColumns) > 0 && len(mapped.TargetKeyColumns) != len(mapped.TargetPrimaryKey) {
+			return errors.New("invalid_primary_key: complete target primary key is required")
+		}
+		for _, key := range mapped.TargetKeyColumns {
+			if value, exists := mapped.TargetPrimaryKey[key]; !exists || value == nil {
+				return fmt.Errorf("invalid_primary_key: missing or NULL key %s", key)
+			}
+		}
+		for key, value := range mapped.TargetPrimaryKey {
+			if value == nil {
+				return fmt.Errorf("invalid_primary_key: NULL key %s", key)
+			}
+		}
+		if mapped.DeleteMode != "" && mapped.DeleteMode != rules.DeleteSoft && mapped.DeleteMode != rules.DeleteHard {
+			return errors.New("invalid delete_mode")
+		}
+	}
+	for _, column := range mapped.TargetColumns {
+		if err := mapper.ValidateIdentifier(column); err != nil {
+			return err
+		}
+	}
 	if mapped.Event.EventID == "" {
 		return errors.New("event_id is required")
 	}
@@ -632,7 +816,31 @@ func validateMappedEvent(mapped mapper.MappedEvent) error {
 			}
 		}
 	}
+	if mapped.Event.EventType == event.TypeAddColumn || mapped.Event.EventType == event.TypeDropColumn {
+		if !mapped.SchemaChangeSelected || mapped.Event.SchemaChange == nil {
+			return errors.New("schema change is not selected by the rule")
+		}
+		if mapped.Event.SchemaChange.Operation != mapped.Event.EventType {
+			return errors.New("schema change operation does not match event_type")
+		}
+		if err := mapper.ValidateIdentifier(mapped.Event.SchemaChange.Column.Name); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func isSchemaEvent(mapped mapper.MappedEvent) bool {
+	return mapped.Event.EventType == event.TypeAddColumn || mapped.Event.EventType == event.TypeDropColumn
+}
+
+func containsSchemaEvent(events []mapper.MappedEvent) bool {
+	for _, evt := range events {
+		if isSchemaEvent(evt) {
+			return true
+		}
+	}
+	return false
 }
 
 func wherePrimaryKey(primaryKey map[string]any) (string, []any, error) {

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
+	"github.com/YufeiSun5/NodeBridge/internal/dbgovernance"
 )
 
 func TestConfigValidate(t *testing.T) {
@@ -49,6 +50,36 @@ func TestConvertRowChange(t *testing.T) {
 
 	if _, err := ConvertRowChange(RowChange{Operation: "DDL"}); err == nil {
 		t.Fatal("expected invalid row error")
+	}
+}
+
+func TestConvertRowChangeValidatesSchemaPayload(t *testing.T) {
+	add := &dbgovernance.SchemaChange{
+		Operation: string(cdc.OperationAddColumn),
+		Column: dbgovernance.ColumnDefinition{
+			Name:     "governed_note",
+			Type:     "varchar(64)",
+			Nullable: true,
+		},
+	}
+	change, err := ConvertRowChange(RowChange{
+		DatabaseName: "scada_edge",
+		TableName:    "device_config",
+		Operation:    cdc.OperationAddColumn,
+		SchemaChange: add,
+	})
+	if err != nil || change.SchemaChange == nil || change.SchemaChange.Column.Name != "governed_note" {
+		t.Fatalf("unexpected schema change=%+v err=%v", change, err)
+	}
+
+	for _, row := range []RowChange{
+		{DatabaseName: "scada_edge", TableName: "device_config", Operation: cdc.OperationAddColumn},
+		{DatabaseName: "scada_edge", TableName: "device_config", Operation: cdc.OperationUpdate, SchemaChange: add},
+		{DatabaseName: "scada_edge", TableName: "device_config", Operation: cdc.OperationDropColumn, SchemaChange: add},
+	} {
+		if _, err := ConvertRowChange(row); err == nil {
+			t.Fatalf("expected schema payload mismatch for %+v", row)
+		}
 	}
 }
 

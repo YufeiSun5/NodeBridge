@@ -622,7 +622,9 @@ mcp_server:
 }
 
 func TestRunMCPStdioSavesNonSecretConfigPatch(t *testing.T) {
-	configPath := writeTempConfig(t, `
+	for _, lab := range []bool{false, true} {
+		t.Run(fmt.Sprintf("lab=%t", lab), func(t *testing.T) {
+			configPath := writeTempConfig(t, `
 mode: edge
 node:
   id: edge-001
@@ -637,37 +639,43 @@ sync:
 mcp_server:
   enable: true
 `)
-	rulesPath := filepath.Join(t.TempDir(), "rules.yaml")
-	if err := os.WriteFile(rulesPath, []byte("rules: []\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	var stdout, stderr bytes.Buffer
-	input := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"nodebridge_save_config_patch","arguments":{"patch":{"node":{"name":"Remote Edge"},"sync":{"apply_lanes":2}}}}}` + "\n"
-	oldStdin := os.Stdin
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Stdin = r
-	defer func() { os.Stdin = oldStdin }()
-	if _, err := w.WriteString(input); err != nil {
-		t.Fatal(err)
-	}
-	_ = w.Close()
+			rulesPath := filepath.Join(t.TempDir(), "rules.yaml")
+			if err := os.WriteFile(rulesPath, []byte("rules: []\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var stdout, stderr bytes.Buffer
+			input := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"nodebridge_save_config_patch","arguments":{"patch":{"node":{"name":"Remote Edge"},"sync":{"apply_lanes":2}}}}}` + "\n"
+			oldStdin := os.Stdin
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.Stdin = r
+			defer func() { os.Stdin = oldStdin }()
+			if _, err := w.WriteString(input); err != nil {
+				t.Fatal(err)
+			}
+			_ = w.Close()
 
-	err = run([]string{"mcp-stdio", "-config", configPath, "-rules", rulesPath}, &stdout, &stderr)
-	if err != nil {
-		t.Fatalf("mcp-stdio returned error: %v stderr=%s", err, stderr.String())
-	}
-	if !strings.Contains(stdout.String(), "saved") {
-		t.Fatalf("expected saved response, got %s", stdout.String())
-	}
-	cfg, err := appconfig.LoadFile(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Node.Name != "Remote Edge" || cfg.Sync.ApplyLanes != 2 {
-		t.Fatalf("expected config patch to persist, got %+v", cfg)
+			args := []string{"mcp-stdio", "-config", configPath, "-rules", rulesPath}
+			if lab {
+				args = append(args, "-lab-full-access")
+			}
+			err = run(args, &stdout, &stderr)
+			if err != nil {
+				t.Fatalf("mcp-stdio returned error: %v stderr=%s", err, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), "saved") {
+				t.Fatalf("expected saved response, got %s", stdout.String())
+			}
+			cfg, err := appconfig.LoadFile(configPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Node.Name != "Remote Edge" || cfg.Sync.ApplyLanes != 2 {
+				t.Fatalf("expected config patch to persist, got %+v", cfg)
+			}
+		})
 	}
 }
 
@@ -797,13 +805,26 @@ func TestWatchStopFileCancelsContext(t *testing.T) {
 	}
 }
 
-func TestWorkerConfigDefaultsRetryInterval(t *testing.T) {
+func TestWorkerConfigSeparatesIdlePollingFromDefaultErrorRetry(t *testing.T) {
 	cfg := workerConfig("edge-upload", 0, 3)
 	if cfg.Name != "edge-upload" || cfg.MaxSteps != 3 {
 		t.Fatalf("unexpected config %+v", cfg)
 	}
-	if cfg.IdleInterval == 0 || cfg.ErrorInterval == 0 {
-		t.Fatalf("expected default intervals, got %+v", cfg)
+	if cfg.IdleInterval != 100*time.Millisecond {
+		t.Fatalf("expected 100ms idle polling, got %s", cfg.IdleInterval)
+	}
+	if cfg.ErrorInterval != 10*time.Second {
+		t.Fatalf("expected default 10s error retry, got %s", cfg.ErrorInterval)
+	}
+}
+
+func TestWorkerConfigUsesConfiguredErrorRetryOnly(t *testing.T) {
+	cfg := workerConfig("server-ingress", 7, 0)
+	if cfg.IdleInterval != 100*time.Millisecond {
+		t.Fatalf("expected 100ms idle polling, got %s", cfg.IdleInterval)
+	}
+	if cfg.ErrorInterval != 7*time.Second {
+		t.Fatalf("expected configured 7s error retry, got %s", cfg.ErrorInterval)
 	}
 }
 

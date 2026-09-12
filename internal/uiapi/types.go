@@ -35,11 +35,15 @@ type SaveConfigRequest struct {
 }
 
 type SyncRulesDTO struct {
-	Rules []rules.SyncRule `json:"rules"`
+	Rules          []rules.SyncRule `json:"rules"`
+	SavedRevision  string           `json:"saved_revision,omitempty"`
+	ActiveRevision string           `json:"active_revision,omitempty"`
+	Activation     string           `json:"activation,omitempty"`
 }
 
 type SaveSyncRulesRequest struct {
-	Rules []rules.SyncRule `json:"rules"`
+	Rules            []rules.SyncRule `json:"rules"`
+	ExpectedRevision string           `json:"expected_revision,omitempty"`
 }
 
 type NodeOptionDTO struct {

@@ -37,3 +37,20 @@ func (d RoutingDownlinkDispatcher) Dispatch(ctx context.Context, evt event.SyncE
 		Body:       body,
 	})
 }
+
+func (d RoutingDownlinkDispatcher) DispatchBatch(ctx context.Context, requests []DownlinkRequest) error {
+	if len(requests) == 0 {
+		return nil
+	}
+	publishes := make([]rabbitmq.PublishRequest, 0, len(requests))
+	for _, request := range requests {
+		body, err := rabbitmq.EncodeJSON(request.Event)
+		if err != nil {
+			return err
+		}
+		publishes = append(publishes, rabbitmq.PublishRequest{
+			Exchange: d.Exchange, RoutingKey: request.TargetNodeID + ".downlink", Body: body,
+		})
+	}
+	return publishCanalBatch(ctx, d.Publisher, publishes)
+}

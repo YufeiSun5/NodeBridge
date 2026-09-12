@@ -21,7 +21,27 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-nsis-beta.
 
 Real Erlang/RabbitMQ/Java/Canal component installation must still be tested only inside the isolated installer VM.
 
-## v0.46.3 Compatibility
+## v0.46.15 Component Mode
+
+The Chinese/English/Japanese wizard now asks for a component installation mode. **Reuse existing components** is selected by default, including silent installs with no mode flag. Choose this for Docker, external services, or an existing working deployment. It skips system installers, managed password migration, and component topology/configuration. Existing config and rules are preserved byte-for-byte; an absent config is created from the external bootstrap. It does not auto-detect Docker or verify connections.
+
+Select **Install local system components** only for an explicitly intended native component installation. Unattended callers must now pass `/InstallSystemComponents`; `/SkipSystemComponents` remains supported. Both flags together fail before installation. Direct `install.ps1` callers likewise default to reuse and must explicitly pass `-InstallSystemComponents` for component changes. This is an intentional safer default, not automatic environment discovery.
+
+Fresh configs still use the trial admin/exit password `1234`. Reuse upgrades preserve existing passwords and do not run the password migration described in the older compatibility section below. Existing managed configurations are not silently converted to external; the selected mode governs this installer run only. No database migration or synchronization start is implied.
+
+`scripts/test-installer-component-mode.ps1` executes the wrapper against fixture-only binaries and component scripts for default/explicit reuse, explicit installation, fresh external bootstrap, and mutually exclusive flags. No real system components are installed. `test-nsis-upgrade.ps1` also checks exact configuration hashes and skipped component steps.
+
+## v0.46.13 Upgrade UI
+
+The installer still uses NSIS MUI2 with the existing component and uninstall paths. Welcome/finish pages, branded bitmaps, DPI awareness, and Chinese/English/Japanese page text are added; compile UTF-8 sources with `/INPUTCHARSET UTF8`. `scripts/build-installer-art.ps1` derives the installer bitmaps from the existing app icon.
+
+Preflight records original UI session IDs and owner SIDs in the private NSIS plugin directory. After a successful install, `restore-ui.ps1` launches the installed UI using a temporary least-privilege InteractiveToken task only when the original user's desktop is unambiguous. It never launches into Session 0, avoids an existing UI, and removes the temporary task even after failure. A missing/ambiguous desktop or launch failure is retained as a `restore-ui` warning in the installer summary; installation is not rolled back. New installs do not auto-launch, and `UPGRADE_TEST` disables restoration. Autostart settings are unchanged.
+
+`scripts/test-ui-restore.ps1` covers selectors and mocked task dispatch/cleanup. Actual interactive desktop restoration still requires installation retesting; these mocks are not a desktop acceptance result.
+
+## v0.46.6 Compatibility
+
+Normal worker idle polling no longer inherits `sync.retry_interval_seconds`; it uses a 100ms interval while actual errors keep the configured retry backoff. Canal long polling is also capped at 100ms to keep idle single-row synchronization responsive on a LAN.
 
 Fresh installations use `1234` for the NodeBridge admin unlock and exit passwords and do not preset MySQL credentials, a database, node identity, or sync rules. Upgrades preserve existing configuration and rules while migrating NodeBridge-owned admin, exit, and managed RabbitMQ passwords to `1234`. MySQL and Canal credentials are never changed.
 

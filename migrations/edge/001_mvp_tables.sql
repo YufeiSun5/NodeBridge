@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS sync_apply_log (
   applied_at DATETIME(3) NOT NULL,
   UNIQUE KEY uk_event_id (event_id),
   KEY idx_table_pk (table_name, pk_value),
+  KEY idx_table_op (table_name, op_type),
   KEY idx_applied_at (applied_at)
 );
 
@@ -104,6 +105,17 @@ CREATE TABLE IF NOT EXISTS sync_upload_offset (
   gtid VARCHAR(512) NULL,
   updated_at DATETIME(3) NOT NULL,
   UNIQUE KEY uk_reader_name (reader_name)
+);
+
+CREATE TABLE IF NOT EXISTS sync_ack_log (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  event_id VARCHAR(128) NOT NULL,
+  target_node_id VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  ack_at DATETIME(3) NULL,
+  error_message TEXT NULL,
+  created_at DATETIME(3) NOT NULL,
+  UNIQUE KEY uk_event_target (event_id, target_node_id)
 );
 
 CREATE TABLE IF NOT EXISTS sync_rule_snapshot (

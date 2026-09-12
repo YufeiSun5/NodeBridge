@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
+	"github.com/YufeiSun5/NodeBridge/internal/atomicfile"
 	canalplan "github.com/YufeiSun5/NodeBridge/internal/installer/canal"
 	"github.com/YufeiSun5/NodeBridge/internal/installer/manifest"
 	rabbitplan "github.com/YufeiSun5/NodeBridge/internal/installer/rabbitmq"
@@ -269,24 +271,45 @@ func initRabbitMQ(ctx context.Context, cfg appconfig.Config) error {
 }
 
 func writeCanalDestinationConfig(cfg appconfig.Config, m manifest.Manifest) (string, error) {
-	dir := canalDestinationPath(m.ManagedComponents.Canal.ConfigDir, canalDestination(cfg))
+	destination := canalDestination(cfg)
+	root := expandProgramData(m.ManagedComponents.Canal.ConfigDir)
+	dir := canalDestinationPath(root, destination)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
-	content := fmt.Sprintf(`# NodeBridge managed. / NodeBridge 管理。 / NodeBridge 管理。
+	content := fmt.Sprintf(`# NodeBridge managed.
+canal.instance.mysql.slaveId=%d
+canal.instance.gtidon=%t
 canal.instance.master.address=%s:%d
 canal.instance.dbUsername=%s
+canal.instance.dbPassword=%s
+canal.instance.connectionCharset=UTF-8
+canal.instance.tsdb.enable=false
+canal.instance.enableDruid=false
 canal.instance.filter.regex=%s
-`, cfg.MySQL.Host, cfg.MySQL.Port, cfg.MySQL.Username, defaultString(cfg.CDC.Filter, ".*\\..*"))
+`, canalSlaveID(cfg.Node.ID), cfg.CDC.UseGTID,
+		canalPropertyValue(cfg.MySQL.Host), cfg.MySQL.Port,
+		canalPropertyValue(cfg.MySQL.Username), canalPropertyValue(cfg.MySQL.Password),
+		canalPropertyValue(defaultString(cfg.CDC.Filter, ".*\\..*")))
 	path := filepath.Join(dir, "instance.properties")
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		return "", err
+	}
+	if err := activateCanalDestination(root, destination); err != nil {
+		return "", err
+	}
+	if err := removeLegacyCanalDestination(root, cfg, dir); err != nil {
 		return "", err
 	}
 	return path, nil
 }
 
 func canalDestinationPath(configDir, destination string) string {
-	return filepath.Join(expandProgramData(configDir), destination)
+	root := expandProgramData(configDir)
+	if strings.EqualFold(filepath.Base(filepath.Clean(root)), "conf") {
+		return filepath.Join(root, destination)
+	}
+	return filepath.Join(root, "conf", destination)
 }
 
 func expandProgramData(path string) string {
@@ -301,16 +324,85 @@ func expandProgramData(path string) string {
 }
 
 func canalDestination(cfg appconfig.Config) string {
-	if cfg.CDC.Destination != "" {
-		if strings.HasPrefix(cfg.CDC.Destination, "nodebridge-") {
-			return cfg.CDC.Destination
+	if destination := strings.TrimSpace(cfg.CDC.Destination); destination != "" {
+		return destination
+	}
+	if nodeID := strings.TrimSpace(cfg.Node.ID); nodeID != "" {
+		return nodeID
+	}
+	return "nodebridge-local"
+}
+
+func activateCanalDestination(configDir, destination string) error {
+	confDir := configDir
+	if !strings.EqualFold(filepath.Base(filepath.Clean(confDir)), "conf") {
+		confDir = filepath.Join(confDir, "conf")
+	}
+	if err := os.MkdirAll(confDir, 0o755); err != nil {
+		return err
+	}
+	path := filepath.Join(confDir, "canal.properties")
+	data, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	lines = setCanalProperty(lines, "canal.destinations", destination)
+	lines = setCanalProperty(lines, "canal.auto.scan", "false")
+	content := strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
+	return atomicfile.Write(path, []byte(content), 0o600)
+}
+
+func setCanalProperty(lines []string, key, value string) []string {
+	replacement := key + " = " + canalPropertyValue(value)
+	for i, line := range lines {
+		left, _, found := strings.Cut(line, "=")
+		if found && strings.TrimSpace(left) == key {
+			lines[i] = replacement
+			return lines
 		}
-		return "nodebridge-" + cfg.CDC.Destination
 	}
-	if cfg.Node.ID == "" {
-		return "nodebridge-local"
+	return append(lines, replacement)
+}
+
+func removeLegacyCanalDestination(root string, cfg appconfig.Config, currentDir string) error {
+	legacyName := strings.TrimSpace(cfg.CDC.Destination)
+	if legacyName == "" {
+		legacyName = strings.TrimSpace(cfg.Node.ID)
 	}
-	return "nodebridge-" + cfg.Node.ID
+	if legacyName == "" {
+		legacyName = "local"
+	}
+	if !strings.HasPrefix(legacyName, "nodebridge-") {
+		legacyName = "nodebridge-" + legacyName
+	}
+	legacyDir := filepath.Join(root, legacyName)
+	if filepath.Clean(legacyDir) == filepath.Clean(currentDir) {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(legacyDir, "instance.properties")); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	return os.RemoveAll(legacyDir)
+}
+
+func canalPropertyValue(value string) string {
+	replacer := strings.NewReplacer(
+		`\`, `\\`,
+		"\r", `\r`,
+		"\n", `\n`,
+		"\t", `\t`,
+	)
+	return replacer.Replace(value)
+}
+
+func canalSlaveID(nodeID string) uint32 {
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(strings.ToLower(strings.TrimSpace(nodeID))))
+	return 1000 + hash.Sum32()%1000000
 }
 
 func rabbitURL(cfg appconfig.Config) string {

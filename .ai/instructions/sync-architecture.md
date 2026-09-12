@@ -48,11 +48,23 @@ MySQL -> CDC -> ChangeEvent -> SyncEvent -> RabbitMQ -> Apply -> MySQL
 
 ## 回环抑制
 
+- 本节点的冲突修复只凭 `sync_repair_replay` 的事件/节点/库/表/实际操作证明过滤；不得简单移除 `updated_by_node != local` 限制而误过滤业务自己的标记更新。UPDATE必须识别新修复标记，保留旧标记的本地UPDATE继续上传；DELETE不能借用旧INSERT/UPDATE修复证明。
+- 修复任务及获胜镜像与版本同事务持久保存。捕获线程不得等待业务行锁做恢复；修复worker必须先锁业务行/间隙，再等新鲜CDC屏障，之后锁版本并重新读取当前winner。修复/来源证明/日志/清任务同事务，不用修复时间创造新的业务版本。
+
 - 多向表必须包含：`sync_version`、`updated_by_node`、`last_event_id`、`updated_at`。
 - 每个节点必须维护 `sync_apply_log`。
 - Apply Worker 写业务表和写 `sync_apply_log` 必须在同一事务。
-- CDC 捕获本地变更后，如果 `last_event_id` 命中 `sync_apply_log` 且来源不是本节点，则不上传。
+- INSERT 的远端 `last_event_id` 命中 `sync_apply_log` 时可判定回放；UPDATE 还必须检查 FULL 前后镜像中的同步标记变化。标记保持不变的后续本地 UPDATE 必须上传，不得仅因旧收据存在而过滤；缺少必要前镜像时返回错误，不猜测来源。
+- HARD DELETE 的回放必须有删除事务来源证据，不能把删除前遗留的 INSERT/UPDATE 标记当作删除回放证据。双向映射的 TrackDeleteReplay 路径在同事务更新专用标记、删除、写 sync_delete_replay 和 sync_apply_log；专用收据按事件/来源/库/表查询，普通旧收据不算删除证明。该路径要求 FULL 元数据及无触发器且可核验；普通单向删除不增加标记 UPDATE。完整双向运行验收前仍保持能力门禁。
 - Server 分发时不得把事件发回 `origin_node_id`。
+
+## 首次对齐约束
+
+- 当前快照/传输/恢复仅为内部原语，不能把复制收据当作CDC交接完成。`sync_alignment_job`的所有现有phase都阻断Agent；禁止以删账本或直接改phase解除阻断。
+- 源端持表行/间隙锁到目标提交收据返回，最终提交请求前持久保存SOURCE_READY行数与摘要。目标复制行、原事务捕获标记和收据同事务；RabbitMQ数据消息只能在目标提交后ACK。
+- 探针读取Canal不ACK，关闭后原业务输入必须可重读。恢复只观察已提交的原标记，不能拿新脉冲位置替代；普通过期计划禁止新复制，已提交目标的核对恢复可在过期后进行。
+- 正式启用前必须完成旧事件过滤、完整来源血缘验证、全部参与节点就绪/启用握手及维护租约编排。不能清空已有行版本/墓碑，不能扩大参与节点范围或假设远端库表同名。
+- context取消并不证明MySQL autocommit未执行，也不证明上游Canal socket已中止；提交结果未知须按持久结果核对，不可盲目重复写入。
 
 ## RabbitMQ 约束
 

@@ -1,0 +1,51 @@
+mode: ""
+
+node:
+  id: ""
+  name: ""
+  location: ""
+
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  username: ""
+  password: ""
+  database: ""
+
+rabbitmq:
+  mode: external
+  install: false
+  local_url: ""
+  server_url: ""
+  management_url: http://127.0.0.1:15672
+  username: ""
+  password: ""
+  vhost: ""
+
+cdc:
+  type: canal
+  mode: external
+  install: false
+  reader_name: ""
+  canal_addr: 127.0.0.1:11111
+  destination: ""
+  username: ""
+  password: ""
+  filter: ""
+  batch_size: 1000
+  use_gtid: false
+
+sync: {}
+
+log_web:
+  enable: false
+  bind: 127.0.0.1
+  port: 18080
+  token: ""
+
+mcp_server:
+  enable: false
+
+security:
+  admin_password: "1234"
+  exit_password: "1234"

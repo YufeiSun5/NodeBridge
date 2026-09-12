@@ -1,5 +1,6 @@
 param(
     [string]$InstallRoot,
+    [string]$UIStatePath = "",
     [switch]$TestOnlySkipAdminCheck
 )
 
@@ -36,6 +37,16 @@ New-Item -ItemType File -Force -Path $stopFile | Out-Null
 $targets = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
     $_.Name -in @("NodeBridge.exe", "DataSync.exe", "SyncAgent.exe") -and
     (Test-PathInsideRoot -Path ([string]$_.ExecutablePath) -Root $InstallRoot)
+}
+
+if ($UIStatePath -ne "") {
+    $sessions = @($targets | Where-Object { $_.Name -in @("NodeBridge.exe", "DataSync.exe") -and $_.SessionId -gt 0 } | ForEach-Object {
+        $owner = Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid
+        if ($owner.ReturnValue -ne 0 -or [string]::IsNullOrWhiteSpace($owner.Sid)) { throw "Cannot identify the existing UI owner." }
+        [ordered]@{ session_id = [int]$_.SessionId; user_sid = [string]$owner.Sid }
+    })
+    [ordered]@{ install_root = [IO.Path]::GetFullPath($InstallRoot); sessions = $sessions } |
+        ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $UIStatePath -Encoding UTF8
 }
 
 $deadline = (Get-Date).AddSeconds(10)

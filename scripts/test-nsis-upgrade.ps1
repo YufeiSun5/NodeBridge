@@ -1,9 +1,10 @@
 param(
-    [string]$Version = "0.46.3",
+    [string]$Version = "0.46.13",
     [string]$ProductionStaging = ""
 )
 
 $ErrorActionPreference = "Stop"
+& (Join-Path $PSScriptRoot "build-installer-art.ps1")
 $repoRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $cacheRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot ".cache\nsis-upgrade"))
 $testRoot = [System.IO.Path]::GetFullPath((Join-Path $cacheRoot (Get-Date -Format "yyyyMMdd-HHmmss-fff")))
@@ -57,7 +58,10 @@ try {
         "app\SyncAgent.exe",
         "app\NodeBridge.ico",
         "app\config.yaml",
+        "app\config-external.yaml",
         "app\sync-rules.yaml",
+        "app\migrations\edge\001_mvp_tables.sql",
+        "app\migrations\server\001_mvp_tables.sql",
         "installer\headless\scripts\headless-installer-test.ps1"
     )) {
         Copy-Required -Source (Join-Path $ProductionStaging $relative) -Target (Join-Path $staging $relative)
@@ -72,7 +76,7 @@ try {
     ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
     if (-not $makensis) { throw "makensis.exe not found" }
 
-    & $makensis "/DVERSION=$Version" "/DSTAGING_DIR=$staging" "/DOUTPUT_EXE=$testInstaller" "/DUPGRADE_TEST=1" (Join-Path $repoRoot "installer\nsis\NodeBridgeBeta.nsi") | Out-Null
+    & $makensis /INPUTCHARSET UTF8 "/DVERSION=$Version" "/DSTAGING_DIR=$staging" "/DOUTPUT_EXE=$testInstaller" "/DUPGRADE_TEST=1" (Join-Path $repoRoot "installer\nsis\NodeBridgeBeta.nsi") | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "build upgrade test installer failed: $LASTEXITCODE" }
 
     $env:ProgramData = $programData
@@ -91,6 +95,7 @@ try {
     }
     Set-Content -LiteralPath $rulesPath -Value "rules: []`n# preserve-upgrade" -Encoding UTF8
     $rulesHashBefore = (Get-FileHash -LiteralPath $rulesPath -Algorithm SHA256).Hash
+    $configHashBefore = (Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash
 
     $installedAgent = Join-Path $installRoot "app\SyncAgent.exe"
     & go build -o $installedAgent (Join-Path $repoRoot "scripts\tests\upgrade-sleeper.go")
@@ -109,16 +114,28 @@ try {
     $expectedAppHash = (Get-FileHash -LiteralPath (Join-Path $staging "app\NodeBridge.exe") -Algorithm SHA256).Hash
     Assert-Equal $agentHash $expectedAgentHash "SyncAgent overwrite"
     Assert-Equal $appHash $expectedAppHash "NodeBridge overwrite"
+    $migrationHashes=@{}
+    foreach($scope in @('edge','server')){
+        $relative="app\migrations\$scope\001_mvp_tables.sql"
+        $actual=(Get-FileHash -LiteralPath (Join-Path $installRoot $relative)).Hash
+        Assert-Equal $actual (Get-FileHash -LiteralPath (Join-Path $staging $relative)).Hash "$scope packaged migration"
+        $migrationHashes[$scope]=$actual
+    }
     if ((Get-Content -LiteralPath $configPath -Raw) -notmatch 'name:\s+preserve-upgrade') {
         throw "second install did not preserve existing config"
     }
     Assert-Equal (Get-FileHash -LiteralPath $rulesPath -Algorithm SHA256).Hash $rulesHashBefore "rules preservation"
+    Assert-Equal (Get-FileHash -LiteralPath $configPath -Algorithm SHA256).Hash $configHashBefore "config byte preservation"
 
     $latestSummary = Get-ChildItem -LiteralPath (Join-Path $programData "NodeBridgeInstallerLogs") -Recurse -Filter "nsis-beta-install-summary.json" |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if (-not $latestSummary) { throw "installer summary is missing" }
     $summary = Get-Content -LiteralPath $latestSummary.FullName -Raw | ConvertFrom-Json
     Assert-Equal $summary.status "passed" "second install summary"
+    Assert-Equal $summary.component_mode "reuse" "upgrade component mode"
+    foreach ($step in @('system-components','managed-config-migration','managed-node-configuration')) {
+        Assert-Equal ($summary.steps | Where-Object name -eq $step).status 'skipped' $step
+    }
 
     [ordered]@{
         status = "passed"
@@ -127,6 +144,9 @@ try {
         second_install = "passed"
         running_agent_stopped = $true
         binaries_overwritten = $true
+        agent_sha256 = $agentHash
+        ui_sha256 = $appHash
+        migration_sha256 = $migrationHashes
         existing_config_preserved = $true
         existing_rules_preserved = $true
         install_root = $installRoot

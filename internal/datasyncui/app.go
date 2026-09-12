@@ -14,6 +14,7 @@ import (
 
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
 	"github.com/YufeiSun5/NodeBridge/internal/autostart"
+	"github.com/YufeiSun5/NodeBridge/internal/buildinfo"
 	"github.com/YufeiSun5/NodeBridge/internal/diagnostic"
 	installerexec "github.com/YufeiSun5/NodeBridge/internal/installer/executor"
 	"github.com/YufeiSun5/NodeBridge/internal/mysqlconn"
@@ -29,7 +30,7 @@ import (
 )
 
 const (
-	appVersion          = "0.46.3"
+	appVersion          = buildinfo.Version
 	defaultAdminTimeout = 24 * time.Hour
 )
 
@@ -373,6 +374,16 @@ func probeRabbitMQURL(url string) error {
 }
 
 func (a *App) GetSyncRules() (uiapi.SyncRulesDTO, error) {
+	if a.rulesPath != "" {
+		set, revision, err := rules.LoadFileWithRevision(a.rulesPath)
+		if err == nil {
+			a.ruleSet = set
+			return a.rulesDTO(set.Rules, revision), nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return uiapi.SyncRulesDTO{}, err
+		}
+	}
 	if a.ruleSet != nil {
 		return uiapi.SyncRulesDTO{Rules: append([]rules.SyncRule(nil), a.ruleSet.Rules...)}, nil
 	}
@@ -386,10 +397,16 @@ func (a *App) GetSyncRules() (uiapi.SyncRulesDTO, error) {
 		if err != nil {
 			set = rules.DefaultFieldRuleSet()
 		}
-		_ = rules.SaveFile(a.effectiveRulesPath(), *set)
+		if _, err := rules.SaveFileCAS(a.effectiveRulesPath(), *set, rules.MissingRevision); err != nil {
+			return uiapi.SyncRulesDTO{}, err
+		}
 	}
 	a.ruleSet = set
-	return uiapi.SyncRulesDTO{Rules: append([]rules.SyncRule(nil), set.Rules...)}, nil
+	revision, err := rules.FileRevision(a.effectiveRulesPath())
+	if err != nil {
+		return uiapi.SyncRulesDTO{}, err
+	}
+	return a.rulesDTO(set.Rules, revision), nil
 }
 
 func (a *App) SaveSyncRules(req uiapi.SaveSyncRulesRequest) (uiapi.SyncRulesDTO, error) {
@@ -400,10 +417,16 @@ func (a *App) SaveSyncRules(req uiapi.SaveSyncRulesRequest) (uiapi.SyncRulesDTO,
 	if err := set.Validate(); err != nil {
 		return uiapi.SyncRulesDTO{}, err
 	}
+	if err := a.checkRuleActivation(context.Background(), set); err != nil {
+		return uiapi.SyncRulesDTO{}, err
+	}
 	if a.rulesPath != "" {
-		if err := rules.SaveFile(a.rulesPath, set); err != nil {
+		revision, err := rules.SaveFileCAS(a.rulesPath, set, req.ExpectedRevision)
+		if err != nil {
 			return uiapi.SyncRulesDTO{}, err
 		}
+		a.ruleSet = &set
+		return a.rulesDTO(set.Rules, revision), nil
 	}
 	a.ruleSet = &set
 	return uiapi.SyncRulesDTO{Rules: append([]rules.SyncRule(nil), req.Rules...)}, nil
@@ -601,7 +624,11 @@ func (a *App) GetLogs(req uiapi.LogQuery) uiapi.LogsResponse {
 			Message: entry.Message,
 		})
 	}
-	items = append(items, a.agentLogEntries(req, limit-len(items))...)
+	items = append(items, a.agentLogEntries(req, limit)...)
+	sortLogEntries(items)
+	if len(items) > limit {
+		items = items[:limit]
+	}
 	return uiapi.LogsResponse{Items: items}
 }
 
@@ -1048,37 +1075,6 @@ func (a *App) failedEventCount(ctx context.Context) (int64, error) {
 	}
 	defer closeFn()
 	return store.CountFailedEvents(ctx)
-}
-
-func (a *App) agentLogEntries(req uiapi.LogQuery, limit int) []uiapi.LogEntry {
-	if limit <= 0 {
-		return nil
-	}
-	data, err := os.ReadFile(agentLogPath(a.effectiveConfigPath()))
-	if err != nil {
-		return nil
-	}
-	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
-	items := make([]uiapi.LogEntry, 0, limit)
-	for i := len(lines) - 1; i >= 0 && len(items) < limit; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
-			continue
-		}
-		if req.Level != "" && !strings.EqualFold(req.Level, "info") {
-			continue
-		}
-		if req.Module != "" && req.Module != "sync-agent" {
-			continue
-		}
-		items = append(items, uiapi.LogEntry{
-			Time:    uiapi.TimeString(time.Now()),
-			Level:   "INFO",
-			Module:  "sync-agent",
-			Message: line,
-		})
-	}
-	return items
 }
 
 func (a *App) queuePlaceholders() []uiapi.QueueStatusDTO {

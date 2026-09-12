@@ -6,6 +6,10 @@ export function ApplyManagedInstall(arg1) {
   return window['go']['datasyncui']['App']['ApplyManagedInstall'](arg1);
 }
 
+export function ApplyQueueEventQuarantine(arg1) {
+  return window['go']['datasyncui']['App']['ApplyQueueEventQuarantine'](arg1);
+}
+
 export function ExportDiagnosticPackage() {
   return window['go']['datasyncui']['App']['ExportDiagnosticPackage']();
 }
@@ -22,12 +26,20 @@ export function GetAutoStart() {
   return window['go']['datasyncui']['App']['GetAutoStart']();
 }
 
+export function GetCapabilities() {
+  return window['go']['datasyncui']['App']['GetCapabilities']();
+}
+
 export function GetConfig() {
   return window['go']['datasyncui']['App']['GetConfig']();
 }
 
 export function GetDeadLetters(arg1) {
   return window['go']['datasyncui']['App']['GetDeadLetters'](arg1);
+}
+
+export function GetEventStatus(arg1) {
+  return window['go']['datasyncui']['App']['GetEventStatus'](arg1);
 }
 
 export function GetFailedEvents(arg1) {
@@ -54,6 +66,10 @@ export function GetOverview() {
   return window['go']['datasyncui']['App']['GetOverview']();
 }
 
+export function GetQueueEventAudit(arg1) {
+  return window['go']['datasyncui']['App']['GetQueueEventAudit'](arg1);
+}
+
 export function GetQueueStatus() {
   return window['go']['datasyncui']['App']['GetQueueStatus']();
 }
@@ -68,6 +84,14 @@ export function LoadConfig(arg1) {
 
 export function LockAdmin() {
   return window['go']['datasyncui']['App']['LockAdmin']();
+}
+
+export function PlanQueueEventQuarantine(arg1) {
+  return window['go']['datasyncui']['App']['PlanQueueEventQuarantine'](arg1);
+}
+
+export function PreflightSyncRule(arg1) {
+  return window['go']['datasyncui']['App']['PreflightSyncRule'](arg1);
 }
 
 export function RequestExit(arg1) {

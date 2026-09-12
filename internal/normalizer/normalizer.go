@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
+	"github.com/YufeiSun5/NodeBridge/internal/dbgovernance"
 	"github.com/YufeiSun5/NodeBridge/internal/event"
 )
 
@@ -60,8 +62,13 @@ func (n Normalizer) Normalize(change cdc.ChangeEvent) (event.SyncEvent, error) {
 
 	now := n.options.Now()
 	eventTime := change.EventTime
+	timeSource := "source_event"
+	if change.BinlogFile != "" && change.BinlogPos > 0 {
+		timeSource = "source_binlog"
+	}
 	if eventTime.IsZero() {
 		eventTime = now
+		timeSource = "processing_fallback"
 	}
 	eventID, err := n.options.NewChangeID(change, n.options.NodeID, now)
 	if err != nil {
@@ -84,6 +91,7 @@ func (n Normalizer) Normalize(change cdc.ChangeEvent) (event.SyncEvent, error) {
 		PrimaryKey:    cloneMap(change.PrimaryKey),
 		Before:        cloneMap(change.Before),
 		After:         cloneMap(change.After),
+		SchemaChange:  cloneSchemaChange(change.SchemaChange),
 		BinlogFile:    change.BinlogFile,
 		BinlogPos:     change.BinlogPos,
 		SchemaVersion: n.options.SchemaVersion,
@@ -92,7 +100,8 @@ func (n Normalizer) Normalize(change cdc.ChangeEvent) (event.SyncEvent, error) {
 		EventTime:     eventTime,
 		TraceID:       eventID,
 		Headers: map[string]string{
-			"normalizer": "cdc",
+			"normalizer":        "cdc",
+			"event_time_source": timeSource,
 		},
 	}, nil
 }
@@ -107,29 +116,31 @@ func RandomEventID(now time.Time) (string, error) {
 
 func StableCDCEventID(change cdc.ChangeEvent, nodeID string, now time.Time) (string, error) {
 	_ = now
-	if change.BinlogFile == "" || change.BinlogPos == 0 || len(change.PrimaryKey) == 0 {
+	if change.BinlogFile == "" || change.BinlogPos == 0 || (len(change.PrimaryKey) == 0 && change.SchemaChange == nil) {
 		return "", nil
 	}
 	key := struct {
-		NodeID     string         `json:"node_id"`
-		Database   string         `json:"database"`
-		Table      string         `json:"table"`
-		Operation  cdc.Operation  `json:"operation"`
-		BinlogFile string         `json:"binlog_file"`
-		BinlogPos  uint32         `json:"binlog_pos"`
-		PrimaryKey map[string]any `json:"primary_key"`
-		Before     map[string]any `json:"before,omitempty"`
-		After      map[string]any `json:"after,omitempty"`
+		NodeID       string         `json:"node_id"`
+		Database     string         `json:"database"`
+		Table        string         `json:"table"`
+		Operation    cdc.Operation  `json:"operation"`
+		BinlogFile   string         `json:"binlog_file"`
+		BinlogPos    uint32         `json:"binlog_pos"`
+		PrimaryKey   map[string]any `json:"primary_key"`
+		Before       map[string]any `json:"before,omitempty"`
+		After        map[string]any `json:"after,omitempty"`
+		SchemaChange any            `json:"schema_change,omitempty"`
 	}{
-		NodeID:     nodeID,
-		Database:   change.DatabaseName,
-		Table:      change.TableName,
-		Operation:  change.Operation,
-		BinlogFile: change.BinlogFile,
-		BinlogPos:  change.BinlogPos,
-		PrimaryKey: change.PrimaryKey,
-		Before:     change.Before,
-		After:      change.After,
+		NodeID:       nodeID,
+		Database:     change.DatabaseName,
+		Table:        change.TableName,
+		Operation:    change.Operation,
+		BinlogFile:   change.BinlogFile,
+		BinlogPos:    change.BinlogPos,
+		PrimaryKey:   change.PrimaryKey,
+		Before:       change.Before,
+		After:        change.After,
+		SchemaChange: change.SchemaChange,
 	}
 	body, err := json.Marshal(key)
 	if err != nil {
@@ -141,11 +152,19 @@ func StableCDCEventID(change cdc.ChangeEvent, nodeID string, now time.Time) (str
 
 func validOperation(operation cdc.Operation) bool {
 	switch operation {
-	case cdc.OperationInsert, cdc.OperationUpdate, cdc.OperationDelete:
+	case cdc.OperationInsert, cdc.OperationUpdate, cdc.OperationDelete, cdc.OperationAddColumn, cdc.OperationDropColumn:
 		return true
 	default:
 		return false
 	}
+}
+
+func cloneSchemaChange(change *dbgovernance.SchemaChange) *dbgovernance.SchemaChange {
+	if change == nil {
+		return nil
+	}
+	cloned := *change
+	return &cloned
 }
 
 func cloneMap(source map[string]any) map[string]any {
@@ -161,6 +180,12 @@ func cloneMap(source map[string]any) map[string]any {
 
 func int64Value(values map[string]any, key string) int64 {
 	switch value := values[key].(type) {
+	case string:
+		parsed, _ := strconv.ParseInt(value, 10, 64)
+		return parsed
+	case json.Number:
+		parsed, _ := value.Int64()
+		return parsed
 	case int:
 		return int64(value)
 	case int64:

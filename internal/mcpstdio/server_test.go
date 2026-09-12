@@ -10,9 +10,31 @@ import (
 	"testing"
 
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
+	"github.com/YufeiSun5/NodeBridge/internal/buildinfo"
 	"github.com/YufeiSun5/NodeBridge/internal/mcpstdio"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
 )
+
+func TestInitializeUsesSharedBuildVersion(t *testing.T) {
+	var stdout bytes.Buffer
+	server := mcpstdio.Server{Service: mcpstdio.StaticService{}}
+	if err := server.Serve(context.Background(), strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize"}`+"\n"), &stdout); err != nil {
+		t.Fatal(err)
+	}
+	var response struct {
+		Result struct {
+			ServerInfo struct {
+				Version string `json:"version"`
+			} `json:"serverInfo"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Result.ServerInfo.Version != buildinfo.Version {
+		t.Fatalf("MCP version %q != build %q", response.Result.ServerInfo.Version, buildinfo.Version)
+	}
+}
 
 func TestServerListsTools(t *testing.T) {
 	var stdout bytes.Buffer
@@ -281,9 +303,9 @@ func TestServerSavesSyncRules(t *testing.T) {
 		ID:             "device-config",
 		DatabaseName:   "scada_edge",
 		TableName:      "device_config",
-		Direction:      rules.DirectionBidirectional,
+		Direction:      rules.DirectionEdgeToServer,
 		DispatchTarget: rules.DispatchActiveEdges,
-		ConflictPolicy: rules.ConflictLastWriteWin,
+		ConflictPolicy: rules.ConflictNone,
 		Enable:         true,
 		PrimaryKeys:    []string{"id"},
 	}
@@ -314,8 +336,8 @@ func TestServerRejectsInvalidSyncRulesAndAudits(t *testing.T) {
 		ID:             "bad-table",
 		DatabaseName:   "scada_edge",
 		TableName:      "bad-table",
-		Direction:      rules.DirectionBidirectional,
-		ConflictPolicy: rules.ConflictLastWriteWin,
+		Direction:      rules.DirectionEdgeToServer,
+		ConflictPolicy: rules.ConflictNone,
 		Enable:         true,
 		PrimaryKeys:    []string{"id"},
 	}

@@ -1,4 +1,5 @@
 param(
+    [string]$BundleVersion = "0.46.12",
     [switch]$ExecuteInstall,
     [switch]$Uninstall,
     [switch]$VerifyOnly,
@@ -10,7 +11,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$bundleVersion = "0.46.3"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $bundleRoot = Split-Path -Parent $scriptDir
 $binDir = Join-Path $bundleRoot "bin"

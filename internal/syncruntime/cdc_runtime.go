@@ -3,7 +3,6 @@ package syncruntime
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
 	"github.com/YufeiSun5/NodeBridge/internal/event"
@@ -23,7 +22,7 @@ type ChangeNormalizer interface {
 }
 
 type UploadDecider interface {
-	ShouldUpload(change cdc.ChangeEvent) loop.Decision
+	ShouldUpload(ctx context.Context, change cdc.ChangeEvent) (loop.Decision, error)
 }
 
 type CDCUploadRuntime struct {
@@ -66,7 +65,10 @@ func (r CDCUploadRuntime) RunOnce(ctx context.Context) (StepResult, error) {
 	}
 
 	if r.Decider != nil {
-		decision := r.Decider.ShouldUpload(change)
+		decision, err := r.Decider.ShouldUpload(ctx, change)
+		if err != nil {
+			return StepResult{Processed: true, Action: "failed"}, err
+		}
 		if !decision.Upload {
 			return StepResult{Processed: true, Action: "suppressed"}, nil
 		}
@@ -110,67 +112,74 @@ func (r ServerCDCDispatchRuntime) RunOnce(ctx context.Context) (StepResult, erro
 }
 
 func dispatchServerChange(ctx context.Context, change cdc.ChangeEvent, decider UploadDecider, normalizer ChangeNormalizer, ruleSet *rules.RuleSet, dispatcher DownlinkDispatcher, edgeNodes []string, nodeStore ActiveNodeStore, eventStore EventLogStore) (string, int, string, error) {
-	if normalizer == nil {
-		return "", 0, "", fmt.Errorf("change normalizer is required")
-	}
-	if ruleSet == nil {
-		return "", 0, "", fmt.Errorf("rules are required")
-	}
 	if dispatcher == nil {
 		return "", 0, "", fmt.Errorf("downlink dispatcher is required")
 	}
+	record, rule, err := prepareServerChange(ctx, change, decider, normalizer, ruleSet)
+	eventID := record.Event.EventID
+	if err != nil {
+		return eventID, 0, "", err
+	}
+	if rule == nil {
+		return eventID, 0, "suppressed", nil
+	}
+	if eventStore != nil {
+		if err := eventStore.UpsertEventLog(ctx, record); err != nil {
+			return eventID, 0, "", fmt.Errorf("persist server cdc event: %w", err)
+		}
+	}
+	count, err := (ServerIngressRuntime{Dispatcher: dispatcher, EdgeNodes: edgeNodes, NodeStore: nodeStore}).dispatch(ctx, record.Event, *rule)
+	if err != nil {
+		return eventID, count, "", err
+	}
+	if eventStore != nil {
+		if err := completeEventLogs(ctx, eventStore, []syncstore.EventLogRecord{record}); err != nil {
+			return eventID, count, "", fmt.Errorf("persist dispatched server cdc event: %w", err)
+		}
+	}
+	return eventID, count, "dispatched", nil
+}
+
+func prepareServerChange(ctx context.Context, change cdc.ChangeEvent, decider UploadDecider, normalizer ChangeNormalizer, ruleSet *rules.RuleSet) (syncstore.EventLogRecord, *rules.SyncRule, error) {
+	defer measurePhase(ctx, "cdc_prepare")()
+	var record syncstore.EventLogRecord
+	if normalizer == nil {
+		return record, nil, fmt.Errorf("change normalizer is required")
+	}
+	if ruleSet == nil {
+		return record, nil, fmt.Errorf("rules are required")
+	}
 	if decider != nil {
-		decision := decider.ShouldUpload(change)
+		decision, err := decider.ShouldUpload(ctx, change)
+		if err != nil {
+			return record, nil, err
+		}
 		if !decision.Upload {
-			return "", 0, "suppressed", nil
+			return record, nil, nil
 		}
 	}
 	evt, err := normalizer.Normalize(change)
 	if err != nil {
-		return "", 0, "", err
+		return record, nil, err
 	}
+	record.Event = evt
 	rule := findRuleForEvent(ruleSet, evt)
 	if rule == nil || !rule.Enable || rule.Direction == rules.DirectionIgnore || !shouldDispatch(*rule) {
-		return evt.EventID, 0, "suppressed", nil
+		return record, nil, nil
 	}
 	mapped, err := mapper.MapEvent(evt, *rule)
 	if err != nil {
-		return evt.EventID, 0, "", fmt.Errorf("map server cdc event: %w", err)
+		return record, nil, fmt.Errorf("map server cdc event: %w", err)
+	}
+	if !schemaChangeAllowed(evt, mapped, *rule) {
+		return record, nil, nil
 	}
 	body, err := rabbitmq.EncodeJSON(evt)
 	if err != nil {
-		return evt.EventID, 0, "", err
+		return record, nil, err
 	}
-	if eventStore != nil {
-		if err := eventStore.UpsertEventLog(ctx, syncstore.EventLogRecord{
-			Event:              evt,
-			TargetDatabaseName: mapped.TargetDatabase,
-			TargetTableName:    mapped.TargetTable,
-			PKValue:            pkValue(evt.PrimaryKey),
-			Direction:          rule.Direction,
-			Status:             syncstore.StatusPending,
-			Payload:            body,
-		}); err != nil {
-			return evt.EventID, 0, "", fmt.Errorf("persist server cdc event: %w", err)
-		}
-	}
-	count, err := (ServerIngressRuntime{Dispatcher: dispatcher, EdgeNodes: edgeNodes, NodeStore: nodeStore}).dispatch(ctx, evt, *rule)
-	if err != nil {
-		return evt.EventID, count, "", err
-	}
-	if eventStore != nil {
-		if err := eventStore.UpsertEventLog(ctx, syncstore.EventLogRecord{
-			Event:              evt,
-			TargetDatabaseName: mapped.TargetDatabase,
-			TargetTableName:    mapped.TargetTable,
-			PKValue:            pkValue(evt.PrimaryKey),
-			Direction:          rule.Direction,
-			Status:             syncstore.StatusSuccess,
-			AppliedAt:          time.Now(),
-			Payload:            body,
-		}); err != nil {
-			return evt.EventID, count, "", fmt.Errorf("persist dispatched server cdc event: %w", err)
-		}
-	}
-	return evt.EventID, count, "dispatched", nil
+	record.TargetDatabaseName, record.TargetTableName = mapped.TargetDatabase, mapped.TargetTable
+	record.PKValue, record.Direction = pkValue(evt.PrimaryKey), rule.Direction
+	record.Status, record.Payload = syncstore.StatusPending, body
+	return record, rule, nil
 }

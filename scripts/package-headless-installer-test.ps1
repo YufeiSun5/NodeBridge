@@ -1,4 +1,5 @@
 param(
+    [string]$Version = "0.46.15",
     [switch]$NoBuild,
     [switch]$NoZip,
     [switch]$RefreshConfig
@@ -38,7 +39,6 @@ function Copy-IfMissingOrRefresh {
     }
 }
 
-$version = "0.46.3"
 $bundleRoot = Join-Path $root "build/headless-installer-test"
 $zipPath = Join-Path $root "build/NodeBridge-headless-installer-test-v$version.zip"
 $syncAgentSource = Join-Path $root "build/bin/SyncAgent.exe"

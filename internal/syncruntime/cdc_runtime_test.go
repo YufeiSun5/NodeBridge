@@ -161,10 +161,11 @@ func (s *fakeChangeSource) GetChange(ctx context.Context) (cdc.ChangeEvent, bool
 
 type fakeDecider struct {
 	decision loop.Decision
+	err      error
 }
 
-func (d fakeDecider) ShouldUpload(change cdc.ChangeEvent) loop.Decision {
-	return d.decision
+func (d fakeDecider) ShouldUpload(_ context.Context, change cdc.ChangeEvent) (loop.Decision, error) {
+	return d.decision, d.err
 }
 
 type fakeNormalizer struct {

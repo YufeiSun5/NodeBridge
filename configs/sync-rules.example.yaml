@@ -22,7 +22,8 @@ rules:
     direction: BIDIRECTIONAL
     dispatch_target: ACTIVE_EDGES
     conflict_policy: LAST_WRITE_WIN
-    enable: true
+    # Unsupported conflict/bidirectional example; do not enable.
+    enable: false
     primary_keys:
       - id
     target_primary_keys:
@@ -52,6 +53,7 @@ rules:
     direction: SERVER_TO_EDGE
     dispatch_target: ACTIVE_EDGES
     conflict_policy: LAST_WRITE_WIN
-    enable: true
+    # Unsupported conflict policy; do not enable.
+    enable: false
     primary_keys:
       - id
