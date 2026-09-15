@@ -31,7 +31,7 @@
 
 ## Active Board
 
-2026-09-15 frontend-ai：NB-WELCOME-DESIGN ready，独立site官网重做为浅色画布/深绿交互预览/功能区/部署步骤，三语自动语言保留；36组语言/320–1366宽度/面板及键盘、无JS错误、全test/vet/lint通过。owner frontend-ai跨test-ai仅浏览器/发布检查，不改变Wails/同步核心/安装包；待Pages发布核验。
+2026-09-15 frontend-ai：NB-WELCOME-DESIGN closed，独立site官网重做为浅色画布/深绿交互预览/功能区/部署步骤，三语自动语言保留；36组语言/320–1366宽度/面板及键盘、无JS错误、全test/vet/lint通过。owner frontend-ai跨test-ai仅浏览器/发布检查，不改变Wails/同步核心/安装包；Pages部署34924227551成功，官网新版本已上线；历史现场同步复验项维持open。
 
 
 2026-09-15 backend-ai：NB-PUBLISH closed，跨 frontend-ai 完成三语 README 和独立欢迎页（浏览器语言匹配、英语回退、手动选择记忆），跨 test-ai 全测/vet/lint/合同及三语390/1366宽度浏览器检查通过。GitHub v0.48.7已发布（tag a9d1aaa），340906969字节与SHA256 5A1FDF8F…一致，Pages部署34923121980成功，线上三语390/1366验证通过，仅发布site。无新增Wails API；owner backend-ai。现场复验等NB-RECONNECT边界仍open。
