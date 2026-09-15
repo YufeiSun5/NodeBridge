@@ -88,7 +88,7 @@ Last updated: 2026-09-15 Asia/Singapore
 
 ## 改动记录
 
-- 2026-09-15 11:30 | Codex | frontend-ai按用户纠正将展示重心移到GitHub README：三语SVG品牌横幅、直接下载、功能表、真实前端测试截图、折叠开发说明；链接与全测/vet/lint通过。
+- 2026-09-15 13:23 | Codex | frontend-ai按用户纠正将展示重心移到GitHub README：三语SVG品牌横幅、直接下载、功能表、真实前端测试截图、折叠开发说明；链接与全测/vet/lint通过。
 
 - 2026-09-15 11:17 | Codex | frontend-ai重做site欢迎页：浅色品牌视觉、深绿三标签交互预览、三语响应式，36组浏览器检查与Go全测/vet/lint通过；仅官网发布，安装包不变。
 
@@ -97,4 +97,3 @@ Last updated: 2026-09-15 Asia/Singapore
 - 2026-09-15 10:16 | Codex / backend-ai | 修复RabbitMQ运行期自动重连，完成两轮三节点断线回归及0.48.7补丁包。
 
 - 2026-09-15 08:46 | Codex / backend-ai | 修复批量部分提交ACK前漏转发，完成真实死锁回归及0.48.6补丁安装包。
-

@@ -31,7 +31,7 @@
 
 ## Active Board
 
-2026-09-15 frontend-ai：NB-GITHUB-SHOWCASE open，按用户纠正重做GitHub仓库README内展示；三语横幅、导航、功能表与实际前端测试截图，owner frontend-ai跨test-ai仅GitHub渲染检查。
+2026-09-15 frontend-ai：NB-GITHUB-SHOWCASE closed，按用户纠正重做GitHub仓库README内展示；三语横幅、导航、功能表与实际前端测试截图，owner frontend-ai跨test-ai，GitHub线上三语横幅/截图/功能表实测通过，源码e0c0bc7已推送；全test/vet/lint与本地链接通过。历史现场复验项维持open。
 
 
 2026-09-15 frontend-ai：NB-WELCOME-DESIGN closed，独立site官网重做为浅色画布/深绿交互预览/功能区/部署步骤，三语自动语言保留；36组语言/320–1366宽度/面板及键盘、无JS错误、全test/vet/lint通过。owner frontend-ai跨test-ai仅浏览器/发布检查，不改变Wails/同步核心/安装包；Pages部署34924227551成功，官网新版本已上线；历史现场同步复验项维持open。
