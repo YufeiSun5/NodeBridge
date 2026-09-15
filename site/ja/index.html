@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ja" data-language="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="エッジと中央サーバー向け MySQL データ同期。双方向マッピング、自動再接続、MCP による AI 運用を提供。Windows インストーラーと中英日 UI に対応。">
+  <meta name="theme-color" content="#f4f6f8">
+  <title>NodeBridge — MySQL 双方向同期と MCP 運用 | Windows</title>
+  <link rel="icon" type="image/svg+xml" href="../mark.svg">
+  <link rel="stylesheet" href="../style.css">
+<!-- SEO START -->
+<link rel="canonical" href="https://yufeisun5.github.io/NodeBridge/ja/">
+<link rel="alternate" hreflang="en" href="https://yufeisun5.github.io/NodeBridge/en/">
+<link rel="alternate" hreflang="zh-CN" href="https://yufeisun5.github.io/NodeBridge/zh-CN/">
+<link rel="alternate" hreflang="ja" href="https://yufeisun5.github.io/NodeBridge/ja/">
+<link rel="alternate" hreflang="x-default" href="https://yufeisun5.github.io/NodeBridge/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="NodeBridge — MySQL 双方向同期と MCP 運用 | Windows">
+<meta property="og:description" content="エッジと中央サーバー向け MySQL データ同期。双方向マッピング、自動再接続、MCP による AI 運用を提供。Windows インストーラーと中英日 UI に対応。">
+<meta property="og:url" content="https://yufeisun5.github.io/NodeBridge/ja/">
+<!-- SEO END -->
+</head>
+<body>
+<a class="skip-link" href="#main" data-text="skip">本文へ移動</a>
+<header class="header wrap">
+  <a class="brand" href="./" aria-label="NodeBridge"><img src="../mark.svg" width="32" height="32" alt="">NodeBridge</a>
+  <nav class="header-nav" aria-label="Main"><a class="mcp-nav" href="#mcp">MCP <span class="nav-tag">AI</span></a><a href="#product" data-text="navProduct">製品概要</a><a href="#deploy" data-text="navDeploy">はじめる</a><a href="https://github.com/YufeiSun5/NodeBridge" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></nav>
+  <button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false"><span aria-hidden="true">◐</span><span data-text="theme">ダークモード</span></button><label class="language-control"><span id="languageLabel" class="sr-only">Language</span><span aria-hidden="true">◎</span><select id="language" aria-labelledby="languageLabel"><option value="en">English</option><option value="zh">简体中文</option><option value="ja">日本語</option></select></label>
+</header>
+<main id="main">
+  <section class="hero wrap">
+    <div class="hero-copy">
+      <a class="release-pill" href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7"><span class="dot"></span>v0.48.7 BETA <span class="pill-divider"></span><span data-text="release">切断後も、自動で再接続</span><span aria-hidden="true">↗</span></a>
+      <h1><span data-text="title">データをつなぐ。</span><br><span class="accent" data-text="titleAccent">現場が近づく。</span></h1>
+      <p class="lead" data-text="intro">生産現場から中央サーバーへ。Windows エッジネットワークで MySQL データを同期。管理の主導権は、いつもあなたの手に。</p>
+      <div class="hero-actions"><a class="button primary" href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7"><span class="windows-mark" aria-hidden="true">⊞</span><span data-text="download">Windows 版をダウンロード</span><span aria-hidden="true">↗</span></a><a class="text-link" id="readme" href="https://github.com/YufeiSun5/NodeBridge/blob/main/README.ja.md"><span data-text="guide">ドキュメント</span><span aria-hidden="true">→</span></a></div>
+      <p class="hero-meta"><span>Windows x64</span><span>MIT Open Source</span><span data-text="localFirst">ローカル管理</span><a class="mcp-ready" href="#mcp">MCP READY ↗</a></p>
+    </div>
+    <div class="hero-visual" id="product">
+      <div class="preview-caption"><span class="tiny-square"></span><span data-text="previewLabel">NodeBridge を体験</span><span class="caption-right" data-text="demo">操作イメージ</span></div>
+      <div class="console">
+        <div class="console-bar"><span class="console-brand"><img src="../mark.svg" alt="" width="19" height="19">NodeBridge</span><span class="console-mode">WORKSPACE / 01</span><span class="window-dots" aria-hidden="true">···</span></div>
+        <div class="preview-tabs" role="tablist" aria-label="Preview">
+          <button id="tab-overview" type="button" role="tab" aria-selected="true" aria-controls="panel-overview" data-panel="overview" data-text="tabOverview">同期の概要</button>
+          <button id="tab-rules" type="button" role="tab" aria-selected="false" aria-controls="panel-rules" tabindex="-1" data-panel="rules" data-text="tabRules">ルール</button>
+          <button id="tab-recovery" type="button" role="tab" aria-selected="false" aria-controls="panel-recovery" tabindex="-1" data-panel="recovery" data-text="tabRecovery">接続復旧</button>
+        </div>
+        <div class="preview-body">
+          <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
+            <div class="panel-heading"><div><p class="console-eyebrow" data-text="network">同期ネットワーク</p><h2 data-text="oneView">すべてのノードを、一目で。</h2></div><span class="status-chip"><span class="dot"></span><span data-text="connected">接続済み</span></span></div>
+            <div class="node-row central"><span class="node-icon" aria-hidden="true">▤</span><div class="node-name"><strong data-text="central">中央サーバー</strong><code>server-001</code></div><span class="node-tag">MySQL</span></div>
+            <div class="edge-label"><span aria-hidden="true">↳</span><span data-text="edgeNetwork">エッジネットワーク</span><span class="line"></span><span>02</span></div>
+            <div class="node-row"><span class="node-icon" aria-hidden="true">▥</span><div class="node-name"><strong data-text="edgeOne">生産ライン A</strong><code>edge-001</code></div><span class="sync-state"><span class="dot"></span><span data-text="syncing">同期中</span></span></div>
+            <div class="node-row"><span class="node-icon" aria-hidden="true">▥</span><div class="node-name"><strong data-text="edgeTwo">生産ライン B</strong><code>edge-002</code></div><span class="sync-state"><span class="dot"></span><span data-text="syncing">同期中</span></span></div>
+            <div class="console-note"><span aria-hidden="true">↔</span><span data-text="direction">双方向ルールで、宛先を明確に。</span></div>
+          </section>
+          <section id="panel-rules" role="tabpanel" aria-labelledby="tab-rules" tabindex="0" hidden>
+            <div class="panel-heading"><div><p class="console-eyebrow" data-text="ruleWorkspace">ルール設定</p><h2 data-text="rulePreviewTitle">わかる名前で、迷わず管理。</h2></div><span class="status-chip" data-text="enabled">有効</span></div>
+            <div class="rule-preview"><div class="rule-title"><span class="node-icon" aria-hidden="true">↔</span><div><strong data-text="ruleName">生産イベント同期</strong><code>production-events</code></div></div><div class="rule-field"><span data-text="source">ソース</span><code>factory_edge.events</code></div><div class="rule-field"><span data-text="destination">宛先</span><code>factory_center.events</code></div><div class="rule-field"><span data-text="key">主キー</span><code>id</code></div><div class="rule-field"><span data-text="mode">同期方向</span><span data-text="bidirectional">双方向</span></div></div>
+            <div class="console-note"><span aria-hidden="true">✓</span><span data-text="stableIdentity">表示名を変えても、ルール ID はそのまま。</span></div>
+          </section>
+          <section id="panel-recovery" role="tabpanel" aria-labelledby="tab-recovery" tabindex="0" hidden>
+            <div class="panel-heading"><div><p class="console-eyebrow" data-text="recoveryWorkspace">接続の復旧</p><h2 data-text="recoveryPreviewTitle">つながれば、また進める。</h2></div></div>
+            <ol class="recovery-list"><li><span class="step-symbol">01</span><div><strong data-text="disconnect">接続が中断</strong><p data-text="disconnectBody">未確認メッセージを再試行のために保持。</p></div></li><li><span class="step-symbol">02</span><div><strong data-text="reconnect">接続を再構築</strong><p data-text="reconnectBody">失効したチャネルと発行器を置き換えます。</p></div></li><li><span class="step-symbol success">✓</span><div><strong data-text="resume">同期を再開</strong><p data-text="resumeBody">接続復旧後、イベントの冪等性を保ち再試行。</p></div></li></ol>
+            <div class="console-note"><span aria-hidden="true">↻</span><span data-text="noRestart">この復旧経路では Agent の手動再起動は不要。</span></div>
+          </section>
+        </div>
+        <div class="console-footer"><span><span class="dot"></span>SyncAgent</span><span data-text="demoFooter">設定例 · 実際の稼働データではありません</span></div>
+      </div>
+      <div class="visual-footnote"><span>01 — 03</span><span data-text="tryTabs">上のタブで表示を切り替え ↑</span></div>
+    </div>
+  </section>
+  <section class="stack-strip wrap" aria-label="Technology"><p data-text="builtWith">実績ある技術を基盤に</p><div><span>MySQL</span><span>Canal CDC</span><span>RabbitMQ</span><span>Go</span><span>Wails</span></div></section>
+
+  <section class="mcp-section wrap" id="mcp">
+    <div class="mcp-heading"><div><p class="eyebrow"><span class="mcp-symbol">⌘</span> MODEL CONTEXT PROTOCOL</p><h2><span data-text="mcpTitle">AI アシスタントを、</span><br><span class="accent" data-text="mcpAccent">同期運用につなぐ。</span></h2></div><p data-text="mcpIntro">MCP クライアントから NodeBridge の構造化された管理機能へ。キューの確認、ルールの検証、整合タスクの追跡を、具体的なツールと実行結果で支援します。</p></div>
+    <div class="mcp-workspace">
+      <div class="mcp-scenarios"><div class="mcp-scenario-label"><span data-text="mcpChoose">AI に何を頼みますか？</span><span>01 — 03</span></div>
+        <button type="button" class="scenario" data-scenario="diagnose" aria-pressed="true"><span class="scenario-index">01</span><span><strong data-text="mcpDiagnose">同期の停滞を調べる</strong><small data-text="mcpDiagnoseSub">状態 · キュー · ログ · イベント</small></span><span aria-hidden="true">↗</span></button>
+        <button type="button" class="scenario" data-scenario="rules" aria-pressed="false"><span class="scenario-index">02</span><span><strong data-text="mcpRules">同期ルールを確認</strong><small data-text="mcpRulesSub">スキーマ · マッピング · リビジョン</small></span><span aria-hidden="true">↗</span></button>
+        <button type="button" class="scenario" data-scenario="alignment" aria-pressed="false"><span class="scenario-index">03</span><span><strong data-text="mcpAlignment">初期整合を追跡</strong><small data-text="mcpAlignmentSub">開始 · ポーリング · 復旧確認</small></span><span aria-hidden="true">↗</span></button>
+        <p class="mcp-scenario-note" data-text="mcpLocalNote">ローカル stdio または SSH で接続。ご自身の MCP クライアントで操作します。</p>
+      </div>
+      <div class="mcp-trace"><div class="trace-bar"><span class="trace-title"><span class="dot"></span>nodebridge / MCP</span><span data-text="mcpExample">ワークフローの例</span></div><div class="trace-content" aria-live="polite" aria-atomic="true"><p class="trace-label" data-text="mcpPromptLabel">依頼の例</p><p id="mcp-prompt" class="trace-prompt">エッジの同期が止まった理由を、状態とログから調べて。</p><div class="trace-label tool-label"><span data-text="mcpToolLabel">クライアントが呼び出せるツール</span><span>JSON-RPC · stdio</span></div><ol id="mcp-tools" class="tool-list"><li><span>01</span><code>nodebridge_overview</code></li><li><span>02</span><code>nodebridge_queue_status</code></li><li><span>03</span><code>nodebridge_logs</code></li><li><span>04</span><code>nodebridge_event_status</code></li></ol><div class="trace-result"><span aria-hidden="true">↳</span><p id="mcp-outcome">プロセス状態、キュー深度、イベント記録を照合。プロセス実行中だけでは同期の健全性を証明できません。</p></div></div><div class="trace-footer"><span aria-hidden="true">◎</span><span data-text="mcpDemoNote">機能のイメージです。このページはノードに接続しません。</span></div></div>
+    </div>
+    <div class="mcp-capabilities"><article><span class="cap-icon">01 / INSPECT</span><h3 data-text="mcpInspect">何が起きたかを把握</h3><p data-text="mcpInspectBody">概要、スキーマ、キュー深度、有限のログとイベント記録を確認。診断アーカイブを出力して調査できます。</p></article><article><span class="cap-icon">02 / MANAGE</span><h3 data-text="mcpManage">調査から対応へ</h3><p data-text="mcpManageBody">設定の検証・保存、ルール管理、Agent 制御、失敗イベントの再試行。データ変更は構造化計画と明示確認で行います。</p></article><article><span class="cap-icon">03 / CONNECT</span><h3 data-text="mcpConnect">複数ノードを管理</h3><p data-text="mcpConnectBody">Windows ノードごとにクライアント項目を追加。ローカル stdio または Windows・Mac から SSH で設定所有アカウントに接続します。</p></article></div>
+    <div class="mcp-setup"><div><p class="eyebrow" data-text="mcpSetupLabel">MCP クライアントを接続</p><h3 data-text="mcpSetupTitle">まずはローカル接続から。</h3><p data-text="mcpSetupBody">NodeBridge で完全な設定を保存し MCP を有効化。設定所有者の Windows アカウントで実行し、command と args をクライアントの形式に合わせます。</p><a class="text-link" href="https://github.com/YufeiSun5/NodeBridge/blob/main/docs/mcp-service.md"><span data-text="mcpReference">MCP ツール資料</span> ↗</a><a class="text-link" href="https://github.com/YufeiSun5/NodeBridge/blob/main/docs/lan-deployment-guide.md"><span data-text="mcpRemote">SSH 接続ガイド</span> ↗</a></div><div class="config-example"><div class="config-bar"><span data-text="mcpConfigExample">一般的なクライアント設定</span><span>JSON</span></div><pre id="mcp-config" tabindex="0"><code>{
+  "mcpServers": {
+    "nodebridge": {
+      "command": "C:\\Program Files\\NodeBridge\\app\\SyncAgent.exe",
+      "args": [
+        "mcp-stdio",
+        "-config",
+        "C:\\ProgramData\\NodeBridge\\config.yaml"
+      ]
+    }
+  }
+}</code></pre></div></div>
+    <p class="mcp-boundary"><strong data-text="mcpBoundaryLabel">明確な操作範囲。</strong> <span data-text="mcpBoundary">MCP HTTP リスナー、任意 Shell、生 SQL は提供しません。設定検証、マスキング、書き込み監査を維持。初期整合には全参加端の Agent 停止、明示確認とポーリングが必要です。running は完了ではありません。</span></p>
+  </section>
+
+  <section class="features wrap">
+    <div class="section-heading"><div><p class="eyebrow" data-text="sectionLabel">エッジネットワークのために</p><h2><span data-text="featureTitle">複雑なネットワークを、</span><br><span class="muted-title" data-text="featureAccent">もっと明快に管理。</span></h2></div><p data-text="featureIntro">ルール設定、接続の中断、アップグレード。日々の運用で大切な場面を支えるツールです。</p></div>
+    <div class="feature-grid">
+      <article class="feature-card"><div class="feature-top"><span class="feature-icon" aria-hidden="true">↻</span><span>01 / RESILIENCE</span></div><h3 data-text="recovery">再接続して、その先へ。</h3><p data-text="recoveryBody">失効した RabbitMQ 接続を自動再構築。接続が戻れば、Agent はデータ同期を再開できます。</p><div class="feature-bottom"><span class="dot"></span><span data-text="recoveryTag">自動再接続と復旧</span></div></article>
+      <article class="feature-card"><div class="feature-top"><span class="feature-icon" aria-hidden="true">≡</span><span>02 / CLARITY</span></div><h3 data-text="rules">スクロールを減らし、明快に。</h3><p data-text="rulesBody">コンパクトな編集画面と目立つ表示名。名前を変えても、ルール ID と既存の整合記録を維持します。</p><div class="feature-bottom"><span class="dot"></span><span data-text="rulesTag">わかりやすいルール名</span></div></article>
+      <article class="feature-card"><div class="feature-top"><span class="feature-icon" aria-hidden="true">↗</span><span>03 / CONTINUITY</span></div><h3 data-text="upgrade">ソフトもシステム DB も更新。</h3><p data-text="upgradeBody">設定済みの NodeBridge システム DB をインストール時に更新。移行に失敗すると完了を停止します。</p><div class="feature-bottom"><span class="dot"></span><span data-text="upgradeTag">システム DB 移行を内蔵</span></div></article>
+    </div>
+  </section>
+  <section class="deploy wrap" id="deploy">
+    <div class="deploy-intro"><p class="eyebrow" data-text="deployLabel">ダウンロードから導入まで</p><h2 data-text="start">あなたのネットワークで、次の一歩を。<br>Your next step.</h2><p data-text="deployIntro">まずガイドを確認。設定を明確にし、ご自身の環境で検証してください。</p><a class="text-link" href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7"><span data-text="releaseNotes">リリースノート</span><span aria-hidden="true">↗</span></a></div>
+    <ol class="deploy-steps"><li><span>01</span><div><h3 data-text="prepareTitle">環境を準備</h3><p data-text="prepareBody">MySQL を別途用意し、固有のノード ID を設定。設定・ルール・DB をバックアップします。</p></div></li><li><span>02</span><div><h3 data-text="installTitle">インストールと設定</h3><p data-text="installBody">Windows インストーラーを管理者として実行し、ソースと宛先の DB・テーブル・列を指定します。</p></div></li><li><span>03</span><div><h3 data-text="validateTitle">導入環境で検証</h3><p data-text="validateBody">整合、CRUD、接続復旧を現場で確認。隔離 3 Agent の Beta 検証は本番 SLA を保証しません。</p></div></li></ol>
+  </section>
+  <section class="download-banner wrap"><div><p class="eyebrow">NODEBRIDGE / v0.48.7 BETA</p><h2 data-text="closingTitle">離れたデータを、ひとつに。</h2><p data-text="closingBody">オープンソース。Windows ネイティブ。次の検証へ。</p></div><a class="button light" href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7"><span data-text="download">Windows 版をダウンロード</span><span aria-hidden="true">↗</span></a></section>
+<!-- SEARCH CONTENT START -->
+<section class="wrap search-summary"><h2 data-text="searchTitle">Windows エッジ環境向け MySQL 双方向同期</h2><p data-text="searchBody">エッジと中央サーバーの MySQL データを同期。双方向マッピング、自動再接続、MCP によるキュー確認・ルール管理・初期整合追跡に対応。Windows インストーラーを提供。</p><nav aria-label="Languages"><a href="https://yufeisun5.github.io/NodeBridge/en/" lang="en">English</a> · <a href="https://yufeisun5.github.io/NodeBridge/zh-CN/" lang="zh-CN">简体中文</a> · <a href="https://yufeisun5.github.io/NodeBridge/ja/" lang="ja">日本語</a></nav></section>
+<!-- SEARCH CONTENT END -->
+</main>
+<footer class="footer wrap"><a class="brand" href="./"><img src="../mark.svg" width="26" height="26" alt="">NodeBridge</a><p data-text="footer">現場をつなぐために。MIT ライセンスで公開。</p><a href="https://github.com/YufeiSun5/NodeBridge">GitHub ↗</a></footer>
+<script src="../app.js"></script>
+</body>
+</html>

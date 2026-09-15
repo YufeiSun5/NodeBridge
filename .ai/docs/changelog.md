@@ -1228,3 +1228,5 @@ Last updated: 2026-09-09 08:46 Asia/Singapore
 
 
 - 2026-09-15 08:46 | Codex / backend-ai | 修复批量部分提交ACK前漏转发，完成真实死锁回归及0.48.6补丁安装包。
+
+- 2026-09-15 10:16 | Codex / backend-ai | 修复RabbitMQ运行期自动重连，完成两轮三节点断线回归及0.48.7补丁包。

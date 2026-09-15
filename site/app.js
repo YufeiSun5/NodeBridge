@@ -57,6 +57,9 @@
     }
     return 'en';
   }
+  Object.assign(messages.en, {searchTitle:'MySQL synchronization for Windows edge networks',searchBody:'Synchronize MySQL between edge nodes and a central server with bidirectional mappings, automatic reconnection and MCP tools for AI-assisted operations. Windows installer available.'});
+  Object.assign(messages.zh, {searchTitle:'面向 Windows 边缘网络的 MySQL 双向同步软件',searchBody:'在边缘节点与中心服务器之间同步 MySQL 数据，支持双向映射、断线自动重连，以及通过 MCP 查队列、管理规则、跟踪首次对齐。提供 Windows 直装版。'});
+  Object.assign(messages.ja, {searchTitle:'Windows エッジ環境向け MySQL 双方向同期',searchBody:'エッジと中央サーバーの MySQL データを同期。双方向マッピング、自動再接続、MCP によるキュー確認・ルール管理・初期整合追跡に対応。Windows インストーラーを提供。'});
   if (typeof module !== 'undefined') module.exports = {choose, messages};
   if (typeof document === 'undefined') return;
   const key = 'NodeBridge.welcome.language';
@@ -72,10 +75,15 @@
     renderScenario(lang);
     document.getElementById('readme').href = 'https://github.com/YufeiSun5/NodeBridge/blob/main/' + ({en:'README.md',zh:'README.zh-CN.md',ja:'README.ja.md'})[lang];
   }
-  render(choose(saved, navigator.languages || [navigator.language]));
+  const pageLanguage = document.documentElement.dataset.language;
+  render(pageLanguage || choose(saved, navigator.languages || [navigator.language]));
   document.getElementById('language').addEventListener('change', event => {
     const lang = choose(event.target.value, []);
     try { localStorage.setItem(key, lang); } catch {}
+    if (pageLanguage) {
+      location.assign('../' + ({en:'en',zh:'zh-CN',ja:'ja'})[lang] + '/' + location.hash);
+      return;
+    }
     render(lang);
   });
 

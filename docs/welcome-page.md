@@ -13,3 +13,10 @@
 
 - MCP: three interactive example workflows (diagnosis, rules, alignment), capability summaries and valid local client JSON. Claims checked against internal/datasyncui/mcp.go; static examples never invoke node tools. 三语 README 同步突出 MCP。
 - Expanded browser gate: 36 product states plus 72 MCP scenario/language/theme/width combinations; JSON parsing, theme persistence and keyboard navigation passed.
+
+## Search discovery / 搜索发现 / 検索
+
+- Generate with `node scripts/build-welcome-locales.cjs`; CI regenerates before publishing. `/en/`, `/zh-CN/`, `/ja/` contain translated HTML without JavaScript. Explicit locale URLs override browser/storage preference; root retains automatic selection.
+- Each page has its own title, description, canonical, reciprocal hreflang and Open Graph metadata. `site/sitemap.xml` lists four URLs. Topics now describe MySQL sync, CDC, Windows, MCP and edge computing.
+- Validate with `node scripts/test-welcome-seo.cjs` and `scripts/test-welcome-locales-browser.js` (start at site root).
+- Sitemap: https://yufeisun5.github.io/NodeBridge/sitemap.xml . Search Console/Bing submission requires account access and site ownership verification; not submitted in this task. A project-path robots.txt would not control the host root, so none is added. Indexing/ranking is not guaranteed.

@@ -1,15 +1,15 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-language="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="MySQL data synchronization for edge nodes and central servers. Bidirectional mappings, automatic reconnection and MCP AI operations. Windows installer; Chinese, English and Japanese.">
   <meta name="theme-color" content="#f4f6f8">
   <title>NodeBridge — MySQL Bidirectional Sync &amp; MCP | Windows</title>
-  <link rel="icon" type="image/svg+xml" href="mark.svg">
-  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/svg+xml" href="../mark.svg">
+  <link rel="stylesheet" href="../style.css">
 <!-- SEO START -->
-<link rel="canonical" href="https://yufeisun5.github.io/NodeBridge/">
+<link rel="canonical" href="https://yufeisun5.github.io/NodeBridge/en/">
 <link rel="alternate" hreflang="en" href="https://yufeisun5.github.io/NodeBridge/en/">
 <link rel="alternate" hreflang="zh-CN" href="https://yufeisun5.github.io/NodeBridge/zh-CN/">
 <link rel="alternate" hreflang="ja" href="https://yufeisun5.github.io/NodeBridge/ja/">
@@ -17,13 +17,13 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="NodeBridge — MySQL Bidirectional Sync &amp; MCP | Windows">
 <meta property="og:description" content="MySQL data synchronization for edge nodes and central servers. Bidirectional mappings, automatic reconnection and MCP AI operations. Windows installer; Chinese, English and Japanese.">
-<meta property="og:url" content="https://yufeisun5.github.io/NodeBridge/">
+<meta property="og:url" content="https://yufeisun5.github.io/NodeBridge/en/">
 <!-- SEO END -->
 </head>
 <body>
 <a class="skip-link" href="#main" data-text="skip">Skip to content</a>
 <header class="header wrap">
-  <a class="brand" href="./" aria-label="NodeBridge"><img src="mark.svg" width="32" height="32" alt="">NodeBridge</a>
+  <a class="brand" href="./" aria-label="NodeBridge"><img src="../mark.svg" width="32" height="32" alt="">NodeBridge</a>
   <nav class="header-nav" aria-label="Main"><a class="mcp-nav" href="#mcp">MCP <span class="nav-tag">AI</span></a><a href="#product" data-text="navProduct">Product</a><a href="#deploy" data-text="navDeploy">Get started</a><a href="https://github.com/YufeiSun5/NodeBridge" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></nav>
   <button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false"><span aria-hidden="true">◐</span><span data-text="theme">Dark mode</span></button><label class="language-control"><span id="languageLabel" class="sr-only">Language</span><span aria-hidden="true">◎</span><select id="language" aria-labelledby="languageLabel"><option value="en">English</option><option value="zh">简体中文</option><option value="ja">日本語</option></select></label>
 </header>
@@ -39,7 +39,7 @@
     <div class="hero-visual" id="product">
       <div class="preview-caption"><span class="tiny-square"></span><span data-text="previewLabel">A closer look</span><span class="caption-right" data-text="demo">Illustrative preview</span></div>
       <div class="console">
-        <div class="console-bar"><span class="console-brand"><img src="mark.svg" alt="" width="19" height="19">NodeBridge</span><span class="console-mode">WORKSPACE / 01</span><span class="window-dots" aria-hidden="true">···</span></div>
+        <div class="console-bar"><span class="console-brand"><img src="../mark.svg" alt="" width="19" height="19">NodeBridge</span><span class="console-mode">WORKSPACE / 01</span><span class="window-dots" aria-hidden="true">···</span></div>
         <div class="preview-tabs" role="tablist" aria-label="Preview">
           <button id="tab-overview" type="button" role="tab" aria-selected="true" aria-controls="panel-overview" data-panel="overview" data-text="tabOverview">Overview</button>
           <button id="tab-rules" type="button" role="tab" aria-selected="false" aria-controls="panel-rules" tabindex="-1" data-panel="rules" data-text="tabRules">Rules</button>
@@ -84,7 +84,7 @@
       <div class="mcp-trace"><div class="trace-bar"><span class="trace-title"><span class="dot"></span>nodebridge / MCP</span><span data-text="mcpExample">Example workflow</span></div><div class="trace-content" aria-live="polite" aria-atomic="true"><p class="trace-label" data-text="mcpPromptLabel">YOU ASK</p><p id="mcp-prompt" class="trace-prompt">Why has edge synchronization stopped progressing?</p><div class="trace-label tool-label"><span data-text="mcpToolLabel">TOOLS THE CLIENT CAN CALL</span><span>JSON-RPC · stdio</span></div><ol id="mcp-tools" class="tool-list"><li><span>01</span><code>nodebridge_overview</code></li><li><span>02</span><code>nodebridge_queue_status</code></li><li><span>03</span><code>nodebridge_logs</code></li><li><span>04</span><code>nodebridge_event_status</code></li></ol><div class="trace-result"><span aria-hidden="true">↳</span><p id="mcp-outcome">Correlate process status with queue depth and event evidence. A running process alone does not prove healthy synchronization.</p></div></div><div class="trace-footer"><span aria-hidden="true">◎</span><span data-text="mcpDemoNote">Illustration only. This page does not connect to your nodes.</span></div></div>
     </div>
     <div class="mcp-capabilities"><article><span class="cap-icon">01 / INSPECT</span><h3 data-text="mcpInspect">See what is happening</h3><p data-text="mcpInspectBody">Read overview, schema, queue depth, bounded logs and event receipts. Export a diagnostic archive for investigation.</p></article><article><span class="cap-icon">02 / MANAGE</span><h3 data-text="mcpManage">Move from insight to action</h3><p data-text="mcpManageBody">Validate and save configuration, manage rules, control the Agent and retry failed events. Data mutations use structured plans and explicit confirmation.</p></article><article><span class="cap-icon">03 / CONNECT</span><h3 data-text="mcpConnect">Work across your nodes</h3><p data-text="mcpConnectBody">Add one client entry per Windows node. Use local stdio or SSH from Windows or Mac, with the configuration-owning account.</p></article></div>
-    <div class="mcp-setup"><div><p class="eyebrow" data-text="mcpSetupLabel">CONNECT YOUR MCP CLIENT</p><h3 data-text="mcpSetupTitle">Start with a local connection.</h3><p data-text="mcpSetupBody">Save a complete configuration and enable MCP in NodeBridge. Run the client as the Windows account that owns the configuration. Adapt command and args to your client's format.</p><a class="text-link" href="https://github.com/YufeiSun5/NodeBridge/blob/main/docs/mcp-service.md"><span data-text="mcpReference">MCP tool reference</span> ↗</a><a class="text-link" href="https://github.com/YufeiSun5/NodeBridge/blob/main/docs/lan-deployment-guide.md"><span data-text="mcpRemote">Remote SSH setup</span> ↗</a></div><div class="config-example"><div class="config-bar"><span data-text="mcpConfigExample">Common client configuration</span><span>JSON</span></div><pre id="mcp-config" tabindex="0"><code>{
+    <div class="mcp-setup"><div><p class="eyebrow" data-text="mcpSetupLabel">CONNECT YOUR MCP CLIENT</p><h3 data-text="mcpSetupTitle">Start with a local connection.</h3><p data-text="mcpSetupBody">Save a complete configuration and enable MCP in NodeBridge. Run the client as the Windows account that owns the configuration. Adapt command and args to your client’s format.</p><a class="text-link" href="https://github.com/YufeiSun5/NodeBridge/blob/main/docs/mcp-service.md"><span data-text="mcpReference">MCP tool reference</span> ↗</a><a class="text-link" href="https://github.com/YufeiSun5/NodeBridge/blob/main/docs/lan-deployment-guide.md"><span data-text="mcpRemote">Remote SSH setup</span> ↗</a></div><div class="config-example"><div class="config-bar"><span data-text="mcpConfigExample">Common client configuration</span><span>JSON</span></div><pre id="mcp-config" tabindex="0"><code>{
   "mcpServers": {
     "nodebridge": {
       "command": "C:\\Program Files\\NodeBridge\\app\\SyncAgent.exe",
@@ -108,7 +108,7 @@
     </div>
   </section>
   <section class="deploy wrap" id="deploy">
-    <div class="deploy-intro"><p class="eyebrow" data-text="deployLabel">FROM DOWNLOAD TO DEPLOYMENT</p><h2 data-text="start">Your network.<br>Your next step.</h2><p data-text="deployIntro">Start with the guide. Keep the configuration explicit. Validate in your own environment.</p><a class="text-link" href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7"><span data-text="releaseNotes">Read release notes</span><span aria-hidden="true">↗</span></a></div>
+    <div class="deploy-intro"><p class="eyebrow" data-text="deployLabel">FROM DOWNLOAD TO DEPLOYMENT</p><h2 data-text="start">Your network. Your next step.<br>Your next step.</h2><p data-text="deployIntro">Start with the guide. Keep the configuration explicit. Validate in your own environment.</p><a class="text-link" href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7"><span data-text="releaseNotes">Read release notes</span><span aria-hidden="true">↗</span></a></div>
     <ol class="deploy-steps"><li><span>01</span><div><h3 data-text="prepareTitle">Prepare your environment</h3><p data-text="prepareBody">Install MySQL separately, assign unique node IDs, and back up configuration, rules and databases.</p></div></li><li><span>02</span><div><h3 data-text="installTitle">Install and configure</h3><p data-text="installBody">Run the Windows installer as administrator. Define your source and target databases, tables and columns.</p></div></li><li><span>03</span><div><h3 data-text="validateTitle">Validate your deployment</h3><p data-text="validateBody">Check alignment, CRUD and recovery in your environment. This beta has isolated three-Agent coverage, not a production SLA.</p></div></li></ol>
   </section>
   <section class="download-banner wrap"><div><p class="eyebrow">NODEBRIDGE / v0.48.7 BETA</p><h2 data-text="closingTitle">Bring your data together.</h2><p data-text="closingBody">Open source. Windows native. Ready for your next test.</p></div><a class="button light" href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7"><span data-text="download">Download for Windows</span><span aria-hidden="true">↗</span></a></section>
@@ -116,7 +116,7 @@
 <section class="wrap search-summary"><h2 data-text="searchTitle">MySQL synchronization for Windows edge networks</h2><p data-text="searchBody">Synchronize MySQL between edge nodes and a central server with bidirectional mappings, automatic reconnection and MCP tools for AI-assisted operations. Windows installer available.</p><nav aria-label="Languages"><a href="https://yufeisun5.github.io/NodeBridge/en/" lang="en">English</a> · <a href="https://yufeisun5.github.io/NodeBridge/zh-CN/" lang="zh-CN">简体中文</a> · <a href="https://yufeisun5.github.io/NodeBridge/ja/" lang="ja">日本語</a></nav></section>
 <!-- SEARCH CONTENT END -->
 </main>
-<footer class="footer wrap"><a class="brand" href="./"><img src="mark.svg" width="26" height="26" alt="">NodeBridge</a><p data-text="footer">Made for connected operations. Open source under MIT.</p><a href="https://github.com/YufeiSun5/NodeBridge">GitHub ↗</a></footer>
-<script src="app.js"></script>
+<footer class="footer wrap"><a class="brand" href="./"><img src="../mark.svg" width="26" height="26" alt="">NodeBridge</a><p data-text="footer">Made for connected operations. Open source under MIT.</p><a href="https://github.com/YufeiSun5/NodeBridge">GitHub ↗</a></footer>
+<script src="../app.js"></script>
 </body>
 </html>
