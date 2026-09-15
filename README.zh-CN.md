@@ -16,6 +16,28 @@
 
 ---
 
+## MCP · 让 AI 助手接入同步运维
+
+**通过本机 stdio 或远程 SSH，把自己的 MCP 客户端接入 NodeBridge。** 在对话中查证据、管理配置、跟踪对齐任务。
+
+| 你可以这样问 | NodeBridge 提供的能力 |
+| --- | --- |
+| “这个节点为什么不再同步？” | 查看 Agent 状态、队列、日志和事件收据，导出诊断包。 |
+| “保存前帮我核对这条映射。” | 读取表结构与规则、本机预检、校验配置，并通过版本检查保存修改。 |
+| “跟踪我们已授权的首次对齐。” | 发起已确认的任务、轮询进度，核对整组完成后再恢复同步。 |
+
+还支持 Agent 启停、失败事件重试，以及结构化业务数据查询和修改。数据修改需要计划与显式确认，不提供任意 Shell 或原始 SQL 执行。
+
+**接入方法：**先保存完整配置，在 NodeBridge 开启 MCP，再用配置所属的 Windows 账户运行客户端。每个节点配置独立条目；远程通过 SSH 传输 stdio，无需开放 MCP HTTP 端口。
+
+```powershell
+& 'C:\Program Files\NodeBridge\app\SyncAgent.exe' mcp-stdio -config 'C:\ProgramData\NodeBridge\config.yaml'
+```
+
+首次对齐要求所有参与端停止 Agent、确认操作，并在轮询期间保持各端 MCP 会话；返回 `running` 不代表完成。规则预检仅检查本机，修改后还需核对已保存与已生效版本。
+
+[MCP 工具与客户端配置](docs/mcp-service.md) · [多节点 AI 操作交接指南](docs/mcp-business-ai-handoff.md) · [交互式 MCP 介绍](https://yufeisun5.github.io/NodeBridge/#mcp)
+
 ## 为连接中的每一个环节而设计
 
 <table>

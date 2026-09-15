@@ -16,6 +16,28 @@
 
 ---
 
+## MCP · Bring your AI assistant into sync operations
+
+**Connect your MCP client to NodeBridge through local stdio or remote SSH.** Inspect evidence, manage configuration and follow alignment tasks from one conversation.
+
+| Ask your assistant | NodeBridge capabilities |
+| --- | --- |
+| “Why has this node stopped syncing?” | Inspect Agent status, queues, logs and event receipts; export diagnostics. |
+| “Check this mapping before saving.” | Read schema and rules, preflight local mappings, validate and save configuration with revision checks. |
+| “Track our approved initial alignment.” | Start the confirmed task, poll progress and inspect the complete group before restarting synchronization. |
+
+MCP also supports Agent control, failed-event retries and structured business-data queries and changes. Data changes require a plan and explicit confirmation; arbitrary shell and raw SQL are not exposed.
+
+**Connect:** save a complete configuration, enable MCP in NodeBridge, then run your client as the Windows account that owns that configuration. Each node gets its own client entry; SSH carries stdio without opening an MCP HTTP port.
+
+```powershell
+& 'C:\Program Files\NodeBridge\app\SyncAgent.exe' mcp-stdio -config 'C:\ProgramData\NodeBridge\config.yaml'
+```
+
+Initial alignment requires stopped Agents on all participants, confirmation and open MCP sessions while polling. A task returning `running` is not complete. Rule preflight checks the local node; verify the saved and active revisions after changes.
+
+[MCP tools and client configuration](docs/mcp-service.md) · [Multi-node AI handoff guide](docs/mcp-business-ai-handoff.md) · [Interactive MCP overview](https://yufeisun5.github.io/NodeBridge/#mcp)
+
 ## Built for connected operations
 
 <table>

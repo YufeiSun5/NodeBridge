@@ -88,6 +88,8 @@ Last updated: 2026-09-15 Asia/Singapore
 
 ## 改动记录
 
+- 2026-09-15 13:34 | Codex | frontend-ai跨test-ai：三语README/Pages重点介绍MCP实际工具、连接和操作边界；官网对齐软件灰白蓝绿与深色主题，36产品状态+72MCP组合、JSON/键盘/持久化及Go全测/vet/lint通过。
+
 - 2026-09-15 13:23 | Codex | frontend-ai按用户纠正将展示重心移到GitHub README：三语SVG品牌横幅、直接下载、功能表、真实前端测试截图、折叠开发说明；链接与全测/vet/lint通过。
 
 - 2026-09-15 11:17 | Codex | frontend-ai重做site欢迎页：浅色品牌视觉、深绿三标签交互预览、三语响应式，36组浏览器检查与Go全测/vet/lint通过；仅官网发布，安装包不变。
@@ -95,5 +97,3 @@ Last updated: 2026-09-15 Asia/Singapore
 - 2026-09-15 11:00 | Codex | backend-ai跨frontend/test：三语README与欢迎页，自动语言/英语回退，三语390/1366浏览器和全test/vet/lint通过；GitHub v0.48.7与Pages已发布，远端安装包哈希一致，现场验收边界保留。
 
 - 2026-09-15 10:16 | Codex / backend-ai | 修复RabbitMQ运行期自动重连，完成两轮三节点断线回归及0.48.7补丁包。
-
-- 2026-09-15 08:46 | Codex / backend-ai | 修复批量部分提交ACK前漏转发，完成真实死锁回归及0.48.6补丁安装包。

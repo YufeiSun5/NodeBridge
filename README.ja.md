@@ -16,6 +16,28 @@
 
 ---
 
+## MCP · AI アシスタントを同期運用につなぐ
+
+**ローカル stdio または SSH で、ご自身の MCP クライアントを NodeBridge に接続。** 会話から実行記録の確認、設定管理、整合タスクの追跡を行えます。
+
+| 依頼の例 | NodeBridge の機能 |
+| --- | --- |
+| 「このノードの同期が止まった理由は？」 | Agent、キュー、ログ、イベント記録を確認し、診断を出力。 |
+| 「保存前にマッピングを確認して」 | スキーマとルールを取得し、ローカル事前検証とリビジョン確認を経て保存。 |
+| 「承認済みの初期整合を追跡して」 | 確認済みタスクを開始し、全参加ノードの完了を確認してから同期を再開。 |
+
+Agent の起動・停止、失敗イベントの再試行、構造化された業務データの照会・変更にも対応します。データ変更には計画と明示的な確認が必要です。任意のシェルや生の SQL は公開しません。
+
+**接続方法：**完全な設定を保存し、NodeBridge で MCP を有効化します。設定を所有する Windows アカウントでクライアントを実行し、ノードごとに接続を登録します。SSH は stdio を転送するため、MCP HTTP ポートは不要です。
+
+```powershell
+& 'C:\Program Files\NodeBridge\app\SyncAgent.exe' mcp-stdio -config 'C:\ProgramData\NodeBridge\config.yaml'
+```
+
+初期整合には全参加ノードの Agent 停止と確認が必要です。ポーリング中は各 MCP セッションを維持してください。`running` は完了ではありません。事前検証はローカルのみで、変更後は保存済み・有効リビジョンを確認します。
+
+[MCP ツールと接続設定](docs/mcp-service.md) · [複数ノードの AI 操作ガイド](docs/mcp-business-ai-handoff.md) · [MCP のインタラクティブ紹介](https://yufeisun5.github.io/NodeBridge/#mcp)
+
 ## つながる現場を支える機能
 
 <table>

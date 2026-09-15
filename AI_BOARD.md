@@ -31,6 +31,9 @@
 
 ## Active Board
 
+2026-09-15 frontend-ai：NB-MCP-SHOWCASE ready，README/Pages突出已实现MCP场景，官网对齐软件灰白/蓝/绿及深色主题；owner frontend-ai跨test-ai仅静态/浏览器发布检查，无同步核心/API变更。
+
+
 2026-09-15 frontend-ai：NB-GITHUB-SHOWCASE closed，按用户纠正重做GitHub仓库README内展示；三语横幅、导航、功能表与实际前端测试截图，owner frontend-ai跨test-ai，GitHub线上三语横幅/截图/功能表实测通过，源码e0c0bc7已推送；全test/vet/lint与本地链接通过。历史现场复验项维持open。
 
 
