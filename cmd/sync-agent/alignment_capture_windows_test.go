@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"net"
 	"net/url"
 	"os"
@@ -15,8 +16,12 @@ import (
 	"github.com/YufeiSun5/NodeBridge/internal/alignment"
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
 	"github.com/YufeiSun5/NodeBridge/internal/cdc/canal"
+	"github.com/YufeiSun5/NodeBridge/internal/event"
 	"github.com/YufeiSun5/NodeBridge/internal/mysqlconn"
+	"github.com/YufeiSun5/NodeBridge/internal/normalizer"
+	"github.com/YufeiSun5/NodeBridge/internal/rabbitmq"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
+	"github.com/YufeiSun5/NodeBridge/internal/syncruntime"
 	"github.com/go-sql-driver/mysql"
 	"github.com/rabbitmq/amqp091-go"
 )
@@ -196,12 +201,122 @@ func TestOwnedAlignmentCaptureProbe(t *testing.T) {
 	}
 	verifyCapturedSnapshotTransport(t, ctx, db, cfg, readerConfig, rule, false)
 	// Reset only this test's owned databases for a second independent plan.
-	for _, query := range []string{"DELETE FROM nb_cdc_source.source_rows WHERE id=4", "DELETE FROM nb_cdc_target.target_rows", "DELETE FROM nb_cdc_source.sync_alignment_job", "DELETE FROM nb_cdc_target.sync_alignment_job"} {
+	for _, query := range []string{"DELETE FROM nb_cdc_source.source_rows WHERE id=4", "DELETE FROM nb_cdc_target.target_rows", "DELETE FROM nb_cdc_source.sync_alignment_job", "DELETE FROM nb_cdc_target.sync_alignment_job", "DELETE FROM nb_cdc_source.sync_alignment_cutover", "DELETE FROM nb_cdc_target.sync_alignment_cutover", "DELETE FROM nb_cdc_target.sync_alignment_event"} {
 		if _, err := db.ExecContext(ctx, query); err != nil {
 			t.Fatal(err)
 		}
 	}
 	verifyCapturedSnapshotTransport(t, ctx, db, cfg, readerConfig, rule, true)
+	for _, query := range []string{"DELETE FROM nb_cdc_source.source_rows WHERE id=4", "DELETE FROM nb_cdc_target.target_rows", "DELETE FROM nb_cdc_source.sync_alignment_job", "DELETE FROM nb_cdc_target.sync_alignment_job", "DELETE FROM nb_cdc_source.sync_alignment_cutover", "DELETE FROM nb_cdc_target.sync_alignment_cutover"} {
+		if _, err := db.ExecContext(ctx, query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	verifyPairSession(t, ctx, db, cfg, readerConfig, rule)
+}
+
+func verifyPairSession(t *testing.T, ctx context.Context, source *sql.DB, cfg *mysql.Config, sourceConfig canal.Config, rule rules.SyncRule) {
+	t.Helper()
+	cfg.DBName = "nb_cdc_target"
+	target, err := sql.Open("mysql", cfg.FormatDSN())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer target.Close()
+	left, err := alignment.Observe(ctx, source, "owned-probe", "nb_cdc_source", "source_rows")
+	if err != nil {
+		t.Fatal(err)
+	}
+	right, err := alignment.Observe(ctx, target, "owned-peer", "nb_cdc_target", "target_rows")
+	if err != nil {
+		t.Fatal(err)
+	}
+	abortedPlan, err := alignment.BuildPlan(rule, left, right, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	aborted, err := alignment.PrepareSnapshotJob(ctx, source, abortedPlan, rule, left.NodeID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Simulate interruption after a durable source marker, before target prepare.
+	if _, err := source.ExecContext(ctx, "UPDATE sync_alignment_job SET capture_marker=? WHERE job_id=?", strings.Repeat("a", 64), aborted.ID); err != nil {
+		t.Fatal(err)
+	}
+	type outcome struct {
+		proof alignment.CutoverProof
+		err   error
+	}
+	var initial string
+	for attempt := -1; attempt < 2; attempt++ {
+		results := []chan outcome{make(chan outcome, 1), make(chan outcome, 1)}
+		for i, db := range []*sql.DB{source, target} {
+			conn, err := amqp091.Dial(os.Getenv("NODEBRIDGE_CDC_TEST_RABBITMQ_URL"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			node, peer := "owned-probe", "owned-peer"
+			reader := sourceConfig
+			if i == 1 {
+				node, peer = peer, node
+				reader = canal.Config{ReaderName: "owned-target-session", Address: os.Getenv("NODEBRIDGE_CDC_TEST_SECOND_CANAL_ADDR"), Destination: "example", Filter: `nb_cdc_target\.(target_rows|sync_capture_fence)`, BatchSize: 256}
+			}
+			options := alignment.PairSessionOptions{NodeID: node, PeerID: peer, IsEdge: i == 0, Rule: rule, DB: db, Broker: conn, Canal: reader, Confirm: true, Ready: func(context.Context, alignment.CutoverProof) error { return nil }}
+			go func(index int) {
+				defer conn.Close()
+				proof, err := alignment.RunPairSession(ctx, options)
+				results[index] <- outcome{proof, err}
+			}(i)
+		}
+		var outcomes [2]outcome
+		for i := range outcomes {
+			select {
+			case outcomes[i] = <-results[i]:
+			case <-ctx.Done():
+				t.Fatal("session did not terminate", ctx.Err())
+			}
+		}
+		for _, outcome := range outcomes {
+			if attempt == -1 {
+				if outcome.err == nil || !strings.Contains(outcome.err.Error(), "alignment_uncommitted_attempt_cancelled") {
+					t.Fatal("uncommitted attempt not cancelled", outcome.err)
+				}
+				continue
+			}
+			if outcome.err != nil {
+				t.Fatal("pair session failed", outcome.err)
+			}
+		}
+		if attempt == -1 {
+			for i, db := range []*sql.DB{source, target} {
+				node := []string{left.NodeID, right.NodeID}[i]
+				job, err := alignment.ReadSnapshotJob(ctx, db, abortedPlan, node)
+				if err != nil || job.Phase != alignment.JobCancelled || (i == 0 && job.CaptureMarker == "") {
+					t.Fatal("cancellation lost original evidence", job, err)
+				}
+				if err := alignment.CheckPendingJobs(ctx, db); err != nil {
+					t.Fatal("cancelled attempt remains pending", err)
+				}
+			}
+			continue
+		}
+		if outcomes[0].proof.ID != outcomes[1].proof.ID || outcomes[0].proof.Result.Rows != 2 {
+			t.Fatal("pair results differ", outcomes)
+		}
+		if attempt == 0 {
+			initial = outcomes[0].proof.ID
+			if _, err := source.ExecContext(ctx, "INSERT INTO source_rows VALUES (9,'after-session')"); err != nil {
+				t.Fatal(err)
+			}
+		} else if outcomes[0].proof.ID != initial {
+			t.Fatal("retry created a new snapshot")
+		}
+	}
+	var count int
+	if err := target.QueryRowContext(ctx, "SELECT COUNT(*) FROM target_rows WHERE id=9").Scan(&count); err != nil || count != 0 {
+		t.Fatal("retry silently copied new source rows", count, err)
+	}
+	t.Log("PASS: ephemeral RabbitMQ pair handshake coordinates actual snapshot, two-sided durable cutover and repeat recovery without another copy")
 }
 
 func verifyCapturedSnapshotTransport(t *testing.T, ctx context.Context, source *sql.DB, cfg *mysql.Config, sourceConfig canal.Config, rule rules.SyncRule, failBoundary bool) {
@@ -395,4 +510,132 @@ func verifyCapturedSnapshotTransport(t *testing.T, ctx context.Context, source *
 		}
 	}
 	t.Log("PASS: RabbitMQ snapshot commits rows and target marker atomically; both endpoints persist observed Canal boundaries; restart retains copied and later rows on the correct sides of each boundary; durable activation fences remain")
+	verifyCapturedCutover(t, ctx, dbs, nodes, plan, rule, configs[0], connections[1])
+}
+
+func verifyCapturedCutover(t *testing.T, ctx context.Context, dbs []*sql.DB, nodes []string, plan alignment.Plan, rule rules.SyncRule, readerConfig canal.Config, conn *amqp091.Connection) {
+	t.Helper()
+	jobs := make([]alignment.SnapshotJob, 2)
+	for i := range jobs {
+		var err error
+		jobs[i], err = alignment.ReadSnapshotJob(ctx, dbs[i], plan, nodes[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	proof, err := alignment.BuildCutoverProof(rule, jobs[0], jobs[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipts := make([]alignment.CutoverReceipt, 2)
+	for i := range receipts {
+		receipts[i], err = alignment.InstallCutover(ctx, dbs[i], proof, nodes[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := alignment.CheckPendingJobs(ctx, dbs[i]); err == nil {
+			t.Fatal("READY alone enabled capture")
+		}
+		bad := alignment.CutoverReceipt{ProofID: proof.ID, NodeID: "unrelated", Phase: alignment.CutoverReady}
+		if err := alignment.ActivateCutover(ctx, dbs[i], proof, nodes[i], bad); err == nil {
+			t.Fatal("foreign readiness accepted")
+		}
+	}
+	for i := range receipts {
+		if err := alignment.ActivateCutover(ctx, dbs[i], proof, nodes[i], receipts[1-i]); err != nil {
+			t.Fatal(err)
+		}
+		if err := alignment.ActivateCutover(ctx, dbs[i], proof, nodes[i], receipts[1-i]); err != nil {
+			t.Fatal("activation retry failed", err)
+		}
+		if err := alignment.CheckPendingJobs(ctx, dbs[i]); err != nil {
+			t.Fatal("valid cutover still blocked", err)
+		}
+	}
+	filter, err := loadRuntimeCutover(ctx, dbs[0], nodes[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := canal.NewWithlinClient(readerConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter, err := canal.NewAdapter(readerConfig, client, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, n := cutoverCapture(adapter, normalizer.New(normalizer.Options{NodeID: nodes[0]}), filter)
+	if err := source.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer source.Stop(context.Background())
+	var current event.SyncEvent
+	until := time.Now().Add(5 * time.Second)
+	for current.EventID == "" && time.Now().Before(until) {
+		changes, _, err := source.FetchChangesOnce(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, change := range changes {
+			if change.TableName != "source_rows" {
+				continue
+			}
+			if change.After["id"] != "4" {
+				t.Fatal("pre-snapshot row leaked into capture", change)
+			}
+			current, err = n.Normalize(change)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if current.EventID == "" || current.Headers[alignment.EpochHeader] != proof.ID {
+		t.Fatal("post-snapshot write was lost")
+	}
+	channel, err := conn.Channel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer channel.Close()
+	queue := "nb.owned.cutover." + proof.ID
+	if _, err := channel.QueueDeclare(queue, true, false, false, false, nil); err != nil {
+		t.Fatal(err)
+	}
+	defer channel.QueueDelete(queue, false, false, false)
+	publisher, err := rabbitmq.NewPublisher(channel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := current
+	legacy.EventID, legacy.Headers = "legacy-old", nil
+	for _, evt := range []event.SyncEvent{legacy, current} {
+		body, err := json.Marshal(evt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := publisher.Publish(ctx, rabbitmq.PublishRequest{RoutingKey: queue, Body: body}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	targetFilter, err := loadRuntimeCutover(ctx, dbs[1], nodes[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	incoming := cutoverIncoming(syncruntime.AMQPBatchGetSource{Channel: channel, Queue: queue}, targetFilter)
+	messages, err := incoming.GetBatch(ctx, 10, 20*time.Millisecond)
+	if err != nil || len(messages) != 1 {
+		t.Fatal("legacy input not isolated", len(messages), err)
+	}
+	var kept event.SyncEvent
+	if err := json.Unmarshal(messages[0].Body(), &kept); err != nil || kept.EventID != current.EventID {
+		t.Fatal("current input lost", err)
+	}
+	var count int
+	if err := dbs[1].QueryRowContext(ctx, "SELECT COUNT(*) FROM sync_alignment_event WHERE event_id='legacy-old'").Scan(&count); err != nil || count != 1 {
+		t.Fatal("legacy payload not durably audited", count, err)
+	}
+	if err := messages[0].Nack(false, true); err != nil {
+		t.Fatal(err)
+	}
+	t.Log("PASS: durable two-sided readiness enables capture; repeat activation is idempotent; actual Canal old rows are filtered and new rows stamped; RabbitMQ legacy payload is audited before ACK while new input remains available")
 }

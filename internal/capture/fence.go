@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
+	"github.com/YufeiSun5/NodeBridge/internal/replay"
 )
 
 const Table = "sync_capture_fence"
@@ -20,11 +21,12 @@ const Table = "sync_capture_fence"
 var identifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,63}$`)
 
 type Fence struct {
-	db       *sql.DB
-	database string
-	node     string
-	mu       sync.Mutex
-	pending  map[string]chan struct{}
+	TransactionReplay bool
+	db                *sql.DB
+	database          string
+	node              string
+	mu                sync.Mutex
+	pending           map[string]chan struct{}
 }
 
 func NewFence(db *sql.DB, database, node string) (*Fence, error) {
@@ -60,7 +62,7 @@ func (f *Fence) Wait(ctx context.Context) error {
 	}()
 	// One row per node bounds storage. Each concurrent pulse is a distinct binlog write.
 	query := "INSERT INTO `" + f.database + "`.`" + Table + "` (node_id,token) VALUES (?,?) ON DUPLICATE KEY UPDATE token=?"
-	if _, err := f.db.ExecContext(ctx, query, f.node, token, token); err != nil {
+	if err := f.writePulse(ctx, query, token); err != nil {
 		return fmt.Errorf("write capture fence: %w", err)
 	}
 	select {
@@ -71,8 +73,38 @@ func (f *Fence) Wait(ctx context.Context) error {
 	}
 }
 
+func (f *Fence) writePulse(ctx context.Context, query, token string) error {
+	if !f.TransactionReplay {
+		_, err := f.db.ExecContext(ctx, query, f.node, token, token)
+		return err
+	}
+	tx, err := f.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := replay.Mark(ctx, tx, token, "BEGIN", f.database, Table); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, query, f.node, token, token); err != nil {
+		return err
+	}
+	if err := replay.End(ctx, tx, token, f.database, Table); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (f *Fence) isPulse(change cdc.ChangeEvent) bool {
 	return change.DatabaseName == f.database && change.TableName == Table
+}
+
+func (f *Fence) pendingPulse(change cdc.ChangeEvent) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	token, _ := change.After["token"].(string)
+	_, ok := f.pending[token]
+	return ok
 }
 
 func (f *Fence) observe(changes []cdc.ChangeEvent) {

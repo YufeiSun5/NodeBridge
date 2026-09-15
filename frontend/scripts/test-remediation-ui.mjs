@@ -22,6 +22,7 @@ try {
       page.on('pageerror', (error) => errors.push(error.message));
       const theme = size === 'desktop' ? 'dark' : 'light';
       await page.goto(`${base}/tests/remediation.html?language=${language}&theme=${theme}`);
+      await page.locator('.rules-tools summary').click();
       await page.getByRole('button', { name: labels.check, exact: true }).click();
       await page.getByText('permission_delete', { exact: true }).waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `rules overflow ${language}/${size}`);

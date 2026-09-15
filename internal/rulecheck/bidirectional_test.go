@@ -97,7 +97,6 @@ func TestBidirectionalPairRejectsUnsafeProjection(t *testing.T) {
 			r.ColumnMappings = append(r.ColumnMappings, rules.ColumnMapping{SourceColumn: "missing", TargetColumn: "other"})
 		},
 		"unknown selector":        func(r *rules.SyncRule, e, s *rulecheck.Schema) { r.ExcludeColumns = []string{"missing"} },
-		"missing marker":          func(r *rules.SyncRule, e, s *rulecheck.Schema) { e.Columns = e.Columns[:3]; s.Columns = s.Columns[:3] },
 		"soft missing columns":    func(r *rules.SyncRule, e, s *rulecheck.Schema) { r.DeleteMode = rules.DeleteSoft },
 		"duplicate schema column": func(r *rules.SyncRule, e, s *rulecheck.Schema) { e.Columns = append(e.Columns, e.Columns[0]) },
 	}
@@ -182,10 +181,18 @@ func TestBidirectionalPairSoftDeleteBothEndpoints(t *testing.T) {
 	if p.Reverse.EffectiveDeleteMode() != rules.DeleteSoft {
 		t.Fatal("soft delete lost")
 	}
-	// An alias cannot remove the reserved replay fields on either endpoint.
+	// Business columns are not reserved by the replay protocol.
 	r.ColumnMappings = append(r.ColumnMappings, rules.ColumnMapping{SourceColumn: "updated_by_node", TargetColumn: "writer"})
 	s.Columns[3].Name = "writer"
-	if _, err := rulecheck.BuildBidirectionalPair(r, "edge-1", "server-1", e, s); err == nil {
-		t.Fatal("noncanonical replay fields accepted")
+	if _, err := rulecheck.BuildBidirectionalPair(r, "edge-1", "server-1", e, s); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestBidirectionalPairWithoutSyncColumns(t *testing.T) {
+	r, e, s := pairFixture()
+	e.Columns, s.Columns = e.Columns[:2], s.Columns[:2]
+	if _, err := rulecheck.BuildBidirectionalPair(r, "edge-1", "server-1", e, s); err != nil {
+		t.Fatal(err)
 	}
 }

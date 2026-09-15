@@ -80,6 +80,9 @@ func NewMCPService(configPath, rulesPath, logPath string, lab bool) (*MCPService
 		bindTool("nodebridge_mysql_schema", "Inspect table columns and primary keys in the saved MySQL database; optional table filter.", false, s.mysqlSchema),
 	}
 	s.extra = append(s.extra,
+		bindTool("nodebridge_start_initial_alignment", "Start or retry manual initial alignment asynchronously. Requires rule_id, peer_node_id and confirm=true. On the server, peer_node_id is a comma-separated list of ALL participating edges; on an edge it is its server ID. Every member must explicitly run this tool with its saved local mapping and stopped Agent. Retry reconciles committed copies without copying again. Keep this stdio session open and poll nodebridge_initial_alignment_status; running is not completion. Raw snapshot limit 256 MiB, wire limit 512 MiB, copy timeout 15 minutes. Does not automatically start Agents.", true, app.StartInitialAlignment),
+		noArgs("nodebridge_initial_alignment_status", "Read the current initial-alignment task and its durable last status. completed means group readiness, not running synchronization. unknown requires retry to inspect persisted database outcomes; never assume rollback after disconnect.", false, func() (any, error) { return app.GetInitialAlignmentStatus(), nil }),
+		noArgs("nodebridge_interrupt_initial_alignment", "Interrupt the initial-alignment task owned by this stdio session. Does not roll back committed data, delete job evidence, or unlock an incomplete group. Poll status, then retry start on every member to reconcile.", true, func() (any, error) { return app.InterruptInitialAlignment() }),
 		bindContextTool("nodebridge_event_status", "Inspect bounded runtime failures and apply receipts by event_id or rule_id; includes retry observations, positions and next retry time. Empty results never prove consistency. Does not read business rows or remove messages.", false, func(ctx context.Context, req eventstatus.Request) (eventstatus.Response, error) {
 			ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()
@@ -131,7 +134,7 @@ func NewMCPService(configPath, rulesPath, logPath string, lab bool) (*MCPService
 		noArgs("nodebridge_get_autostart", "Read current Windows user's NodeBridge startup setting.", false, func() (any, error) { return app.GetAutoStart(), nil }),
 		bindTool("nodebridge_set_autostart", "Change current Windows user's NodeBridge UI startup setting.", true, func(req uiapi.SetAutoStartRequest) (uiapi.AutoStartStatus, error) { return app.SetAutoStart(req), nil }),
 	)
-	s.extra = append(s.extra, noArgs("nodebridge_capabilities", "Read implemented capabilities. Initial alignment is not executable in this build.", false, func() (any, error) { return app.GetCapabilities(), nil }))
+	s.extra = append(s.extra, noArgs("nodebridge_capabilities", "Read implemented synchronization, initial-alignment and management capabilities with their limits.", false, func() (any, error) { return app.GetCapabilities(), nil }))
 	if exe, err := os.Executable(); err == nil {
 		app.autoStart = autostart.CurrentUserManager{Path: filepath.Join(filepath.Dir(exe), "NodeBridge.exe")}
 	}
@@ -333,7 +336,7 @@ func (s *MCPService) CallTool(ctx context.Context, name string, args json.RawMes
 					success = success && ok
 				}
 				detail := map[string]any{"success": success}
-				for _, key := range []string{"operation", "database", "table", "column", "status", "affected_rows", "plan_id"} {
+				for _, key := range []string{"operation", "database", "table", "column", "status", "affected_rows", "plan_id", "stage", "running"} {
 					if field, exists := outcome[key]; exists {
 						detail[key] = field
 					}

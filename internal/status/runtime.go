@@ -14,16 +14,17 @@ const (
 )
 
 type WorkerStatus struct {
-	Name             string    `json:"name"`
-	State            string    `json:"state"`
-	LastEventID      string    `json:"last_event_id,omitempty"`
-	LastAction       string    `json:"last_action,omitempty"`
-	LastError        string    `json:"last_error,omitempty"`
-	ProcessedCount   int64     `json:"processed_count"`
-	ErrorCount       int64     `json:"error_count"`
-	DispatchCount    int64     `json:"dispatch_count"`
-	LastProcessedAt  time.Time `json:"last_processed_at,omitempty"`
-	LastTransitionAt time.Time `json:"last_transition_at"`
+	Name              string    `json:"name"`
+	State             string    `json:"state"`
+	LastEventID       string    `json:"last_event_id,omitempty"`
+	LastAction        string    `json:"last_action,omitempty"`
+	LastError         string    `json:"last_error,omitempty"`
+	ProcessedCount    int64     `json:"processed_count"`
+	ErrorCount        int64     `json:"error_count"`
+	ConsecutiveErrors int64     `json:"consecutive_errors"`
+	DispatchCount     int64     `json:"dispatch_count"`
+	LastProcessedAt   time.Time `json:"last_processed_at,omitempty"`
+	LastTransitionAt  time.Time `json:"last_transition_at"`
 }
 
 type LogEntry struct {
@@ -68,6 +69,7 @@ func (s *RuntimeStore) RecordProcessed(name, eventID, action string, dispatchCou
 	current.LastEventID = eventID
 	current.LastAction = action
 	current.LastError = ""
+	current.ConsecutiveErrors = 0
 	current.ProcessedCount++
 	current.DispatchCount += int64(dispatchCount)
 	current.LastProcessedAt = now
@@ -105,6 +107,7 @@ func (s *RuntimeStore) RecordError(name string, err error) {
 	current.State = WorkerError
 	current.LastError = message
 	current.ErrorCount++
+	current.ConsecutiveErrors++
 	current.LastTransitionAt = now
 	s.workers[name] = current
 	s.appendLogLocked(LogEntry{
@@ -145,6 +148,9 @@ func (s *RuntimeStore) setState(name, state, errMessage, level, message string) 
 	current := s.workers[name]
 	current.Name = name
 	current.State = state
+	if state == WorkerIdle {
+		current.ConsecutiveErrors = 0
+	}
 	current.LastError = errMessage
 	current.LastTransitionAt = now
 	s.workers[name] = current

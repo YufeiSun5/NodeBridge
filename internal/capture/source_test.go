@@ -3,11 +3,15 @@ package capture
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+
+	"github.com/DATA-DOG/go-sqlmock"
 
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
 	"github.com/YufeiSun5/NodeBridge/internal/event"
 	"github.com/YufeiSun5/NodeBridge/internal/rabbitmq"
+	"github.com/YufeiSun5/NodeBridge/internal/replay"
 	"github.com/YufeiSun5/NodeBridge/internal/syncruntime"
 )
 
@@ -16,6 +20,62 @@ type batchSource struct {
 	offset    cdc.Offset
 	err       error
 	committed bool
+}
+
+func TestReplayFenceWaitsForEndInLaterBatch(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	token := strings.Repeat("a", 64)
+	done := make(chan struct{})
+	f := &Fence{database: "db", node: "node", pending: map[string]chan struct{}{token: done}}
+	base := &batchSource{}
+	s, err := NewSource(base, f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Replay = &replay.Observer{DB: db, Database: "db"}
+	mock.ExpectQuery("SELECT @@server_uuid").WillReturnRows(sqlmock.NewRows([]string{"uuid"}).AddRow("uuid"))
+	for index, phase := range []string{"BEGIN", "PULSE", "END"} {
+		c := cdc.ChangeEvent{DatabaseName: "db", TableName: replay.Table, Operation: cdc.OperationInsert, BinlogFile: "mysql-bin.000001", BinlogPos: uint32(100 + index*100), After: map[string]any{"token": token, "phase": phase, "database_name": "db", "table_name": Table}}
+		if phase == "PULSE" {
+			c.TableName = Table
+			c.After = map[string]any{"node_id": "node", "token": token}
+		} else {
+			mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM sync_replay_marker").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
+			mock.ExpectExec("INSERT INTO sync_replay_position").WillReturnResult(sqlmock.NewResult(0, 1))
+		}
+		if index > 0 {
+			count := 1
+			if phase == "END" {
+				count = 2
+			}
+			mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM sync_replay_position").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(count))
+		}
+		base.changes, base.offset = []cdc.ChangeEvent{c}, cdc.Offset{BatchID: int64(index + 1)}
+		changes, offset, err := s.FetchChangesOnce(context.Background())
+		if err != nil || len(changes) != 0 {
+			t.Fatal(changes, err)
+		}
+		if err := s.Commit(context.Background(), offset); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-done:
+			if phase != "END" {
+				t.Fatal("released before END evidence")
+			}
+		default:
+			if phase == "END" {
+				t.Fatal("split fence never released")
+			}
+		}
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (s *batchSource) Start(context.Context) error { return nil }

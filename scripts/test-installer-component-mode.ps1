@@ -10,9 +10,13 @@ if ($LASTEXITCODE -ne 0) { throw 'build fixture agent failed' }
 $savedData = $env:ProgramData
 $savedTrace = $env:NODEBRIDGE_INSTALLER_TEST_TRACE
 $savedComponents = $env:NODEBRIDGE_INSTALLER_TEST_COMPONENT_TRACE
+$savedUpgradeFailure = $env:NODEBRIDGE_INSTALLER_TEST_UPGRADE_FAIL
+$savedUpgradePending = $env:NODEBRIDGE_INSTALLER_TEST_UPGRADE_PENDING
 $results = @()
 try {
-    foreach ($case in @('default-existing','skip-existing','install-existing','default-fresh','conflicting')) {
+    foreach ($case in @('default-existing','skip-existing','install-existing','default-fresh','conflicting','upgrade-failure')) {
+        $env:NODEBRIDGE_INSTALLER_TEST_UPGRADE_FAIL = if ($case -eq 'upgrade-failure') { '1' } else { '' }
+        $env:NODEBRIDGE_INSTALLER_TEST_UPGRADE_PENDING = if ($case -eq 'default-fresh') { '1' } else { '' }
         $caseRoot = Join-Path $testRoot $case
         $installRoot = Join-Path $caseRoot 'installed'
         $app = Join-Path $installRoot 'app'
@@ -30,12 +34,18 @@ try {
         Copy-Item -LiteralPath (Join-Path $root 'scripts/fixtures/installer-components-stub.ps1') -Destination (Join-Path $headless 'headless-installer-test.ps1')
         $config = Join-Path $configDir 'config.yaml'
         $rules = Join-Path $configDir 'sync-rules.yaml'
+		$pairManifest = $rules + '.pairs.json'
+		$alignmentStatus = $config + '.alignment-status.json'
         if ($case -ne 'default-fresh') {
             "mode: server`nnode:`n  id: existing-node`nmysql:`n  database: existing_db`nrabbitmq:`n  mode: managed`nsecurity:`n  admin_password: keep-existing-password`n" | Set-Content -LiteralPath $config
             "rules: []`n# keep-existing" | Set-Content -LiteralPath $rules
+			'{"version":1,"pairs":[],"fixture":"keep-alignment-proof-reference"}' | Set-Content -LiteralPath $pairManifest
+			'{"stage":"completed","fixture":"keep-alignment-status"}' | Set-Content -LiteralPath $alignmentStatus
         }
         $hashBefore = if (Test-Path $config) { (Get-FileHash $config).Hash } else { '' }
         $rulesBefore = if (Test-Path $rules) { (Get-FileHash $rules).Hash } else { '' }
+		$pairBefore = if (Test-Path $pairManifest) { (Get-FileHash $pairManifest).Hash } else { '' }
+		$statusBefore = if (Test-Path $alignmentStatus) { (Get-FileHash $alignmentStatus).Hash } else { '' }
         $arguments = @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',(Join-Path $root 'installer/nsis/scripts/install.ps1'),'-InstallRoot',$installRoot,'-Version','component-test','-TestOnlySkipAdminCheck')
         if ($case -in @('skip-existing','conflicting')) { $arguments += '-SkipSystemComponents' }
         if ($case -in @('install-existing','conflicting')) { $arguments += '-InstallSystemComponents' }
@@ -43,6 +53,12 @@ try {
         $code = $LASTEXITCODE
         if ($case -eq 'conflicting') {
             if ($code -eq 0 -or (Test-Path $env:NODEBRIDGE_INSTALLER_TEST_TRACE) -or (Test-Path (Join-Path $env:ProgramData 'NodeBridgeInstallerLogs'))) { throw 'conflicting flags did not fail before effects' }
+        } elseif ($case -eq 'upgrade-failure') {
+            if ($code -eq 0) { throw 'failed database upgrade was reported successful' }
+            $summaryFile = Get-ChildItem (Join-Path $env:ProgramData 'NodeBridgeInstallerLogs') -Recurse -Filter nsis-beta-install-summary.json | Select-Object -First 1
+            $summary = Get-Content $summaryFile.FullName -Raw | ConvertFrom-Json
+            if ($summary.status -ne 'failed' -or ($summary.steps | Where-Object name -eq 'system-database-upgrade').status -ne 'failed' -or ($summary.steps | Where-Object name -eq 'restore-ui')) { throw 'failed migration did not block completion/UI restore' }
+            if ((Get-FileHash $config).Hash -ne $hashBefore -or (Get-FileHash $rules).Hash -ne $rulesBefore -or (Get-FileHash $pairManifest).Hash -ne $pairBefore) { throw 'failed migration changed existing configuration or proofs' }
         } else {
             if ($code -ne 0) { throw "case $case failed; see $caseRoot/output.txt" }
             $summaryFile = Get-ChildItem (Join-Path $env:ProgramData 'NodeBridgeInstallerLogs') -Recurse -Filter nsis-beta-install-summary.json | Select-Object -First 1
@@ -51,6 +67,8 @@ try {
             if ($summary.status -ne 'passed' -or $summary.component_mode -ne $expectedMode) { throw "wrong summary: $case" }
             $calls = @(Get-Content $env:NODEBRIDGE_INSTALLER_TEST_TRACE | ForEach-Object { ,(ConvertFrom-Json $_) })
             $names = @($calls | ForEach-Object { $_[0] })
+            $expectedUpgrade = if ($case -eq 'default-fresh') { 'skipped' } else { 'passed' }
+            if ($names -notcontains 'upgrade-system' -or ($summary.steps | Where-Object name -eq 'system-database-upgrade').status -ne $expectedUpgrade) { throw "system database upgrade missing: $case" }
             if ($expectedMode -eq 'reuse') {
                 if ((Test-Path $env:NODEBRIDGE_INSTALLER_TEST_COMPONENT_TRACE) -or ($names -contains 'managed-config-migrate') -or ($names -contains 'managed-apply')) { throw "reuse changed components: $case" }
                 foreach ($step in @('system-components','managed-config-migration','managed-node-configuration')) {
@@ -61,6 +79,8 @@ try {
             }
             if ($hashBefore -and (Get-FileHash $config).Hash -ne $hashBefore) { throw "config changed: $case" }
             if ($rulesBefore -and (Get-FileHash $rules).Hash -ne $rulesBefore) { throw "rules changed: $case" }
+			if ($pairBefore -and (Get-FileHash $pairManifest).Hash -ne $pairBefore) { throw "pair manifest changed: $case" }
+			if ($statusBefore -and (Get-FileHash $alignmentStatus).Hash -ne $statusBefore) { throw "alignment status changed: $case" }
             if ($case -eq 'default-fresh' -and (Get-FileHash $config).Hash -ne (Get-FileHash (Join-Path $app 'config-external.yaml')).Hash) { throw 'fresh reuse did not select external bootstrap' }
         }
         $results += @{case=$case;passed=$true}
@@ -72,4 +92,6 @@ try {
     $env:ProgramData = $savedData
     $env:NODEBRIDGE_INSTALLER_TEST_TRACE = $savedTrace
     $env:NODEBRIDGE_INSTALLER_TEST_COMPONENT_TRACE = $savedComponents
+    $env:NODEBRIDGE_INSTALLER_TEST_UPGRADE_FAIL = $savedUpgradeFailure
+    $env:NODEBRIDGE_INSTALLER_TEST_UPGRADE_PENDING = $savedUpgradePending
 }

@@ -213,18 +213,24 @@ func (s StaticService) SaveSyncRules(ctx context.Context, args json.RawMessage) 
 	if req.Rules == nil {
 		return nil, fmt.Errorf("rules array is required; use [] to remove all rules")
 	}
-	revision, err := rules.SaveFileCAS(s.RulesPath, set, req.ExpectedRevision)
+	return s.SaveValidatedRuleSet(ctx, set, req.ExpectedRevision)
+}
+
+// SaveValidatedRuleSet preserves in-process runtime bindings. They cannot be
+// supplied through JSON; callers must verify the local durable proof first.
+func (s StaticService) SaveValidatedRuleSet(_ context.Context, set rules.RuleSet, expectedRevision string) (any, error) {
+	revision, err := rules.SaveFileCAS(s.RulesPath, set, expectedRevision)
 	if err != nil {
-		s.audit("reject_sync_rules", map[string]any{"rules_path": s.RulesPath, "reason": err.Error(), "rule_count": len(req.Rules)})
+		s.audit("reject_sync_rules", map[string]any{"rules_path": s.RulesPath, "reason": err.Error(), "rule_count": len(set.Rules)})
 		return nil, err
 	}
-	s.audit("save_sync_rules", map[string]any{"rules_path": s.RulesPath, "rule_count": len(req.Rules)})
+	s.audit("save_sync_rules", map[string]any{"rules_path": s.RulesPath, "rule_count": len(set.Rules)})
 	return map[string]any{
 		"ok":             true,
 		"status":         "saved",
 		"rules_path":     s.RulesPath,
-		"rule_count":     len(req.Rules),
-		"rules":          req.Rules,
+		"rule_count":     len(set.Rules),
+		"rules":          set.Rules,
 		"saved_revision": revision,
 		"activation":     "restart_required",
 	}, nil

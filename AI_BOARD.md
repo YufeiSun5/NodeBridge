@@ -31,6 +31,78 @@
 
 ## Active Board
 
+2026-09-15 backend-ai：NB-PUBLISH ready，跨 frontend-ai 完成三语 README 和独立欢迎页（浏览器语言匹配、英语回退、手动选择记忆），跨 test-ai 全测/vet/lint/合同及三语390/1366宽度浏览器检查通过。发布既有0.48.7验收包和SHA256，Pages仅发布site。无新增Wails API；owner backend-ai。现场复验等NB-RECONNECT边界仍open。
+
+
+2026-09-15 backend-ai：NB-RECONNECT源码及补丁验收closed，0.48.7修复运行期RabbitMQ连接/通道/Publisher失效后无限重试旧对象，Session失败销毁并有界重连，原ACK/幂等/Canal位点边界保留。独占真实确认中断/通道关闭重投通过；三节点异名中心源及共享同名边缘源两轮批量16，服务停止恢复/通信暂停20秒均不重启Agent自动恢复，实测1.058–1.465秒（夹具重试1秒），CRUD/ready队列清空/收据稳定通过；全量test/vet/lint、Wails/CLI、6安装模式17回归、两角色重复系统库升级、62文件20迁移5资产解包哈希通过。现场配置规则哈希未变，测试资源清理；owner backend-ai跨test-ai仅隔离验证/发布，consecutive_errors合同更新，无UI方法变化。包build/NodeBridge-beta-v0.48.7-20260915.exe（5A1FDF8F…），docs/v0.48.7-reconnect-handoff-20260915.md。现场复验、首次断线诱因、整机Windows重启/实际网络SLA及其他历史项仍待验，不把进程running视为同步健康。
+
+2026-09-15 backend-ai：本次批量部分提交漏转发缺陷closed，0.48.6补丁已生成。原错误分支直接ACK已提交前缀却跳过dispatch；现完成日志与转发才ACK，转发失败重新入队。确定性旧分支失败/新分支通过，全量test/vet/lint、三节点批量16连续10批1056CRUD（53个死锁错误批次仍最终三端30行摘要一致）、Wails/CLI、6安装模式+17回归、两角色旧库重复升级、62文件20迁移5资产解包哈希通过。独占资源清理，原业务配置/规则哈希不变。跨test-ai仅隔离验证及发布门禁，owner backend-ai，无UI/DTO变化；未业务部署，历史已ACK缺行不会自动补回，死锁竞争仍存在，FB-094/107其他历史项、FB-084/109仍open。包build/NodeBridge-beta-v0.48.6-20260915.exe（B1BC08DD…），详见docs/v0.48.6-batch-relay-handoff-20260915.md。
+
+2026-09-15 05:17 test-ai：批量1七小时长测closed，741批/80004次CRUD，三端最终30行及摘要一致，两次10分钟Edge2/Server离线恢复通过；test-output PASS、evidence passed、supervisor passed、原配置/规则哈希复核一致，主管/Agent/7容器/网络已退出清理。run dcee70b6467447519b6ee636420eefee，报告docs/soak-7h-20260914.md。首轮批量16缺行证据保留，FB-094/107仍open，FB-084/109不变；同主机三逻辑节点/递增测试源时间限制保留，owner test-ai。
+
+2026-09-14 22:09 test-ai：第二轮批量1三节点七小时持续测试已完成10批/1056次操作，三端摘要一致；supervisor3032及3个run Agent命令行/7容器存活已核验，原本机业务配置/规则哈希不变。run dcee70b6467447519b6ee636420eefee，22:07:32至次日05:07:32；后台heartbeat nodebridge每10分钟复查。目标交接仅稳定启动，七小时最终验收与2/4小时离线恢复仍pending。Go test/vet/lint及脚本解析通过。首轮批量16缺行未修，不关闭FB-094/107，FB-084/109不变；方案docs/soak-7h-20260914.md，owner test-ai。
+
+
+2026-09-14 22:06 test-ai：本轮批量16三节点持续写入首批90秒未收敛，行数41/42/40，日志出现1213死锁重试后恢复但缺行；原因尚未确证，不宣称修复。失败run 052ecc915e0e4b90a5817ce62c2b5199，三库early-mismatch-*.sql与failure-state.json已留证。原配置/规则哈希不变，独占资源已退出；按用户少量功能失败仍继续测试指令，启动批量1完整三节点7小时替代试验，owner test-ai；FB-094/107新增长测缺行证据open。
+
+
+2026-09-14 test-ai：用户重新授权独立7小时长测，稳定运行后结束goal。使用0.48.5候选及独占三MySQL/三Canal/三Windows Agent和RabbitMQ，不修改业务AI规则/配置/组件。扩展既有三节点真实夹具，覆盖首次对齐、MCP、异名映射、全来源CRUD、精度/二进制、离线恢复、回执回滚重试、持续摘要及回环检查；仅测试代码/脚本。FB-094/107本轮长测准备中，历史问题不关闭，owner test-ai。
+
+
+2026-09-14 14:19 backend-ai交付0.48.5：name显示字段/中文主标题、原id只读、旧规则计划/证明兼容、名称不要求重启及CAS完整校验完成。安装器两种组件模式均升级配置指向的系统库，补齐sync_*表/索引并记录迁移checksum和版本，失败阻断完成与UI恢复；新装未配置明确skipped。两角色MySQL001-009到010重复升级保留原行/ACTIVE证明、全测/vet/lint、Wails/绑定/MCP42工具、6安装场景和17既有回归、三语三宽度名称保存搜索/层级及62文件20迁移5资产哈希门禁通过。安装build/NodeBridge-beta-v0.48.5-20260914.exe（4C8695C2…），交接docs/v0.48.5-upgrade-handoff-20260914.md。owner backend-ai，跨frontend-ai名称交互/绑定、跨test-ai仅隔离验证；本轮名称与升级流程closed。初次MySQL探活脚本参数解析错误已修正后复验通过，测试容器/浏览器/预览服务已退出。现场未部署、未给31条规则填名，FB-094/107/084/109历史验收保持原状态。
+
+2026-09-14 backend-ai：0.48.5规则中文显示名称与安装升级系统库in progress。新增可选name，稳定id/对齐证明不变；安装器复用与新装均检查系统迁移，记录版本校验，失败阻断完成，初始未配置明确pending。owner backend-ai；跨frontend-ai仅名称输入/列表/三语与绑定，跨test-ai仅兼容/升级回归及封包。现场不部署、不改业务表、不解除对齐证明。
+
+2026-09-14 12:07 backend-ai交付0.48.4：双向反向/中继显式目标业务库优先于本机系统默认库，修复原scada_edge覆盖；Canal逗号列表独立追加系统表达式，单向中继回退保留。单条/批量CRUD、失败不ACK重试与诊断、三节点异名映射回归，test/vet/lint、Wails/绑定/CLI/MCP及62文件20迁移5资产与便携21文件哈希门禁通过。安装build/NodeBridge-beta-v0.48.4-20260914.exe，交接docs/v0.48.4-downlink-handoff-20260914.md。owner backend-ai，跨test-ai仅隔离回归/发布验证；本轮代码修复closed，现场复验pending，原失败INSERT与后续DELETE未动，未部署/改业务表/新增迁移。FB-094/107历史验收、FB-084/109保持原状态。
+
+2026-09-14 11:59 backend-ai：旧发布包清理closed，76文件18183514821字节；保留0.48.3安装/离线测试与0.48.2便携Agent，哈希验证通过，清单.cache/cleanup-20260914/release-packages-115845.json。接手用户业务复测报告：双向主站到从站目标业务库被系统库覆盖，owner backend-ai，目标库选择修复in progress；跨test-ai仅相关隔离回归，现场失败消息保留，不修改业务程序/表。历史FB-084/094/107/109状态不因清理改变。
+
+2026-09-14 11:27 frontend-ai交付0.48.3小屏规则页：搜索列表+单条编辑/只读四页签，760px以下选择框，顶部保存与未保存提示，字段说明按需展开且风险常显；预检/首次对齐归入展开工具区。zh/en/ja在1366/1024/800/390宽度四页签48组横向溢出检查及草稿/搜索/增删保存/空表/只读/CAS/预检通过，1024×640默认路由完整展示；更窄允许纵向滚动。Go test/vet/lint、Wails/前端构建/绑定通过。安装包build/NodeBridge-beta-v0.48.3-20260914.exe（6CC4E852…），交接docs/v0.48.3-ui-handoff-20260914.md。owner frontend-ai，本轮布局项closed；跨test-ai仅隔离UI与门禁，跨backend-ai仅版本/封包；未现场安装，FB-084原生DPI/恢复和FB-094/107/109历史项保持原状态。
+
+2026-09-14 11:04 backend-ai接续交付0.48.2：修复单向无关失败对齐阻塞、PID ready启动确认，以及按本机rule_id误裁三节点远端映射的回归；完整拓扑与同表未完成作业保护保留。最终Agent 1EE3945E…，三节点27.97秒、单向上/下18.23/16.57秒、无业务同步列双节点49.14秒全部通过；Go test/vet/lint、Wails构建/绑定、17安装回归、MCP42工具5资源、解包62文件/20迁移/5资产与实测哈希一致。安装包build/NodeBridge-beta-v0.48.2-20260914.exe（D8212312…，340882572字节）、便携ZIP同版已交付；替换10:33失败候选，不按版本号混认。业务接续见docs/v0.48.2-startup-handoff-20260914.md。owner backend-ai，跨test-ai仅隔离回归与发布验证；FB-107本轮启动修复closed，现场验收pending，FB-094/107时钟/历史长测等仍open，FB-084/109未处理。不部署业务、不重启长测、不改系统时间、不自动Git提交；本轮独占容器/Agent已清理。
+
+2026-09-14 backend-ai修复业务AI单向启动阻塞：按启用规则的本地物理源/目标表及MySQL大小写模式筛选对齐job/topology，未完成同表对齐继续阻断，无关禁用表不再全局阻断；不删账本。Agent新增进程ready状态，MCP/UI启动等待对应PID完成启动门禁且短暂稳定，提前退出返回本次启动日志而非ok/running。跨test-ai：两端植入无关失败job及PENDING组后真实单向CRUD/重启，同时保持同表阻断回归；DTO方法不变，进程状态可为starting，owner backend-ai，验证/0.48.2出包中，现场未修改。
+
+2026-09-14 backend-ai 0.48.1交付：FB-107无业务同步列回放修复完成隔离验证并出包；同事务系统BEGIN/END、持久binlog边界、完整标记屏障替代双向业务列标记，保留业务同名列值。两端010系统迁移，无UI/MCP参数变化。最终包内Agent无标记表双节点50.89秒/三节点28.05秒通过，前两轮首次对齐源/中心54.13/52.60秒；batch=1、CRUD/删除/离线LWW/重启/收据重试/repair收敛已覆盖。Go test/vet/lint、17安装回归、MCP42工具5资源、62文件20迁移封包核验通过。安装包build/NodeBridge-beta-v0.48.1-20260914.exe，便携Agent包build/NodeBridge-agent-v0.48.1-20260914.zip；详docs/v0.48.1-replay-handoff-20260914.md。测试容器已清理，未改现场业务表或部署程序；业务AI需切新版stdio并仅迁移NodeBridge系统库后接续现场标准表验收。owner backend-ai，字段门禁实现项closed，现场业务验收pending；FB-094/107时钟及历史积压升级/容量/长测残项open，不宣称全部闭环。
+
+2026-09-14 backend-ai实施无业务字段双向回放：用户明确要求立即修复业务AI阻塞。范围internal回放/Apply/CDC捕获、系统表迁移、规则检查与隔离验证；跨test-ai补无标记表首次对齐、CRUD/删除/修复及重启证据。业务表和现场数据不修改，已有未提交改动保留。计划使用同事务系统表边界替代业务列标记，持久识别binlog回放；不得仅放开门禁。无新增UI/API参数，owner backend-ai，FB-107本项in progress。
+
+2026-09-14 backend-ai兼容性缺陷确认：用户业务AI报告sys_detection_standards两端首次全量均在bidirectional_canonical_replay_columns_required:last_event_id失败、复制0行。源码internal/rulecheck/bidirectional.go硬要求last_event_id及updated_by_node；internal/apply/replay.go、delete_replay.go和internal/loop/suppressor.go依赖业务行标记，不能仅删除校验。此前夹具均带标记，未覆盖普通无同步字段业务表；这是NodeBridge兼容性/验收缺口，不要求业务加列。owner backend-ai，FB-107新增无侵入回放协议整改open，须以无标记真实业务结构验证首次对齐、CRUD、删除/修复回环和重启；当前仅完成定位，未改产品或现场业务表，不能宣称已修复。身份从test-ai切换backend-ai，前序清理结果：17个cr_lite_store_stop_it/trace_it遗留迁移测试库已完整导出后删除，SQL复查剩余0；边缘无可整库删除的独立测试库；保留spindle_main_sync_20260911等业务目标与共享元数据库。证据.cache/cleanup-20260914/stale-databases*，历史大表/共享日志清理仍pending。
+
+2026-09-14 test-ai 停测与数据库核查交接（覆盖下方运行中状态）：用户要求让业务AI先使用，不再自动测试；nodebridge复查自动化已删除。run 20260914a实际08:47:03至08:55:22提前失败，最后记录58批/2860次操作，MySQL连接断开且Docker曾不可用；用户确认随后由其启动主站Docker，停止原因未证实。停止后两端各690行但摘要不同，未通过收敛，计划两次600秒离线均未执行。四个nbsoak隔离库已导出后删除（1480行业务数据，约38.55MiB），两个独占vhost和两个测试Canal容器已删，远端测试运行目录已归档后删；11个重复解包目录删除4259105445字节。业务MySQL/RabbitMQ/原Canal及远端两个MCP进程保留。证据.cache/cleanup-20260914与.cache/soak048。用户追问旧几GB数据后直接查库：scada_center共25992.63MiB、scada_edge共3537.61MiB；历史nb7_/nb_overnight_/nb_incident_/nb_e2e_probe测试表分别208张4767.56MiB、19张1963.56MiB，合计6.57GiB，尚未清理。主站sync_event_log另19509.45MiB、sync_apply_log1714.63MiB，边缘sync_apply_log1573.58MiB；日志按table_name统计大头来自历史测试，不能将整张共享日志直接清空。owner test-ai，旧测试数据及关联日志定向清理pending；FB-094/107和时钟偏差缺陷仍open，业务AI使用结束后等待用户明确恢复测试。
+
+2026-09-14 08:50 test-ai：安装版七小时长测已实际启动（08:47:03至15:47:03，最多再10分钟收敛），run 20260914a。两端100行首次对齐completed且proof相同；完整基线摘要一致。当前supervisor38252/writer28032/本机Agent42856/远端Agent12388均已核验命令行，写入计数110→460→710递增；计划第2/4小时各暂停一端Agent600秒，检查积压恢复与最终预期行数/业务列摘要。独立测试交换逻辑角色（本机Edge、远端Server），保留原约30秒时差；原角色CreatedAt未来误判仍是缺陷，不据此关闭偏时问题或宣称±10分钟验证通过。并发写入期间两次摘要抽查存在1至3行瞬时差异，保留记录，最终须静止收敛核验。heartbeat自动化nodebridge已ACTIVE，约15:48复查本任务并在终态后删除。Go test/vet/lint通过；test-ai，FB-094/107长测in progress，原角色时钟缺陷open，FB-084/109不变。证据.cache/soak048/20260914a；原20260913a失败现场保留。
+
+2026-09-14 test-ai按用户最新指令直接测试，不先整改产品或调整系统时钟。保留原角色组合alignment_plan_expired失败，新增交换两机测试角色的完整双向实测；仅隔离配置/规则交换逻辑角色，原业务配置不动，不删作业/绕过ACTIVE门禁。若通过首次对齐立即启动七小时CRUD/暂停恢复/最终摘要长测，并安排复查；交换角色结果不覆盖原角色失败。owner test-ai，FB-094/107继续取证，不等待校时批准。
+
+2026-09-13 23:39 test-ai阻塞交接：再次确认两机约30秒时差仍在、两端Agent均未运行，七小时progress.json尚不存在。需要用户确认是否允许同步边缘全局系统时间后，才能继续安装版首次对齐与长测；不绕过CreatedAt/ACTIVE门禁。目标标记blocked而非完成，FB-094/107本轮长测证据blocked，owner test-ai。独立Canal已停止、边缘W32Time恢复原Stopped，测试库/vhost/日志保留；无7小时复查自动化。代码门禁结果沿用本轮已通过的test/vet/lint，不等于长测通过。
+
+2026-09-13 23:36 test-ai预启动检查：独立run 20260913a已建库/规则/vhost/Canal，两端已安装Agent用于真实initial-alignment。首次被字符排序规则差异拒绝，已只修测试表；随后两端约30秒时差导致alignment_plan_expired（计划CreatedAt来自Edge，中心校验处于未来）。中心W32Time未同步且resync权限不足，边缘服务原为Stopped，临时启动后resync无时间数据；中心time.windows.com解析到Fake-IP。已向用户询问是否允许边缘全局时钟同步至中心，未获答复前不调整系统时间。七小时producer/supervisor尚未启动、复查自动化尚未创建；FB-094/107 pending，不能写长测通过。脚本范围test-ai，Go test/vet/lint通过；原业务配置未修改，独立测试资源保留待继续。
+
+2026-09-13 test-ai：用户授权两端已安装0.48后的约7小时长测，确认真实写入运行后结束goal，7小时后复查。两端安装Agent哈希一致、当前无Agent；旧长测不适配ACTIVE门禁，新增专用夹具，范围仅测试脚本、独立数据库/规则/vhost/Canal和已安装Agent进程。固定Canal client 1001不能借原实例推进业务游标，必须独立实例；原配置与业务进程保持原状。owner test-ai；FB-094/107长测证据pending，FB-084/109不在本轮关闭范围。
+
+2026-09-12 21:07 backend-ai交付：FB-107本轮Edge1-Server-EdgeN、200MiB首次全量、MCP执行/状态/中断/重试及既有Rules页三语多成员操作完成。安装包build/NodeBridge-beta-v0.48.0-20260912.exe，340838916字节，未签名，SHA256 775BD96C1CF41E4ABDBB47959A879C40C343EADDCAE3A9B9543FACFBD198BE23；60解包文件/18迁移/5组件哈希通过，包内Agent与最终三节点93.24秒实测候选一致。全量代码/绑定/界面/安装门禁及真实短测见docs/v0.48.0-upgrade-handoff-20260912.md。按出包停止，无长测、业务部署或Git提交；独占测试资源已清理。owner backend-ai；FB-107历史6f813a/历史数据残项以及FB-094/084/109仍open，不将未复现或模拟验证当闭环。
+
+2026-09-12 21:05 backend-ai封包门禁：0.48.0候选已构建，Edge1-Server-EdgeN真实三节点异名及共享规则、中心源/边缘源各200MiB、全空、首成员提交后MCP中断/持久恢复、顺序复制间隙版本/墓碑收敛均通过。最终候选200MiB+间隙写入93.24秒（ad4dcb64），双节点兼容55.46秒（dbdc7348）；全量Go test/vet/lint、前端构建/绑定、三语两角色1366/390共12组、五安装模式及32/64各17回归通过。普通stdio42工具5资源版本门禁通过，隔离port1诊断预期partial而非业务连接验证。待最终NSIS exe和解包哈希，未部署/长测/自动Git提交。完整组SELECTED_EDGES须全部互通，已有冲突历史向新成员转移仍明确不支持。owner backend-ai；FB-107本轮出包项待关闭，历史6f813a与FB-094/084/109保持open。
+
+2026-09-12 backend-ai容量整改：200MiB实测发现Canal默认512MiB堆OOM及默认16MiB未ACK缓存阻断边界探针。拟将NodeBridge受管Canal安装配置下限提升为512MiB事件缓存/2GiB最大堆，保留更大已有值；不修改外部Canal，操作文档明确其容量前提。跨test-ai增加安装回归，UI已补Server多成员选择与三语，构建通过；完整大数据实传仍在验收中，owner backend-ai。
+
+2026-09-12 backend-ai接口落地预告：新增3个MCP首次全量工具（start/status/interrupt），重试复用start，普通工具总数42；Server peer_node_id允许逗号分隔完整Edge成员集合，Edge仍单一Server，无新增DTO字段。复制预算为原始256MiB/编码512MiB、15分钟；多端组协调1小时。009保存PENDING/READY/ACTIVE组证据，PENDING阻断Agent，多端真实测试与200MiB实传尚未通过前不得宣称交付。跨frontend-ai仅既有控件文案/三语，owner backend-ai。
+
+2026-09-12 19:40 backend-ai新轮实施：用户要求完善Edge1-Server-EdgeN多端双向、首次全量至少200MB，并补MCP首次全量执行/状态/中断/重试；完备非长测验证后交付安装包，或本轮连续5小时到限即停止（19:39左右开始，截止次日00:39，以goal时间为准）。owner backend-ai；跨test-ai负责独占三节点真实链路、200MB实传、故障和发布门禁；跨frontend-ai限既有首次全量控件、拓扑配置/状态、三语及绑定。当前发现多端图投影已有，但pair-only配置、单表唯一作业与proof epoch过滤阻止实际多端；不得仅放开数量宣称完成。新增MCP操作沿用明确确认，不新增审批。仅C:/D:，不业务部署、不长测、不自动Git提交。前端/DTO具体变化先更新合同；本轮功能项open，旧FB-094/084/109不关闭。
+
+2026-09-12 18:20 backend-ai交付：FB-107本轮限定的一Edge一Server手动首次全量、持久增量交接/中断重试、双向LWW及既有规则页三语入口完成，0.47.0安装包已生成且58解包文件/16迁移/5组件哈希验证通过。两个独立MySQL的server/edge/empty三种起点短测57.05/58.56/54.11秒通过；Go test/vet/lint、前端构建/绑定/三语宽窄屏、五安装模式及32/64位各15回归通过。无业务安装部署、无长测，按出包即停止条件结束；测试资源已清理。owner backend-ai；FB-107历史整改/早期6f813a超时缺现场残项继续open，FB-094/084/109不关闭。操作与哈希见docs/v0.47.0-upgrade-handoff-20260912.md；下方中间状态由本条覆盖。
+
+2026-09-12 18:13 backend-ai FB-107封包门禁：现有Rules页接入三语首次全量/确认/阶段/中断重试，执行中禁改规则，1366/390三语交互截图6组通过；无新管理页/MCP工具。CLI每条启用双向规则必须有本机ACTIVE证明，手写pair manifest不能绕过；Server双向预检改读实际目标表。真实两个独立MySQL UUID、双Canal/双Agent的server源57.05秒和edge源58.56秒通过（bf8e481667b94cb2b239d917f2e420f0、cf307384857d4a76bad906913915dc6d），包含stdio规则保持启用/禁用/再启用、旧消息superseded而无AppliedAt。0.47.0候选已构建，全量Go测试通过，安装暂存/资源预检/五模式配置及pair/status侧文件保留通过；普通stdio39工具5资源通过，离线诊断明确partial。空起点双MySQL最终短测与安装器回归进行中，还没有最终NSIS exe；owner backend-ai，跨test-ai仅独占短测/封包验证，FB-107仍open，FB-094不关闭。
+
+2026-09-12 17:35 backend-ai FB-107：首次全量CLI接双Agent完整短测edge源51.04秒通过（99e2ec83e9f74b12828cb52a41b77d1d），server源52.79秒通过（c823ccfae42f451a895a715fdc205c3a）。中途6af3679失败已取证为源时间由09:28:41回退到09:28:14，删除依法成为loser；独占夹具业务连接改显式递增SET TIMESTAMP，Agent连接不改，不以此宣称时钟回退业务语义已解决。新增保留证据的CANCELLED：目标锁定未提交收据先撤销，源核对后撤销，重新规划不删账本/版本/墓碑；缺目标准备、中断撤销与重试不重复复制14.01秒通过（7e4a4a076968419a88d0f48fdb6a26b8）。Wails异步鉴权/中断/持久状态/脱敏单测通过。规则保存接本机ACTIVE证明，配对观察只允许Enable变化；跨frontend-ai接现有规则页和三语，owner frontend-ai；仍未公开能力、未出包，FB-107 open。
+
+2026-09-12 17:12 backend-ai FB-107：实际Canal socket期限/取消与ACK写失败传播已补；独占捕获/恢复/双端就绪/历史消息留档短测14.16秒通过，.cache/canal-business/1f04aeba80c849e5945b819eac056f28。修复RabbitMQ ConsumeWithContext取消与通道复用竞态。准备新增Wails StartInitialAlignment/GetInitialAlignmentStatus/InterruptInitialAlignment：显式rule_id、peer_node_id、confirm，仅两端已停Agent时执行；返回阶段/结果/错误，中断不是撤销提交。沿现有Rules页新增紧凑操作区，不增加MCP工具。owner backend-ai，跨frontend-ai仅该页面、服务/DTO/三语，跨test-ai仅短测/绑定/截图。重试已提交结果不复制，提交前失败的安全重规划仍在补；能力开关尚未放开，不出包/部署/长测。
+
+2026-09-12 backend-ai存储约束：用户要求弹出移动硬盘，确认USB磁盘为E:/F:，D:为内置NVMe。本轮只使用C:/D:；Go缓存/临时目录和Docker WSL配置均位于C:/D:，测试绑定目录必须保持在工作区，禁止使用E:/F:。
+
+2026-09-12 16:33 backend-ai重启FB-107实施：用户批准精简范围并重新设定出包或5小时停止，本轮截止21:33 Asia/Singapore。仅双节点明确映射、受限首次全量、安全接续/恢复、LWW及现有Wails界面必要操作；多节点编排、大表续传、新MCP工具与新管理页面后置。owner backend-ai；跨test-ai仅单元/独占资源短测及发布门禁，后续跨frontend-ai仅已有页面/服务/三语和绑定。先修Canal实际网络期限，再补旧来源事件过滤与持久交接，公共能力在完整短测前不放开；不操作业务现场、不自动部署、不做长测。前端影响：待稳定接口后补明确配对配置、首次全量阶段/失败原因/重试入口；FB-094不属于本轮关闭范围。
+
 2026-09-12 15:41 backend-ai版本归档：用户要求提交并推送GitHub，本次仅归档累计源码、迁移、测试脚本及文档到origin/main，不继续功能开发或发布安装包。排除output截图、缓存、安装产物及本地凭据文件变更，FB-107/FB-094保持open；不把Git提交视作功能交付，owner backend-ai。
 
 2026-09-12 01:42 backend-ai停止交接：用户设定的累计5小时上限已到，本轮不再继续开发。未出新安装包，首次对齐到增量交接及公开入口仍未完成；FB-107保持open，FB-094旧长测问题不关闭。源码/短测/全量门禁证据见阶段报告，测试资源已清理、业务现场未动。下一步等待用户新指令，owner backend-ai。
@@ -115,7 +187,7 @@
 
 | ID | Owner | Type | Status | Item | Next Action |
 | --- | --- | --- | --- | --- | --- |
-| FB-107 | backend-ai | bug | open | 0.46.16为此前已交付整改包。本轮源码新增配对LWW/墓碑/loser修复，真实双Agent短测51.36秒通过；受限首次快照/RabbitMQ/持久收据/Canal边界/核对恢复实测通过，仍无新安装包。 | 完成CDC旧事件过滤及血缘验证、维护租约/全部参与端启用握手、自动配对和公开Wails/MCP执行恢复后再验收出包；所有作业仍阻断Agent，不能删账本解锁。较早6f813a超时根因未闭环；底层Canal socket deadline及大表暂存也未完成。用户限定出包或累计5小时先到即停止，不部署/长测；详见docs/alignment-bidirectional-progress-20260911.md。 |
+| FB-107 | backend-ai | bug | open | 0.48.0已交付Edge1-Server-EdgeN多端双向、200MiB首次全量、完整组ACTIVE、MCP start/status/interrupt/重试及三语多成员UI；三独立MySQL/Canal/Agent异名/同名共享规则、全空、部分提交恢复、间隙版本/墓碑及发布门禁通过。 | 本轮功能交付完成并按出包停止；仅历史数据整改、较早6f813a超时缺现场根因及业务长测待验保留open，不把未复现当修复。在线扩容/超大单行分片/已有冲突历史向新成员转移/业务指令时间字段仍不支持。详见docs/v0.48.0-upgrade-handoff-20260912.md；不删除账本/版本/墓碑。 |
 
 
 2026-09-11 backend-ai：用户已授权实施方案并进行完备测试，随后明确只用隔离数据，不操作业务表。本轮按P0/P1起步再接M1，现场安装/配置/业务数据保持。backend-ai跨frontend-ai仅共用能力的Wails视图及三语交互，跨test-ai仅隔离夹具/协议/E2E；各阶段证据独立，不将M2或未跑门禁记为完成。

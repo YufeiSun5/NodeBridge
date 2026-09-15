@@ -42,7 +42,10 @@ func checkTargetSchemas(ctx context.Context, tx *sql.Tx, events []mapper.MappedE
 		if err != nil {
 			return err
 		}
-		rule := rules.SyncRule{PrimaryKeys: keys, DeleteMode: rules.DeleteHard}
+		rule := rules.SyncRule{PrimaryKeys: keys, DeleteMode: rules.DeleteHard, ConflictPolicy: evt.ConflictPolicy}
+		if evt.TransactionReplay {
+			rule.ConflictPolicy = rules.ConflictLastWriteWin
+		}
 		if soft {
 			rule.DeleteMode = rules.DeleteSoft
 			for _, source := range []string{"is_deleted", "deleted_at", "deleted_by_node", "updated_by_node", "last_event_id"} {

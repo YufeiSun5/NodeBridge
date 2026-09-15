@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { SectionHeader } from '../components/SectionHeader';
 import { SwitchControl } from '../components/SwitchControl';
+import { InitialAlignmentControl } from '../components/InitialAlignmentControl';
 import { useAuth } from '../auth';
 import { translateStatus, useI18n } from '../i18n';
 import { getConfig, getNodeOptions, getSyncRulesSnapshot, saveSyncRules, preflightSyncRule, type RulePreflightResult, type SyncRulesSnapshot, type NodeOptionsResponse, type SyncRule } from '../services/wails';
@@ -108,7 +109,8 @@ function RulesReadOnly({ rules, t }: { rules: SyncRule[]; t: (key: string) => st
           <div className="rule-readonly-head">
             <div>
               <span className="rule-card-kicker">{t('ruleIdentity')}</span>
-              <strong>{rule.id || '-'}</strong>
+              <strong>{rule.name || rule.id || '-'}</strong>
+              {rule.name ? <small className="rule-technical-id">{rule.id}</small> : null}
             </div>
             <span className={rule.enable ? 'status-chip status-ok rule-readonly-state' : 'status-chip status-unknown rule-readonly-state'}>
               {rule.enable ? t('enabled') : t('no')}
@@ -208,6 +210,17 @@ export function RulesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [alignmentRunning, setAlignmentRunning] = useState(false);
+  const [mode, setMode] = useState('');
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [search, setSearch] = useState('');
+  const [section, setSection] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
+  const activeIndex = Math.min(selectedIndex, Math.max(0, rules.length - 1));
+  const sections = ['tablePair', 'routing', 'keyColumns', 'columnPolicy'];
+  const filteredRules = rules.map((rule, index) => ({ rule, index })).filter(({ rule }) =>
+    [rule.name, rule.id, rule.database_name, rule.table_name, rule.target_database_name, rule.target_table_name].join(' ').toLowerCase().includes(search.toLowerCase()));
+  const dirty = JSON.stringify(rules) !== JSON.stringify(snapshot.rules);
 
   async function load() {
     setLoading(true);
@@ -220,6 +233,7 @@ export function RulesPage() {
       setPreflight(null);
       setNodeOptions(nextNodeOptions);
       setCrudCompactEnabled(Boolean(nextConfig.sync?.enable_crud_compact));
+      setMode(nextConfig.mode);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('rulesError'));
     } finally {
@@ -274,6 +288,9 @@ export function RulesPage() {
     if (!(await ensureUnlocked())) {
       return;
     }
+    setSelectedIndex(rules.length);
+    setSection(0);
+    setSearch('');
     setRules((current) => [
       ...current,
       {
@@ -305,6 +322,7 @@ export function RulesPage() {
       return;
     }
     setRules((current) => current.filter((_, ruleIndex) => ruleIndex !== index));
+    setSelectedIndex(Math.max(0, index - 1));
   }
 
   useEffect(() => {
@@ -312,7 +330,7 @@ export function RulesPage() {
   }, []);
 
   return (
-    <section className="page-panel">
+    <section className="page-panel rules-page">
       <SectionHeader title={t('rules')} tone="sync" />
       {loading ? <LoadingState title={t('loadingRules')} /> : null}
       {error ? <ErrorState title={t('rulesError')} detail={error} /> : null}
@@ -324,20 +342,24 @@ export function RulesPage() {
       ) : null}
 
       {authState.unlocked ? (
-        <div className="toolbar-row">
-          <button className="button-primary" type="button" disabled={saving || loading} onClick={() => void save()}>
+        <div className="toolbar-row rules-actions">
+          <button className="button-primary" type="button" disabled={saving || loading || alignmentRunning} onClick={() => void save()}>
             {t('saveRules')}
           </button>
-          <button className="button-tool" type="button" onClick={() => void addRule()}>
+          <button className="button-tool" type="button" disabled={saving || loading || alignmentRunning} onClick={() => void addRule()}>
             {t('addRule')}
           </button>
-          <button className="button-secondary" type="button" onClick={() => void load()}>
+          <button className="button-secondary" type="button" disabled={saving || loading || alignmentRunning} onClick={() => void load()}>
             {t('refresh')}
           </button>
+          {dirty ? <span className="rules-dirty" role="status">{t('ruleUnsaved')}</span> : null}
         </div>
       ) : null}
 
+      <details className="rules-tools">
+        <summary>{t('ruleTools')}{alignmentRunning ? ` · ${t('checking')}` : ''}</summary>
       {snapshot.saved_revision ? <div className="result-line"><span>{t('savedRevision')}</span><code title={snapshot.saved_revision}>{snapshot.saved_revision.slice(0, 12)}</code><span>{t('activeRevision')}</span><code title={snapshot.active_revision}>{snapshot.active_revision?.slice(0, 12) || '-'}</code><strong>{t(`rulesActivation_${snapshot.activation || 'unknown'}`)}</strong></div> : null}
+      <InitialAlignmentControl rules={snapshot.rules} mode={mode} nodeIDs={nodeOptions.items.filter((node) => node.node_type?.toUpperCase() !== 'SERVER').map((node) => node.node_id)} dirty={saving || JSON.stringify(rules) !== JSON.stringify(snapshot.rules)} onRunning={setAlignmentRunning} onCompleted={() => void load()} />
       {snapshot.rules.length > 0 ? <div className="toolbar-row">
         <select aria-label={t('savedRule')} value={checkRule} onChange={(e) => setCheckRule(e.target.value)}>{snapshot.rules.map((rule) => <option key={rule.id} value={rule.id}>{rule.id}</option>)}</select>
         <select aria-label={t('preflightSide')} value={checkSide} onChange={(e) => setCheckSide(e.target.value as 'source' | 'target')}><option value="source">{t('localSource')}</option><option value="target">{t('localTarget')}</option></select>
@@ -349,20 +371,51 @@ export function RulesPage() {
         {preflight.unverified.length ? <div className="result-line"><strong>{t('unverified')}</strong><span>{preflight.unverified.map((key) => t(`preflight_${key}`)).join(' / ')}</span></div> : null}
       </section> : null}
 
+      </details>
+
       {!loading && rules.length === 0 ? <EmptyState title={t('noSyncRules')} detail={t('emptyRuleSet')} /> : null}
 
-      {rules.length > 0 && !authState.unlocked ? <RulesReadOnly rules={rules} t={t} /> : null}
+      {rules.length > 0 ? <div className="rules-workspace">
+        <aside className="rule-browser" aria-label={t('rules')}>
+          <label className="rule-search"><span>{t('ruleSearch')}</span><input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('ruleSearchPlaceholder')} /></label>
+          <span className="rule-count">{filteredRules.length} / {rules.length}</span>
+          <div className="rule-browser-list">
+            {filteredRules.map(({ rule, index }) => <button type="button" className={index === activeIndex ? 'rule-choice active' : 'rule-choice'} aria-pressed={index === activeIndex} key={index} onClick={() => setSelectedIndex(index)}>
+              <span className="rule-choice-heading"><span className={rule.enable ? 'status-dot ok' : 'status-dot'} /><strong>{rule.name || rule.id || t('ruleIdentity')}</strong></span>
+              {rule.name ? <small className="rule-technical-id">{rule.id}</small> : null}
+              <span>{rule.database_name}.{rule.table_name}</span>
+              <span>→ {rule.target_database_name || rule.database_name}.{rule.target_table_name || rule.table_name}</span>
+              <small>{rule.direction} · {rule.enable ? t('enabled') : t('no')}</small>
+            </button>)}
+          </div>
+          {!filteredRules.length ? <p className="rule-no-results">{t('ruleNoResults')}</p> : null}
+          <select className="rule-mobile-picker" aria-label={t('ruleSelect')} value={filteredRules.some(({ index }) => index === activeIndex) ? activeIndex : ''} onChange={(e) => setSelectedIndex(Number(e.target.value))}>
+            <option value="" disabled>{t('ruleSelect')}</option>
+            {filteredRules.map(({ rule, index }) => <option value={index} key={index}>{index + 1}. {rule.name ? `${rule.name} (${rule.id})` : rule.id}</option>)}
+          </select>
+        </aside>
+        <div className={showHelp ? 'rule-editor show-help' : 'rule-editor'} data-section={section}>
+          <div className="rule-editor-tabs" role="group" aria-label={t('ruleSections')}>
+            {sections.map((key, index) => <button type="button" key={key} aria-pressed={section === index} className={section === index ? 'active' : ''} onClick={() => setSection(index)}>{t(key)}</button>)}
+            <button type="button" className="rule-help-toggle" aria-pressed={showHelp} onClick={() => setShowHelp(!showHelp)}>{t('ruleHelp')}</button>
+          </div>
+          {!authState.unlocked ? <RulesReadOnly rules={[rules[activeIndex]]} t={t} /> : null}
 
       {rules.length > 0 && authState.unlocked ? (
-        <div className="rules-card-list">
-          {rules.map((rule, index) => (
-            <article className="rule-card" key={rule.id || `${rule.database_name}.${rule.table_name}.${index}`}>
+        <fieldset className="rules-card-list rules-edit-surface" disabled={saving || loading || alignmentRunning}>
+          {rules.map((rule, index) => index === activeIndex ? (
+            <article className="rule-card" key={index}>
               <div className="rule-card-head">
-                <div>
+                <div className="rule-name-heading">
+                  <Field label={t('ruleName')}>
+                    <input className="rule-name-input" aria-label={t('ruleName')} value={rule.name || ''} maxLength={128} onChange={(event) => updateRule(index, { name: event.target.value })} placeholder={t('ruleNameHint')} />
+                  </Field>
                   <span className="rule-card-kicker">{t('ruleIdentity')}</span>
                   <input
+                    aria-label={t('ruleIdentity')}
                     className={hasWhitespace(rule.id) ? 'rule-id-input input-warning' : 'rule-id-input'}
                     value={rule.id || ''}
+                    readOnly={snapshot.rules.some((saved) => saved.id === rule.id)}
                     onChange={(event) => updateRule(index, { id: event.target.value })}
                   />
                   {hasWhitespace(rule.id) ? <small className="rule-space-warning">{t('spaceWarning')}</small> : null}
@@ -414,9 +467,9 @@ export function RulesPage() {
                   <legend>{t('routing')}</legend>
                   <div className="rule-field-grid routing-grid">
                     <Field label={t('direction')}>
-                      <select value={rule.direction} onChange={(event) => updateRule(index, { direction: event.target.value })}>
+                      <select value={rule.direction} onChange={(event) => updateRule(index, event.target.value === 'BIDIRECTIONAL' ? { direction: 'BIDIRECTIONAL', enable: false, conflict_policy: 'LAST_WRITE_WIN', sync_mode: 'crud_ordered', dispatch_target: 'AUTO', initial_alignment: { policy: 'MANUAL' } } : { direction: event.target.value, conflict_policy: 'NONE' })}>
                         <option value="EDGE_TO_SERVER">EDGE_TO_SERVER</option>
-                        <option value="BIDIRECTIONAL" disabled>BIDIRECTIONAL ({t('unsupportedPolicy')})</option>
+                        <option value="BIDIRECTIONAL">BIDIRECTIONAL</option>
                         <option value="SERVER_TO_EDGE">SERVER_TO_EDGE</option>
                         <option value="IGNORE">IGNORE</option>
                       </select>
@@ -437,8 +490,8 @@ export function RulesPage() {
                         onChange={(event) => updateRule(index, { sync_mode: event.target.value })}
                       >
                         <option value="crud_ordered">{t('syncModeOrderedCRUD')}</option>
-                        <option value="append_only">{t('syncModeAppendOnly')}</option>
-                        <option value="crud_ordered_compact" disabled={!crudCompactEnabled && rule.sync_mode !== 'crud_ordered_compact'}>
+                        <option value="append_only" disabled={rule.direction === 'BIDIRECTIONAL'}>{t('syncModeAppendOnly')}</option>
+                        <option value="crud_ordered_compact" disabled={rule.direction === 'BIDIRECTIONAL' || !crudCompactEnabled && rule.sync_mode !== 'crud_ordered_compact'}>
                           {t('syncModeCompact')}
                         </option>
                       </select>
@@ -463,7 +516,7 @@ export function RulesPage() {
                         }
                       >
                         <option value="AUTO">AUTO</option>
-                        <option value="NONE">NONE</option>
+                        <option value="NONE" disabled={rule.direction === 'BIDIRECTIONAL'}>NONE</option>
                         <option value="ACTIVE_EDGES">ACTIVE_EDGES</option>
                         <option value="SELECTED_EDGES">SELECTED_EDGES</option>
                       </select>
@@ -475,7 +528,7 @@ export function RulesPage() {
                       >
                         <option value="NONE">NONE</option>
                         <option value="SERVER_WIN" disabled>SERVER_WIN ({t('unsupportedPolicy')})</option>
-                        <option value="LAST_WRITE_WIN" disabled>LAST_WRITE_WIN ({t('unsupportedPolicy')})</option>
+                        <option value="LAST_WRITE_WIN" disabled={rule.direction !== 'BIDIRECTIONAL'}>LAST_WRITE_WIN</option>
                       </select>
                     </Field>
                     <Field label={t('sourceNodes')} className="wide-field">
@@ -572,9 +625,11 @@ export function RulesPage() {
                 </fieldset>
               </div>
             </article>
-          ))}
-        </div>
+          ) : null)}
+        </fieldset>
         ) : null}
+        </div>
+      </div> : null}
     </section>
   );
 }

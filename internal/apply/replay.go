@@ -3,6 +3,9 @@ package apply
 import "github.com/YufeiSun5/NodeBridge/internal/mapper"
 
 func replayWrite(mapped mapper.MappedEvent) mapper.MappedEvent {
+	if mapped.TransactionReplay {
+		return mapped
+	}
 	last, by := mapped.TargetColumn("last_event_id"), mapped.TargetColumn("updated_by_node")
 	_, hasLast := mapped.TargetAfter[last]
 	_, hasBy := mapped.TargetAfter[by]

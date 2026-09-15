@@ -103,6 +103,12 @@ func TestOwnedCanalBusinessPipeline(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	for _, db := range []*sql.DB{source, target} {
+		scope := ownedTableScope("unrelated_business", "failed_standards")
+		sqlExec(db, "INSERT INTO sync_alignment_job (job_id,scope_hash,plan_id,node_id,endpoint_role,phase,plan_json,updated_at) VALUES (?,?,?,'unrelated','SOURCE','PREPARED','{}',UTC_TIMESTAMP(6))", strings.Repeat("a", 64), scope, strings.Repeat("b", 64))
+		sqlExec(db, "INSERT INTO sync_alignment_topology (intent_id,scope_hash,pending_scope,node_id,intent_json,phase,updated_at) VALUES (?,?,?,'unrelated','{}','PENDING',UTC_TIMESTAMP(6))", strings.Repeat("c", 64), scope, scope)
+	}
+	t.Log("Seeded unrelated failed snapshot and PENDING topology on both endpoints; all following one-way CRUD/restart checks must pass without deleting these records")
 	sqlExec(source, "CREATE TABLE source_rows (source_id BIGINT UNSIGNED PRIMARY KEY, amount DECIMAL(30,6) NOT NULL, optional_text VARCHAR(30) NULL, raw_bytes VARBINARY(20) NOT NULL, changed_at DATETIME(6) NOT NULL, last_event_id VARCHAR(64) NOT NULL DEFAULT '', updated_by_node VARCHAR(64) NOT NULL DEFAULT '') ENGINE=InnoDB")
 	sqlExec(target, "CREATE TABLE target_rows (target_id BIGINT UNSIGNED PRIMARY KEY, target_amount DECIMAL(30,6) NOT NULL, target_text VARCHAR(30) NULL, target_bytes VARBINARY(20) NOT NULL, target_time DATETIME(6) NOT NULL, last_event_id VARCHAR(64) NOT NULL DEFAULT '', updated_by_node VARCHAR(64) NOT NULL DEFAULT '') ENGINE=InnoDB")
 	conn, err := amqp091.Dial(broker)
@@ -333,5 +339,29 @@ func TestOwnedCanalBusinessPipeline(t *testing.T) {
 	}
 	stopServer()
 	stopEdge()
+	for _, mode := range []string{sourceMode, targetMode} {
+		probe := func(expected string) {
+			dir := filepath.Dir(paths[mode])
+			cmd := exec.CommandContext(ctx, "node", "../../scripts/test-agent-start-handshake.mjs", candidate, paths[mode], filepath.Join(dir, "rules.yaml"), expected, filepath.Join(root, "start-"+mode+"-"+expected+".json"))
+			cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+			if output, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("MCP handshake %s %s: %v %s", mode, expected, err, output)
+			} else {
+				t.Log(string(output))
+			}
+		}
+		probe("running")
+		db, database, table := source, "nb_cdc_source", "source_rows"
+		if mode == targetMode {
+			db, database, table = target, "nb_cdc_target", "target_rows"
+		}
+		scope := ownedTableScope(database, table)
+		sqlExec(db, "INSERT INTO sync_alignment_topology (intent_id,scope_hash,pending_scope,node_id,intent_json,phase,updated_at) VALUES (?,?,?,'same-table','{}','PENDING',UTC_TIMESTAMP(6))", strings.Repeat("d", 64), scope, scope)
+		probe("blocked")
+		var remaining int
+		if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM sync_alignment_topology").Scan(&remaining); err != nil || remaining != 2 {
+			t.Fatal("startup modified alignment evidence", remaining, err)
+		}
+	}
 	verifyOwnedCaptureFence(t, ctx, source, canal)
 }

@@ -130,12 +130,6 @@ func BuildBidirectionalPair(rule rules.SyncRule, edgeNode, serverNode string, ed
 			return empty, fmt.Errorf("bidirectional_selected_column_unavailable: %s", name)
 		}
 	}
-	// The current replay protocol owns these names on both endpoints.
-	for _, name := range []string{"last_event_id", "updated_by_node"} {
-		if !writable[name] || !owners[name] || mapping[name] != "" && mapping[name] != name {
-			return empty, fmt.Errorf("bidirectional_canonical_replay_columns_required: %s", name)
-		}
-	}
 	forward := rule
 	forward.SourceNodeIDs = []string{edgeNode}
 	forward.TargetDatabaseName, forward.TargetTableName = server.Database, server.Table

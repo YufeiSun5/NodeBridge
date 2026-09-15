@@ -46,6 +46,10 @@ export function GetFailedEvents(arg1) {
   return window['go']['datasyncui']['App']['GetFailedEvents'](arg1);
 }
 
+export function GetInitialAlignmentStatus() {
+  return window['go']['datasyncui']['App']['GetInitialAlignmentStatus']();
+}
+
 export function GetLogs(arg1) {
   return window['go']['datasyncui']['App']['GetLogs'](arg1);
 }
@@ -76,6 +80,10 @@ export function GetQueueStatus() {
 
 export function GetSyncRules() {
   return window['go']['datasyncui']['App']['GetSyncRules']();
+}
+
+export function InterruptInitialAlignment() {
+  return window['go']['datasyncui']['App']['InterruptInitialAlignment']();
 }
 
 export function LoadConfig(arg1) {
@@ -128,6 +136,10 @@ export function SetMCPServerEnabled(arg1) {
 
 export function StartAgent() {
   return window['go']['datasyncui']['App']['StartAgent']();
+}
+
+export function StartInitialAlignment(arg1) {
+  return window['go']['datasyncui']['App']['StartInitialAlignment'](arg1);
 }
 
 export function StopAgent() {

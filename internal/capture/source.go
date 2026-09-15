@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
+	"github.com/YufeiSun5/NodeBridge/internal/replay"
 )
 
 type BatchSource interface {
@@ -17,10 +18,12 @@ type BatchSource interface {
 // Source removes internal pulses before normalization and releases waiters only
 // after the runtime commits the complete batch. It has one sequential consumer.
 type Source struct {
-	source  BatchSource
-	fence   *Fence
-	batchID int64
-	pulses  []cdc.ChangeEvent
+	Replay      *replay.Observer
+	source      BatchSource
+	fence       *Fence
+	batchID     int64
+	pulses      []cdc.ChangeEvent
+	proofPulses []cdc.ChangeEvent
 }
 
 func NewSource(source BatchSource, fence *Fence) (*Source, error) {
@@ -34,6 +37,7 @@ func (s *Source) Start(ctx context.Context) error { return s.source.Start(ctx) }
 
 func (s *Source) Stop(ctx context.Context) error {
 	s.batchID, s.pulses = 0, nil
+	s.proofPulses = nil
 	return s.source.Stop(ctx)
 }
 
@@ -52,10 +56,32 @@ func (s *Source) FetchChangesOnce(ctx context.Context) ([]cdc.ChangeEvent, cdc.O
 		s.batchID = offset.BatchID
 	}
 	forward := make([]cdc.ChangeEvent, 0, len(changes))
+	if s.Replay != nil {
+		for _, change := range changes {
+			if s.Replay.IsMarker(change) {
+				if err := s.Replay.Observe(ctx, change); err != nil {
+					return nil, cdc.Offset{}, err
+				}
+			}
+		}
+	}
 	for _, change := range changes {
+		if s.Replay != nil && s.Replay.IsMarker(change) {
+			continue
+		}
 		if s.fence.isPulse(change) {
 			s.pulses = append(s.pulses, change)
 		} else {
+			if s.Replay != nil {
+				isReplay, err := s.Replay.Contains(ctx, change)
+				if err != nil {
+					return nil, cdc.Offset{}, err
+				}
+				if isReplay {
+					continue
+				}
+				change.ReplayChecked = true
+			}
 			forward = append(forward, change)
 		}
 	}
@@ -69,7 +95,25 @@ func (s *Source) Commit(ctx context.Context, offset cdc.Offset) error {
 	if err := s.source.Commit(ctx, offset); err != nil {
 		return err
 	}
-	s.fence.observe(s.pulses)
+	pulses := s.pulses
+	if s.Replay != nil {
+		pulses = nil
+		s.proofPulses = append(s.proofPulses, s.pulses...)
+		pending := make([]cdc.ChangeEvent, 0, len(s.proofPulses))
+		for _, pulse := range s.proofPulses {
+			ok, err := s.Replay.ProvenPulse(ctx, pulse)
+			if err != nil {
+				return err
+			}
+			if ok {
+				pulses = append(pulses, pulse)
+			} else if s.fence.pendingPulse(pulse) {
+				pending = append(pending, pulse)
+			}
+		}
+		s.proofPulses = pending
+	}
+	s.fence.observe(pulses)
 	s.batchID, s.pulses = 0, nil
 	return nil
 }

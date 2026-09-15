@@ -36,6 +36,7 @@ const (
 
 // App binds Wails UI. / UI 入口。 / UI入口。
 type App struct {
+	alignment        alignmentTask
 	config           *appconfig.Config
 	ruleSet          *rules.RuleSet
 	configPath       string
@@ -147,6 +148,11 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	a.alignment.mu.Lock()
+	if a.alignment.cancel != nil {
+		a.alignment.cancel()
+	}
+	a.alignment.mu.Unlock()
 	if a.tray != nil {
 		a.tray.Stop()
 	}
@@ -414,6 +420,9 @@ func (a *App) SaveSyncRules(req uiapi.SaveSyncRulesRequest) (uiapi.SyncRulesDTO,
 		return uiapi.SyncRulesDTO{}, err
 	}
 	set := rules.RuleSet{Rules: append([]rules.SyncRule(nil), req.Rules...)}
+	if err := a.preparePairedRuleSave(context.Background(), &set); err != nil {
+		return uiapi.SyncRulesDTO{}, err
+	}
 	if err := set.Validate(); err != nil {
 		return uiapi.SyncRulesDTO{}, err
 	}

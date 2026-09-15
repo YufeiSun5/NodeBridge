@@ -10,6 +10,7 @@ import (
 	"github.com/YufeiSun5/NodeBridge/internal/apply"
 	"github.com/YufeiSun5/NodeBridge/internal/capture"
 	"github.com/YufeiSun5/NodeBridge/internal/conflict"
+	"github.com/YufeiSun5/NodeBridge/internal/replay"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
 	"github.com/YufeiSun5/NodeBridge/internal/syncruntime"
 )
@@ -29,7 +30,8 @@ func conflictCaptureFilter(filter, database string) string {
 	if strings.TrimSpace(filter) == "" {
 		return filter
 	}
-	return "(" + filter + ")|(" + regexp.QuoteMeta(database) + `\.` + capture.Table + ")"
+	// Canal splits comma-separated expressions before compiling each pattern.
+	return filter + "," + regexp.QuoteMeta(database) + `\.(` + capture.Table + "|" + replay.Table + ")"
 }
 
 // Called before starting any worker. Public rule validation remains the feature gate.
@@ -49,6 +51,8 @@ func attachConflictRuntime(cfg *appconfig.Config, set *rules.RuleSet, db *sql.DB
 		return nil, nil, nil, err
 	}
 	worker.CaptureFence = fence
+	fence.TransactionReplay = true
+	wrapped.Replay = &replay.Observer{DB: db, Database: cfg.MySQL.Database}
 	recorder := conflict.LocalRecorder{DB: db, NodeID: cfg.Node.ID, Rules: set}
 	repair := &syncruntime.ConflictRepairRuntime{Repairer: apply.RepairWorker{DB: db, NodeID: cfg.Node.ID, Rules: set, CaptureFence: fence}}
 	return wrapped, recorder, repair, nil

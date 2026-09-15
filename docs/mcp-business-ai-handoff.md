@@ -1,13 +1,15 @@
-# NodeBridge 0.46.16：安装与业务 AI MCP 交接
+# NodeBridge 0.48.0：安装与业务 AI MCP 交接
+
+0.48.0 补充：支持 Edge1-Server-EdgeN 多端双向、中心源/边缘源 200 MiB 手动首次全量，以及普通 MCP start/status/interrupt/重试。全部节点须显式参与且 Agent 停止；首次全量操作、三语界面、Canal 堆/缓存及已有冲突历史不可迁入新成员的限制见[首次全量指南](initial-alignment.md)。只有完整组 completed 才可显式启动增量，不能把已受理或复制收据视作完成。
 
 本说明可直接交给负责业务配置的 AI。中心与边缘使用同一个 Windows x64 安装包，角色由每台机器的配置决定。当前为内网测试版，不是七小时性能验收通过版。
 
 ## 1. 本次部署边界
 
-**0.46.16新增半自动组件选择页，默认“复用现有组件（Docker / 已有服务）”。** 本机Docker中心保持默认即可，已有组件的边缘升级也可选择复用；只有要安装Windows原生组件的全新环境才选“安装本机系统组件”。不自动识别Docker或测试连接。停止旧工作区Agent、备份配置后，双击新版EXE；也可显式指定：
+**沿用半自动组件选择页，默认“复用现有组件（Docker / 已有服务）”。** 已有组件升级可选择复用，但大快照所需 Canal 容量必须另外核对；复用模式不改组件参数。只有要安装Windows原生组件的全新环境才选“安装本机系统组件”。不自动识别Docker或测试连接。停止旧工作区Agent、备份配置后，双击新版EXE；也可显式指定：
 
 ```powershell
-& 'D:\DEV_D\NodeBridge\build\NodeBridge-beta-v0.46.16-20260911.exe' /SkipSystemComponents
+& 'D:\DEV_D\NodeBridge\build\NodeBridge-beta-v0.48.0-20260912.exe' /SkipSystemComponents
 ```
 
 复用模式跳过Erlang/RabbitMQ/Java/Canal安装、受管密码迁移和组件拓扑配置，保留已有配置/规则原文及密码；首次安装则生成external配置。不会把已有managed配置偷偷改成external。静默安装默认也是复用；显式安装组件用 `/InstallSystemComponents`，两参数不能同时使用。MySQL不由安装器安装。
@@ -33,7 +35,7 @@ NodeBridge 实现 JSON-RPC 2.0、换行分隔的 **stdio MCP**。客户端启动
 服务支持协议版本 `2024-11-05`、`2025-03-26`、`2025-06-18`、`2025-11-25`。客户端按 initialize 返回值协商，顺序为：
 
 1. `initialize`，带 `protocolVersion`、`capabilities`、`clientInfo`。
-2. 确认 `serverInfo.name=nodebridge`、`serverInfo.version=0.46.16`。
+2. 确认 `serverInfo.name=nodebridge`、`serverInfo.version=0.48.0`，普通目录为42工具、5资源。
 3. 发无 id 的 `notifications/initialized`。
 4. `tools/list`、`resources/list`，再按发现结果执行 `tools/call`、`resources/read`；`ping` 可用。
 
@@ -122,7 +124,7 @@ MCP 开启且配置完整时，普通模式已开放全部管理工具，不需�
 
 ## 7. 本次版本已知边界
 
-0.46.16 包含严格 INSERT、缺行 UPDATE 拒绝、HARD/SOFT 删除、真实主键检查、规则预检/CAS/运行版本、事件状态、受控队列隔离、MCP 数字及可信时间脱敏修复；保留半自动组件选择与复用时配置原文。
+0.48.0 保留普通单向严格 INSERT、缺行 UPDATE 拒绝、HARD/SOFT 删除、真实主键检查、规则预检/CAS/运行版本、事件状态、受控队列隔离、MCP 数字及可信时间脱敏修复；已对齐双向 LWW 使用获胜镜像恢复与墓碑，不套用普通单向缺行语义。保留半自动组件选择与复用时配置原文。
 
 启用规则只支持 `conflict_policy: NONE`，不支持的 `BIDIRECTIONAL`、`SERVER_WIN`、`LAST_WRITE_WIN` 会明确拒绝，不能因旧版曾接受就认为已实现。旧规则原文保留，升级前检查；不要为了通过校验擅自改变业务方向。未写 `delete_mode` 的旧规则仍按 SOFT，需要对应软删列；HARD 仅响应源 DELETE，不清理目标多余行。
 

@@ -1,6 +1,7 @@
-param([string]$CandidatePath = '', [ValidateSet('EDGE_TO_SERVER','SERVER_TO_EDGE')][string]$Direction = 'EDGE_TO_SERVER', [switch]$Bidirectional, [switch]$AlignmentCapture)
+param([string]$CandidatePath = '', [ValidateSet('EDGE_TO_SERVER','SERVER_TO_EDGE')][string]$Direction = 'EDGE_TO_SERVER', [switch]$Bidirectional, [switch]$AlignmentCapture, [switch]$InitialAlignment, [ValidateSet('edge','server','empty')][string]$AlignmentSource = 'edge')
 $ErrorActionPreference='Stop'
 if($Bidirectional -and $AlignmentCapture){throw 'Choose one owned pipeline scenario'}
+if($InitialAlignment -and -not $Bidirectional){throw 'InitialAlignment requires Bidirectional'}
 $repo=[IO.Path]::GetFullPath((Split-Path -Parent $PSScriptRoot))
 $run=[guid]::NewGuid().ToString('N')
 $root=Join-Path $repo ".cache/canal-business/$run"
@@ -9,7 +10,7 @@ $docker='C:/Program Files/Docker/Docker/resources/bin/docker.exe'
 $containers=[Collections.Generic.List[string]]::new()
 $network=''
 $saved=@{}
-foreach($name in @('NODEBRIDGE_OWNED_CDC_FIXTURE','NODEBRIDGE_CDC_FIXTURE_ROOT','NODEBRIDGE_CDC_TEST_DSN','NODEBRIDGE_CDC_TEST_RABBITMQ_URL','NODEBRIDGE_CDC_TEST_CANAL_ADDR','NODEBRIDGE_CDC_TEST_SECOND_CANAL_ADDR','NODEBRIDGE_CDC_DIRECTION')){$saved[$name]=[Environment]::GetEnvironmentVariable($name,'Process')}
+foreach($name in @('NODEBRIDGE_OWNED_CDC_FIXTURE','NODEBRIDGE_CDC_FIXTURE_ROOT','NODEBRIDGE_CDC_TEST_DSN','NODEBRIDGE_CDC_TEST_SECOND_DSN','NODEBRIDGE_CDC_TEST_RABBITMQ_URL','NODEBRIDGE_CDC_TEST_CANAL_ADDR','NODEBRIDGE_CDC_TEST_SECOND_CANAL_ADDR','NODEBRIDGE_CDC_DIRECTION','NODEBRIDGE_CDC_INITIAL_ALIGNMENT','NODEBRIDGE_CDC_ALIGNMENT_SOURCE')){$saved[$name]=[Environment]::GetEnvironmentVariable($name,'Process')}
 function Docker-ID([string[]]$Arguments){
     $output=& $docker @Arguments
     if($LASTEXITCODE -ne 0){throw 'owned Docker fixture creation failed'}
@@ -32,17 +33,27 @@ try{
     $network=Docker-ID @('network','create',"nb-cdc-$run")
     $mysql=Docker-ID @('run','-d','--rm','--network',$network,'--network-alias','owned-mysql','--name',"nb-cdc-mysql-$run",'--cpus','1','--memory','768m','-p','127.0.0.1::3306','-e','MYSQL_ROOT_PASSWORD=owned_cdc_fixture_only','-e','MYSQL_ROOT_HOST=%','mysql:8.0.38','--server-id=98101','--log-bin=mysql-bin','--binlog-format=ROW','--binlog-row-image=FULL','--default-authentication-plugin=mysql_native_password')
     $containers.Add($mysql)
+	$databases=@($mysql)
+	if($Bidirectional){
+		$secondMySQL=Docker-ID @('run','-d','--rm','--network',$network,'--network-alias','owned-second-mysql','--name',"nb-cdc-second-mysql-$run",'--cpus','1','--memory','768m','-p','127.0.0.1::3306','-e','MYSQL_ROOT_PASSWORD=owned_cdc_fixture_only','-e','MYSQL_ROOT_HOST=%','mysql:8.0.38','--server-id=98104','--log-bin=mysql-bin','--binlog-format=ROW','--binlog-row-image=FULL','--default-authentication-plugin=mysql_native_password')
+		$containers.Add($secondMySQL)
+		$databases+=,$secondMySQL
+		$secondMySQLPort=Port $secondMySQL 3306
+		$env:NODEBRIDGE_CDC_TEST_SECOND_DSN="root:owned_cdc_fixture_only@tcp(127.0.0.1:$secondMySQLPort)/"
+	}
     $rabbit=Docker-ID @('run','-d','--rm','--network',$network,'--name',"nb-cdc-rabbit-$run",'--cpus','1','--memory','512m','-p','127.0.0.1::5672','-e','RABBITMQ_DEFAULT_USER=owned_cdc','-e','RABBITMQ_DEFAULT_PASS=owned_cdc_fixture_only','rabbitmq:3-management')
     $containers.Add($rabbit)
-    $deadline=(Get-Date).AddSeconds(90)
+    foreach($databaseID in $databases){
+	$deadline=(Get-Date).AddSeconds(90)
     $mysqlReady=$false
     do{
-        $probe=& $docker exec $mysql mysql --protocol=tcp --host=127.0.0.1 --user=root --password=owned_cdc_fixture_only --batch --skip-column-names --execute='SELECT 1' 2>&1
+        $probe=& $docker exec $databaseID mysql --protocol=tcp --host=127.0.0.1 --user=root --password=owned_cdc_fixture_only --batch --skip-column-names --execute='SELECT 1' 2>&1
         $mysqlReady=$LASTEXITCODE -eq 0
         if($mysqlReady){break}
         Start-Sleep -Milliseconds 500
     }while((Get-Date)-lt $deadline)
     if(-not $mysqlReady){throw "owned MySQL readiness timed out: $probe"}
+	}
     $instance=@'
 canal.instance.mysql.slaveId=98102
 canal.instance.gtidon=false
@@ -71,7 +82,9 @@ canal.mq.partition=0
     $readyPorts=@(@($rabbitPort,'RabbitMQ'),@($canalPort,'Canal'))
     if($Bidirectional -or $AlignmentCapture){
         $secondPath=Join-Path $root 'second-instance.properties'
-        $instance.Replace('slaveId=98102','slaveId=98103').Replace('nb_cdc_source','nb_cdc_target').Replace('source_rows','target_rows') | Set-Content -LiteralPath $secondPath -Encoding ascii
+		$secondInstance=$instance.Replace('slaveId=98102','slaveId=98103').Replace('nb_cdc_source','nb_cdc_target').Replace('source_rows','target_rows')
+		if($Bidirectional){$secondInstance=$secondInstance.Replace('owned-mysql:3306','owned-second-mysql:3306')}
+        $secondInstance | Set-Content -LiteralPath $secondPath -Encoding ascii
         $secondCanal=Docker-ID @('run','-d','--rm','--network',$network,'--name',"nb-cdc-second-canal-$run",'--cpus','1','--memory','768m','-p','127.0.0.1::11111','-e','JAVA_OPTS=-Xms128m -Xmx512m -Xmn64m','--mount',"type=bind,source=$secondPath,target=/home/admin/canal-server/conf/example/instance.properties,readonly",'canal/canal-server:latest')
         $containers.Add($secondCanal)
         $secondPort=Port $secondCanal 11111
@@ -85,6 +98,8 @@ canal.mq.partition=0
     }
     $env:NODEBRIDGE_OWNED_CDC_FIXTURE='1'
     $env:NODEBRIDGE_CDC_DIRECTION=$Direction
+    $env:NODEBRIDGE_CDC_INITIAL_ALIGNMENT=[string][int][bool]$InitialAlignment
+    $env:NODEBRIDGE_CDC_ALIGNMENT_SOURCE=$AlignmentSource
     $env:NODEBRIDGE_CDC_FIXTURE_ROOT=$root
     $env:NODEBRIDGE_CDC_TEST_DSN="root:owned_cdc_fixture_only@tcp(127.0.0.1:$mysqlPort)/"
     $env:NODEBRIDGE_CDC_TEST_RABBITMQ_URL="amqp://owned_cdc:owned_cdc_fixture_only@127.0.0.1:$rabbitPort/"
@@ -94,7 +109,7 @@ canal.mq.partition=0
     if($AlignmentCapture){$testName='^TestOwnedAlignmentCaptureProbe$'}
     & go test ./cmd/sync-agent -run $testName -count=1 -timeout=180s -v 2>&1 | Tee-Object -FilePath (Join-Path $root 'test-output.txt')
     if($LASTEXITCODE -ne 0){throw "CDC fixture failed; evidence at $root"}
-    [ordered]@{passed=$true;direction=$Direction;bidirectional=[bool]$Bidirectional;candidate_sha256=(Get-FileHash -LiteralPath (Join-Path $root 'SyncAgent.exe')).Hash;mysql_port=$mysqlPort;rabbitmq_port=$rabbitPort;canal_port=$canalPort;scope='owned containers and candidate CLI; not installed product'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'evidence.json') -Encoding utf8
+    [ordered]@{passed=$true;direction=$Direction;bidirectional=[bool]$Bidirectional;mysql_instances=$databases.Count;candidate_sha256=(Get-FileHash -LiteralPath (Join-Path $root 'SyncAgent.exe')).Hash;mysql_port=$mysqlPort;rabbitmq_port=$rabbitPort;canal_port=$canalPort;scope='owned containers and candidate CLI; not installed product'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'evidence.json') -Encoding utf8
     Write-Host "Evidence: $root"
 }finally{
     foreach($id in $containers){

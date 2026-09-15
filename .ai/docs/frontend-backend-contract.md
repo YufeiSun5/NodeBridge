@@ -1,12 +1,26 @@
 # Frontend Backend Contract
 
+2026-09-15 NB-RECONNECT：运行状态WorkerStatus新增consecutive_errors，连续失败递增、成功处理或空闲探测成功归零；last_processed_at仍只记录实际处理成功，不以进程running/重连成功替代。RabbitMQ失败日志区分transport reset/reconnect failed及worker recovered，复用现有错误诊断与队列指标，不新增Wails方法或业务规则字段。
+
+2026-09-14 0.48.5：SyncRule新增可选name（显示名称）；UI列表/详情优先名称，未填回退id，已保存id只读。名称随YAML及现有DTO保存，CAS仍覆盖完整文件；名称不参与对齐规则语义/计划哈希或Agent运行语义版本，因此修改名称不要求重启。旧无name规则和既有对齐证明兼容，不开放改ID/删证明。安装器两种组件模式均调用upgrade-system，使用现有配置角色与MySQL系统库；记录sync_schema_migration校验值和sync_schema_version，失败不恢复UI/报告成功，初次未配置明确跳过。不新增业务表列。
+
+2026-09-14 0.48.4：双向下行尊重已编译规则的目标业务库，系统连接默认库不再覆盖反向/中继映射；逗号分隔 Canal 过滤追加独立系统表表达式。无新增 Wails/MCP 方法、DTO、规则字段或迁移，不要求修改业务表。沿用 0.48.3 小屏规则工作区。
+
+2026-09-14 0.48.2：启动只检查当前启用规则涉及的本地物理源/目标表的对齐状态，无关禁用表的失败作业不再阻断；同表未完成对齐仍阻断，方向/规则ID变更不能绕过。StartAgent/MCP start仍返回OperationResult，但成功须等对应PID发布ready且短暂稳定；提前退出/超时返回ok=false、error及本次启动诊断。AgentProcessStatus可为starting，running只说明启动确认及进程存活，不等于全链路业务验收。无新方法或用户参数。
+
+2026-09-14 0.48.1：双向首次对齐不再要求业务表含last_event_id/updated_by_node，业务同名列按原值映射，不覆盖。回放证据转为NodeBridge系统库010迁移的sync_replay_marker/sync_replay_position。Wails/MCP方法、DTO与用户参数不变，两端须同版本并完成系统迁移；缺标记订阅时捕获屏障失败，不静默放行。未改变时钟/LWW策略，不宣称现场时差问题已解决。
+
+2026-09-12 0.48.0多端/MCP：`StartInitialAlignment`保留`rule_id/peer_node_id/confirm`；Server的peer可为逗号分隔全部参与Edge，Edge仍唯一Server。既有Rules页提供中心多选和三语，中心按选定目标表匹配每个Edge唯一保存规则；异名映射用独立rule_id和source_node_ids，同名结构可共享规则。新增MCP start/status/interrupt三个工具，重试复用start；普通stdio42工具5资源，未新增审批。running只表示受理，completed才表示完整组就绪；客户端须保持当前stdio并轮询，断线未知结果需重连核验。原始256MiB/编码512MiB/每复制15分钟/组1小时；中心源与边缘源各200MiB真实三节点短测通过。Canal需足够未ACK缓存与堆（受管默认512MiB/2GiB，外部和复用组件须另外核验重启）；不支持在线加成员或将既有冲突历史复制给新成员。以下0.47的两节点/64MiB/无MCP表述是历史记录，由本条覆盖。
+
 本文件定义 NodeBridge Wails UI 的前后端契约。前端只调用 Wails binding，不直接访问 SyncAgent HTTP API、RabbitMQ、MySQL 或配置文件。
 
 ## 通用规则
 
-2026-09-12 FB-107启动保护：Agent发现`sync_alignment_job`中的未完成对齐作业时以`alignment_cutover_pending`拒绝启动；沿用已有运行错误/日志展示，无新增DTO或Wails方法。复制的TARGET_COMMITTED/TARGET_CONFIRMED均不等于CDC已交接，不提供绕过阻断的启用按钮。账本仅由内部独占测试使用，公开首次对齐执行能力仍为false。
+2026-09-12 FB-107接口：`StartInitialAlignment({rule_id,peer_node_id,confirm})`异步运行明确两节点的手动对齐/已提交结果恢复；两端均须显式执行且Agent已停，复用进程锁，不自动停止Agent或连接远端MySQL。`GetInitialAlignmentStatus()`返回rule_id/peer_node_id/running/stage/plan_id/rows/message/started_at/updated_at。stage为idle/waiting_peer/checking/copying/recovering/preparing_incremental/cancelling_uncommitted/completed/failed/stopping/unknown。`InterruptInitialAlignment()`只中断本窗口当前操作，不能撤销已提交业务数据或删除作业。完成表示双方持久交接已确认，仍由用户显式启动Agent；管理方法沿用requireAdmin。两端CLI到真实Agent的三种起点短测通过后，公开initial_alignment.execute和sync.bidirectional=true；online=false，不增加MCP操作工具。
 
-2026-09-11 FB-107事件状态补充：`state`/`apply_status`新增`superseded`（LWW旧事件已处理但未覆盖获胜行）和`recorded_outcome_unknown`（有Apply收据但仲裁结果查询失败）。`applied_at`沿用收据提交时间，不证明当前行值。`superseded`不属于失败重试，后续转发仍失败时state可为retrying而apply_status为superseded；前端用三语区分，不显示为已写入。
+2026-09-12 FB-107启动保护：非CANCELLED作业必须有核验通过的双方ACTIVE交接证明，否则Agent以`alignment_cutover_pending`拒绝启动。TARGET_COMMITTED/TARGET_CONFIRMED收据本身不够；禁止删除账本解除阻断。重试发现目标尚未提交时，先锁定并撤销目标，再核对撤销源，保留原计划/标记/摘要并返回明确重试提示；双方再次执行才重建计划。每次最多64MiB/两分钟，两端非空拒绝覆盖。已有映射固定，规则保存的Enable变化使用当前配置；启用双向必须匹配本机持久ACTIVE证明，仍执行CAS和本机预检。
+
+2026-09-12 FB-107事件状态：`state`/`apply_status`的`superseded`表示LWW旧事件未覆盖获胜行，或旧消息已被首次全量基线取代并留档；后者没有Apply收据，applied_at为空并返回明确warning。`recorded_outcome_unknown`表示有Apply收据但仲裁结果查询失败。`applied_at`是收据提交时间，不证明当前行值。后续转发仍失败时state可为retrying而apply_status为superseded；前端用三语区分，不显示为已写入。
 
 2026-09-11后续整改覆盖下方首批限制（源码，未出包）：`PreflightSyncRule({rule_id,side,source_schema?})` / `nodebridge_rule_preflight` 只检查所选本机源/目标，返回结构、findings、checked_permissions与unverified。新增启用或修改已启用规则必须通过本机职责端预检；禁用草稿可离线保存。`source_schema`仅用于目标侧比较，来源新鲜度明确未核验。
 
@@ -16,11 +30,11 @@
 
 `nodebridge_mysql_schema/query/mutation_plan/mutation_apply`新增可选rule_id+side（source/target），table须精确匹配该端规则引用；不改默认mysql.database，不开放任意SQL，系统表写保护保留。原无选择参数调用行为不变。MCP结构化参数统一UseNumber，数值主键不经float64。
 
-2026-09-11 业务整改源码合同（未出包）：`SyncRule.delete_mode` 为 `HARD | SOFT`。旧文件缺省按 SOFT 读取，下次显式保存写出 SOFT；读取不改写文件。新建 UI 规则默认显式 HARD，物理 DELETE 不要求软删字段，不推导删除目标额外行。源端软删 UPDATE 仍为 UPDATE。SOFT 的结构预检尚未实现，不能宣称保存成功等于结构可用。
+`SyncRule.delete_mode` 为 `HARD | SOFT`。旧文件缺省按 SOFT 读取，下次显式保存写出 SOFT；读取不改写文件。新建 UI 规则默认显式 HARD，物理 DELETE 不要求软删字段，不推导删除目标额外行。源端软删 UPDATE 仍为 UPDATE。SOFT 的本机结构预检要求实际软删列及兼容类型，不以配置保存代替端到端运行验收。
 
-普通 INSERT 不再 UPSERT；1062 返回 `unique_key_conflict`，不覆盖已有主键。同一 event_id 仍按账本幂等；不同 event_id 的重复主键也是冲突。UPDATE 0 变更行时在同事务锁定检查，缺失返回 `target_row_missing`，同值行成功；异常多行回滚。事件键必须完整且非 NULL；Before/After 可见的主键变化、映射碰撞拒绝。真实目标主键/schema 预检尚未完成。
+普通单向INSERT不再UPSERT；1062返回`unique_key_conflict`，不覆盖已有主键。同一event_id按账本幂等；不同event_id的重复主键是冲突。UPDATE 0变更行时同事务锁定检查，缺失返回`target_row_missing`，同值行成功；异常多行回滚。键必须完整非NULL；可见的主键变化和映射碰撞拒绝。实际目标主键/schema在本机预检；已对齐LWW路径按源版本仲裁后允许恢复获胜镜像，不套用普通单向缺行策略。
 
-启用规则只支持 conflict_policy NONE；SERVER_WIN/LAST_WRITE_WIN 和 BIDIRECTIONAL 明确拒绝启用，不再以配置枚举冒充能力。方向/策略未知值拒绝。`GetCapabilities`/`nodebridge_capabilities` 如实声明上述能力及未实现的首次对齐/规则预检。保存规则仍不提供 CAS 或 active_revision，保存成功不代表运行中已生效。
+普通单向启用规则支持conflict_policy NONE；已完成首次对齐的单Edge/单Server映射对支持BIDIRECTIONAL+LAST_WRITE_WIN，SERVER_WIN仍不支持。LWW依据源binlog秒级时间及确定性平局排序，不以接收/处理时间替代；源时钟回退时后发指令可能成为loser，必须保持源时钟可靠。严格业务指令时间字段另行约定。保存使用CAS及saved/active revision，保存成功不代表运行中已热生效。
 
 MCP v0.46 实验室扩展：`SyncAgent.exe mcp-stdio -lab-full-access` 支持所有 `appconfig.Config` 字段的部分更新，包括密码/token/security/mcp_server，及全部 SyncRule 字段、自启动、真实诊断、重试和同步进程控制。实验室模式绕过 MCP 开关和管理解锁，不改变 Wails 方法鉴权；保留配置/规则校验、加密与脱敏。CLI `mcp-client-config -ssh-host user@ip -lab-full-access` 生成 Windows/Mac 客户端可用的 SSH stdio 配置。详见 `docs/mcp-service.md`。本版 Agent 状态支持跨 UI/MCP 进程识别；升级前须停止旧版同步进程。
 
@@ -44,6 +58,9 @@ MCP v0.46 实验室扩展：`SyncAgent.exe mcp-stdio -lab-full-access` 支持所
 | `TestRabbitMQ(req)` | `appconfig.RabbitMQConfig` | `uiapi.TestResult` | 分别测试本地和中心 URL；请求密码或 URL 凭据为 `******` 时沿用当前已保存值。 |
 | `GetSyncRules()` | none | `uiapi.SyncRulesDTO` | 优先读取 `%ProgramData%\NodeBridge\sync-rules.yaml`，缺失时回退 example。 |
 | `SaveSyncRules(req)` | `uiapi.SaveSyncRulesRequest` | `uiapi.SyncRulesDTO` | 校验 identifier、来源节点作用域、主键映射、列映射及删列来源约束后落盘。 |
+| `StartInitialAlignment(req)` | `uiapi.InitialAlignmentRequest` | `uiapi.InitialAlignmentStatus` | 明确rule_id/peer_node_id/confirm，管理解锁；异步执行手动两端对齐。 |
+| `GetInitialAlignmentStatus()` | none | `uiapi.InitialAlignmentStatus` | 本窗口状态或持久最后状态；重开后未终结操作显示unknown而非成功。 |
+| `InterruptInitialAlignment()` | none | `uiapi.InitialAlignmentStatus` | 管理解锁；中断不撤销已提交数据。 |
 | `GetNodeOptions()` | none | `uiapi.NodeOptionsResponse` | 只读返回 ACTIVE Edge 节点候选，用于 Rules 页 `dispatch_node_ids` 选择；配置缺失返回空列表和 `unknown`。 |
 | `GetQueueStatus()` | none | `uiapi.QueueStatusResponse` | 使用 RabbitMQ passive declare 查询队列深度；无法连接时返回 error 状态。 |
 | `GetFailedEvents(req)` | `uiapi.FailedEventsRequest` | `uiapi.FailedEventsResponse` | 从 SyncAgent MySQL 系统表查询失败 ACK。 |

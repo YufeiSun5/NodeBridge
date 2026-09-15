@@ -20,12 +20,16 @@ func (s *MCPService) SaveSyncRules(ctx context.Context, args json.RawMessage) (a
 	}
 	if req.Rules != nil {
 		set := rules.RuleSet{Rules: req.Rules}
+		if err := s.app.preparePairedRuleSave(ctx, &set); err != nil {
+			return nil, err
+		}
 		if err := set.Validate(); err != nil {
 			return nil, err
 		}
 		if err := s.app.checkRuleActivation(ctx, set); err != nil {
 			return nil, err
 		}
+		return s.SaveValidatedRuleSet(ctx, set, req.ExpectedRevision)
 	}
 	return s.StaticService.SaveSyncRules(ctx, args)
 }
@@ -47,7 +51,7 @@ func (a *App) rulesDTO(items []rules.SyncRule, revision string) uiapi.SyncRulesD
 	}
 	dto.ActiveRevision = state.RulesRevision
 	dto.Activation = "active"
-	if revision != state.RulesRevision {
+	if revision != state.RulesRevision && (state.RulesRuntimeRevision == "" || state.RulesRuntimeRevision != rules.RuntimeRevision(rules.RuleSet{Rules: items})) {
 		dto.Activation = "restart_required"
 	}
 	return dto

@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -349,6 +350,26 @@ func activateCanalDestination(configDir, destination string) error {
 	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
 	lines = setCanalProperty(lines, "canal.destinations", destination)
 	lines = setCanalProperty(lines, "canal.auto.scan", "false")
+	// Unacknowledged alignment probes must retain a complete large snapshot.
+	for _, property := range []struct {
+		key     string
+		minimum uint64
+	}{{"canal.instance.memory.buffer.size", 16384}, {"canal.instance.memory.buffer.memunit", 32768}} {
+		key, value := property.key, property.minimum
+		for _, line := range lines {
+			left, right, found := strings.Cut(line, "=")
+			if found && strings.TrimSpace(left) == key {
+				current, err := strconv.ParseUint(strings.TrimSpace(right), 10, 64)
+				if err != nil {
+					return fmt.Errorf("invalid managed Canal property %s: %w", key, err)
+				}
+				if current > value {
+					value = current
+				}
+			}
+		}
+		lines = setCanalProperty(lines, key, strconv.FormatUint(value, 10))
+	}
 	content := strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
 	return atomicfile.Write(path, []byte(content), 0o600)
 }

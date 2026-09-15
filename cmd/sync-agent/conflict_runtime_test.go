@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
@@ -66,8 +67,13 @@ func TestConflictRuntimeDisabledPreservesSource(t *testing.T) {
 }
 
 func TestConflictCaptureFilterKeepsBusinessAndAddsOnlyLocalFence(t *testing.T) {
-	pattern := regexp.MustCompile("^(?:" + conflictCaptureFilter(`source\.(orders|items)`, "nb_test") + ")$")
-	for _, name := range []string{"source.orders", "source.items", "nb_test.sync_capture_fence"} {
+	pattern := regexp.MustCompile("^(?:" + strings.ReplaceAll(conflictCaptureFilter(`source\.(orders|items),other\.products`, "nb_test"), ",", "|") + ")$")
+	for _, expression := range strings.Split(conflictCaptureFilter(`source\.(orders|items),other\.products`, "nb_test"), ",") {
+		if _, err := regexp.Compile(expression); err != nil {
+			t.Fatalf("invalid Canal expression %q: %v", expression, err)
+		}
+	}
+	for _, name := range []string{"source.orders", "source.items", "other.products", "nb_test.sync_capture_fence", "nb_test.sync_replay_marker"} {
 		if !pattern.MatchString(name) {
 			t.Fatal(name)
 		}

@@ -2,49 +2,19 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"os"
 
+	"github.com/YufeiSun5/NodeBridge/internal/alignment"
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
 	"github.com/YufeiSun5/NodeBridge/internal/rulecheck"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
 )
 
-type pairManifest struct {
-	Version int                      `json:"version"`
-	Pairs   []rulecheck.ObservedPair `json:"pairs"`
-}
+type pairManifest = rulecheck.PairManifest
 
 func readPairManifest(path string) ([]rulecheck.ObservedPair, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if !info.Mode().IsRegular() || info.Size() > 16<<20 {
-		return nil, errors.New("bidirectional_manifest_size_invalid")
-	}
-	decoder := json.NewDecoder(io.LimitReader(f, 16<<20+1))
-	decoder.DisallowUnknownFields()
-	var manifest pairManifest
-	if err := decoder.Decode(&manifest); err != nil {
-		return nil, err
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return nil, errors.New("bidirectional_manifest_trailing_data")
-	}
-	if manifest.Version != 1 || len(manifest.Pairs) == 0 || len(manifest.Pairs) > 256 {
-		return nil, errors.New("bidirectional_manifest_version_or_count_invalid")
-	}
-	return manifest.Pairs, nil
+	return rulecheck.ReadPairManifest(path)
 }
 
 func resolveEndpointRules(ctx context.Context, cfg *appconfig.Config, set *rules.RuleSet, path string) (rulecheck.EndpointRules, error) {
@@ -61,6 +31,7 @@ func resolveEndpointRules(ctx context.Context, cfg *appconfig.Config, set *rules
 		if err != nil {
 			return rulecheck.EndpointRules{}, fmt.Errorf("read pair manifest: %w", err)
 		}
+		observations = activePairGroups(cfg.Node.ID, cfg.Mode, *set, observations)
 	}
 	compiled, err := rulecheck.CompileEndpoint(cfg.Node.ID, cfg.Mode, *set, observations)
 	if err != nil {
@@ -72,6 +43,13 @@ func resolveEndpointRules(ctx context.Context, cfg *appconfig.Config, set *rules
 			return rulecheck.EndpointRules{}, err
 		}
 		defer db.Close()
+		proofs, err := alignment.LoadActiveCutoversForTables(ctx, db, runtimeTableScopes(compiled))
+		if err != nil {
+			return rulecheck.EndpointRules{}, err
+		}
+		if err := alignment.VerifyObservedPairs(observations, proofs); err != nil {
+			return rulecheck.EndpointRules{}, err
+		}
 		if err := rulecheck.VerifyLocalObservations(ctx, db, cfg.Node.ID, observations); err != nil {
 			return rulecheck.EndpointRules{}, err
 		}
@@ -89,4 +67,32 @@ func resolveEndpointRules(ctx context.Context, cfg *appconfig.Config, set *rules
 		}
 	}
 	return compiled, nil
+}
+
+// A local enabled pair needs every remote mapping in its certified group.
+func activePairGroups(node, mode string, set rules.RuleSet, pairs []rulecheck.ObservedPair) []rulecheck.ObservedPair {
+	type group struct{ node, database, table string }
+	key := func(pair rulecheck.ObservedPair) group {
+		return group{pair.ServerNode, pair.Server.Database, pair.Server.Table}
+	}
+	enabled := map[string]bool{}
+	for _, rule := range set.Rules {
+		if rule.Enable && rule.Direction == rules.DirectionBidirectional {
+			enabled[rule.ID] = true
+		}
+	}
+	groups := map[group]bool{}
+	for _, pair := range pairs {
+		local := mode == "edge" && pair.EdgeNode == node || mode == "server" && pair.ServerNode == node
+		if local && enabled[pair.Rule.ID] {
+			groups[key(pair)] = true
+		}
+	}
+	var active []rulecheck.ObservedPair
+	for _, pair := range pairs {
+		if groups[key(pair)] {
+			active = append(active, pair)
+		}
+	}
+	return active
 }

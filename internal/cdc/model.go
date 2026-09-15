@@ -18,16 +18,17 @@ const (
 )
 
 type ChangeEvent struct {
-	DatabaseName string                     `json:"database_name"`
-	TableName    string                     `json:"table_name"`
-	Operation    Operation                  `json:"operation"`
-	PrimaryKey   map[string]any             `json:"primary_key"`
-	Before       map[string]any             `json:"before,omitempty"`
-	After        map[string]any             `json:"after,omitempty"`
-	SchemaChange *dbgovernance.SchemaChange `json:"schema_change,omitempty"`
-	BinlogFile   string                     `json:"binlog_file,omitempty"`
-	BinlogPos    uint32                     `json:"binlog_pos,omitempty"`
-	EventTime    time.Time                  `json:"event_time"`
+	ReplayChecked bool                       `json:"-"`
+	DatabaseName  string                     `json:"database_name"`
+	TableName     string                     `json:"table_name"`
+	Operation     Operation                  `json:"operation"`
+	PrimaryKey    map[string]any             `json:"primary_key"`
+	Before        map[string]any             `json:"before,omitempty"`
+	After         map[string]any             `json:"after,omitempty"`
+	SchemaChange  *dbgovernance.SchemaChange `json:"schema_change,omitempty"`
+	BinlogFile    string                     `json:"binlog_file,omitempty"`
+	BinlogPos     uint32                     `json:"binlog_pos,omitempty"`
+	EventTime     time.Time                  `json:"event_time"`
 }
 
 type Reader interface {

@@ -13,6 +13,7 @@ import (
 	"github.com/YufeiSun5/NodeBridge/internal/conflict"
 	"github.com/YufeiSun5/NodeBridge/internal/event"
 	"github.com/YufeiSun5/NodeBridge/internal/mapper"
+	"github.com/YufeiSun5/NodeBridge/internal/replay"
 	"github.com/YufeiSun5/NodeBridge/internal/rulecheck"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
 )
@@ -108,6 +109,11 @@ func (w RepairWorker) repair(ctx context.Context, key conflict.RowKey, candidate
 		return false, err
 	}
 	physicalWrite := true
+	mapped.TransactionReplay = true
+	token, err := replay.Begin(ctx, tx, mapped.TargetDatabase, mapped.TargetTable)
+	if err != nil {
+		return false, err
+	}
 	switch mapped.Event.EventType {
 	case event.TypeDelete:
 		if exists {
@@ -129,6 +135,9 @@ func (w RepairWorker) repair(ctx context.Context, key conflict.RowKey, candidate
 		if _, err := tx.ExecContext(ctx, "INSERT INTO sync_repair_replay (event_id,node_id,database_name,table_name,operation) VALUES (?,?,?,?,?)", mapped.Event.EventID, w.NodeID, key.Database, key.Table, mapped.Event.EventType); err != nil {
 			return false, err
 		}
+	}
+	if err := replay.End(ctx, tx, token, mapped.TargetDatabase, mapped.TargetTable); err != nil {
+		return false, err
 	}
 	if err := insertApplyLog(ctx, tx, mapped, time.Now()); err != nil {
 		return false, err

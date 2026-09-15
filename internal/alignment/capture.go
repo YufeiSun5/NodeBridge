@@ -156,7 +156,7 @@ func startSnapshotCapture(ctx context.Context, db *sql.DB, client SnapshotCaptur
 			_ = p.Close()
 		}
 	}()
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, SnapshotTimeout)
 	defer cancel()
 	if err := client.Connect(ctx); err != nil {
 		return nil, err
@@ -229,7 +229,7 @@ func (p *SnapshotCapture) WaitMarker(ctx context.Context, token string) (Snapsho
 	if _, err := hex.DecodeString(token); err != nil {
 		return SnapshotBoundary{}, errors.New("alignment_capture_marker_invalid")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, SnapshotTimeout)
 	defer cancel()
 	for {
 		if err := ctx.Err(); err != nil {

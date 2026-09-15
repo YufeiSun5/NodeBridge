@@ -10,7 +10,6 @@ import (
 
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
 	"github.com/YufeiSun5/NodeBridge/internal/rowvalue"
-	withlinclient "github.com/withlin/canal-go/client"
 	withlinprotocol "github.com/withlin/canal-go/protocol"
 	withlinentry "github.com/withlin/canal-go/protocol/entry"
 	"google.golang.org/protobuf/proto"
@@ -41,12 +40,12 @@ func NewWithlinClient(config Config) (*WithlinClient, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-	host, port, err := splitAddress(config.Address)
+	_, _, err := splitAddress(config.Address)
 	if err != nil {
 		return nil, err
 	}
 	factory := func() WithlinConnector {
-		return withlinclient.NewSimpleCanalConnector(host, port, config.Username, config.Password, config.Destination, 60000, int32(time.Hour/time.Millisecond))
+		return &socketConnector{config: config}
 	}
 	return &WithlinClient{
 		Config:           config,
@@ -77,7 +76,7 @@ func (c *WithlinClient) Connect(ctx context.Context) error {
 	if c.connector == nil {
 		return fmt.Errorf("canal connector unavailable")
 	}
-	err := c.connector.Connect()
+	err := runConnector(ctx, c.connector, c.connector.Connect)
 	if err != nil && c.connectorFactory != nil {
 		_ = c.connector.DisConnection()
 		c.connector = nil
@@ -96,7 +95,7 @@ func (c *WithlinClient) Subscribe(ctx context.Context, destination string) error
 	if filter == "" {
 		filter = ".*\\..*"
 	}
-	return c.connector.Subscribe(filter)
+	return runConnector(ctx, c.connector, func() error { return c.connector.Subscribe(filter) })
 }
 
 func (c *WithlinClient) Fetch(ctx context.Context, batchSize int) ([]RowChange, cdc.Offset, error) {
@@ -108,7 +107,12 @@ func (c *WithlinClient) Fetch(ctx context.Context, batchSize int) ([]RowChange, 
 	}
 	timeout := c.TimeoutMS
 	unit := c.UnitMS
-	msg, err := c.connector.GetWithOutAck(int32(defaultBatchSize(batchSize)), &timeout, &unit)
+	var msg *withlinprotocol.Message
+	err := runConnector(ctx, c.connector, func() error {
+		var err error
+		msg, err = c.connector.GetWithOutAck(int32(defaultBatchSize(batchSize)), &timeout, &unit)
+		return err
+	})
 	if err != nil {
 		return nil, cdc.Offset{}, fmt.Errorf("fetch canal message: %w", err)
 	}
@@ -129,7 +133,7 @@ func (c *WithlinClient) Ack(ctx context.Context, offset cdc.Offset) error {
 	if c.connector == nil {
 		return fmt.Errorf("canal connector unavailable")
 	}
-	return c.connector.Ack(offset.BatchID)
+	return runConnector(ctx, c.connector, func() error { return c.connector.Ack(offset.BatchID) })
 }
 
 func IsBatchNotExistError(err error) bool {
@@ -147,7 +151,7 @@ func (c *WithlinClient) Close(ctx context.Context) error {
 	if c.connector == nil {
 		return nil
 	}
-	err := c.connector.DisConnection()
+	err := runConnector(ctx, c.connector, c.connector.DisConnection)
 	// The upstream connector retains its closed socket; reconnect needs a new instance.
 	if c.connectorFactory != nil {
 		c.connector = nil

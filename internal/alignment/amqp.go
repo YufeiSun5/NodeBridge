@@ -10,16 +10,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/YufeiSun5/NodeBridge/internal/rabbitmq"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
 	"github.com/rabbitmq/amqp091-go"
 )
-
-// The offline transport retains unacked input until the target transaction
-// commits. Larger copies need durable staging, not an unbounded broker backlog.
-const MaxSnapshotTransferBytes = 64 * 1024 * 1024
 
 const attemptHeader = "nb_alignment_attempt"
 
@@ -100,7 +95,7 @@ func sendSnapshotAMQP(ctx context.Context, db *sql.DB, conn *amqp091.Connection,
 	if job.Phase != JobPrepared {
 		return CopyResult{}, errors.New("alignment_job_not_prepared")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, SnapshotTimeout)
 	defer cancel()
 	publication, err := conn.Channel()
 	if err != nil {
@@ -123,7 +118,9 @@ func sendSnapshotAMQP(ctx context.Context, db *sql.DB, conn *amqp091.Connection,
 		return CopyResult{}, err
 	}
 	framesQueue, repliesQueue := snapshotQueues(plan)
-	deliveries, err := receipts.ConsumeWithContext(ctx, repliesQueue, "", false, true, false, false, nil)
+	// The select below owns cancellation. ConsumeWithContext can race its
+	// asynchronous basic.cancel against Close and a reused AMQP channel number.
+	deliveries, err := receipts.Consume(repliesQueue, "", false, true, false, false, nil)
 	if err != nil {
 		return CopyResult{}, err
 	}
@@ -132,16 +129,15 @@ func sendSnapshotAMQP(ctx context.Context, db *sql.DB, conn *amqp091.Connection,
 		return CopyResult{}, err
 	}
 	attempt := hex.EncodeToString(random[:])
-	var transferred int
+	var budget snapshotBudget
 	return exportPreparedSnapshot(ctx, db, plan, rule, nodeID, confirm, func(ctx context.Context, frame SnapshotFrame) (CopyResult, error) {
 		body, err := EncodeSnapshotFrame(frame)
 		if err != nil {
 			return CopyResult{}, err
 		}
-		if len(body) > MaxSnapshotTransferBytes-transferred {
-			return CopyResult{}, errors.New("alignment_transfer_limit_exceeded")
+		if err := budget.add(frame, len(body)); err != nil {
+			return CopyResult{}, err
 		}
-		transferred += len(body)
 		if err := publisher.Publish(ctx, rabbitmq.PublishRequest{RoutingKey: framesQueue, Body: body, Headers: amqp091.Table{attemptHeader: attempt}}); err != nil {
 			return CopyResult{}, err
 		}
@@ -200,7 +196,7 @@ func receiveSnapshotAMQP(ctx context.Context, db *sql.DB, conn *amqp091.Connecti
 	if conn == nil || nodeID != plan.Target.NodeID {
 		return CopyResult{}, errors.New("alignment_transport_endpoint_invalid")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, SnapshotTimeout)
 	defer cancel()
 	r, err := NewPreparedSnapshotReceiver(ctx, db, plan, rule, nodeID, confirm)
 	if err != nil {
@@ -230,11 +226,12 @@ func receiveSnapshotAMQP(ctx context.Context, db *sql.DB, conn *amqp091.Connecti
 		return CopyResult{}, err
 	}
 	framesQueue, repliesQueue := snapshotQueues(plan)
-	deliveries, err := input.ConsumeWithContext(ctx, framesQueue, "", false, true, false, false, nil)
+	deliveries, err := input.Consume(framesQueue, "", false, true, false, false, nil)
 	if err != nil {
 		return CopyResult{}, err
 	}
-	attempt, transferred := "", 0
+	attempt := ""
+	var budget snapshotBudget
 	for {
 		select {
 		case <-ctx.Done():
@@ -256,12 +253,11 @@ func receiveSnapshotAMQP(ctx context.Context, db *sql.DB, conn *amqp091.Connecti
 			if attempt != incoming {
 				return CopyResult{}, errors.New("alignment_attempt_changed")
 			}
-			if len(delivery.Body) > MaxSnapshotTransferBytes-transferred {
-				return CopyResult{}, errors.New("alignment_transfer_limit_exceeded")
-			}
-			transferred += len(delivery.Body)
 			frame, err := DecodeSnapshotFrame(delivery.Body)
 			if err != nil {
+				return CopyResult{}, err
+			}
+			if err := budget.add(frame, len(delivery.Body)); err != nil {
 				return CopyResult{}, err
 			}
 			result, receiveErr := r.Accept(ctx, frame)

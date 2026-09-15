@@ -29,6 +29,8 @@ export function GetEventStatus(arg1:eventstatus.Request):Promise<eventstatus.Res
 
 export function GetFailedEvents(arg1:uiapi.FailedEventsRequest):Promise<uiapi.FailedEventsResponse>;
 
+export function GetInitialAlignmentStatus():Promise<uiapi.InitialAlignmentStatus>;
+
 export function GetLogs(arg1:uiapi.LogQuery):Promise<uiapi.LogsResponse>;
 
 export function GetMCPServerStatus():Promise<uiapi.MCPServerStatus>;
@@ -44,6 +46,8 @@ export function GetQueueEventAudit(arg1:datasyncui.QueueEventAuditRequest):Promi
 export function GetQueueStatus():Promise<uiapi.QueueStatusResponse>;
 
 export function GetSyncRules():Promise<uiapi.SyncRulesDTO>;
+
+export function InterruptInitialAlignment():Promise<uiapi.InitialAlignmentStatus>;
 
 export function LoadConfig(arg1:string):Promise<appconfig.Config>;
 
@@ -70,6 +74,8 @@ export function SetAutoStart(arg1:uiapi.SetAutoStartRequest):Promise<uiapi.AutoS
 export function SetMCPServerEnabled(arg1:uiapi.SetMCPServerEnabledRequest):Promise<uiapi.MCPServerStatus>;
 
 export function StartAgent():Promise<uiapi.OperationResult>;
+
+export function StartInitialAlignment(arg1:uiapi.InitialAlignmentRequest):Promise<uiapi.InitialAlignmentStatus>;
 
 export function StopAgent():Promise<uiapi.OperationResult>;
 

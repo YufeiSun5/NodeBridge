@@ -22,6 +22,10 @@ assert.match(service, /SetMCPServerEnabled/, 'service must expose SetMCPServerEn
 assert.match(service, /GetManagedInstallPlan/, 'service must expose GetManagedInstallPlan');
 assert.match(service, /ApplyManagedInstall/, 'service must expose ApplyManagedInstall');
 assert.match(service, /GetNodeOptions/, 'service must expose GetNodeOptions');
+for (const method of ['GetInitialAlignmentStatus', 'StartInitialAlignment', 'InterruptInitialAlignment']) {
+  assert.ok(service.includes(method), `service must expose ${method}`);
+  assert.ok(generated.includes(`function ${method}(`), `generated binding must expose ${method}`);
+}
 assert.match(settingsPage, /admin_password/, 'Settings page must expose admin_password input');
 assert.doesNotMatch(configPage, /admin_password/, 'Config page must not mix app security settings into sync config');
 

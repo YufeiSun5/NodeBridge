@@ -19,7 +19,6 @@ import (
 
 	"github.com/YufeiSun5/NodeBridge/internal/agentlog"
 	"github.com/YufeiSun5/NodeBridge/internal/agentstate"
-	"github.com/YufeiSun5/NodeBridge/internal/alignment"
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
 	"github.com/YufeiSun5/NodeBridge/internal/apply"
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
@@ -54,6 +53,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 		switch args[0] {
 		case "migrate":
 			return runMigrate(args[1:], stdout, stderr)
+		case "upgrade-system":
+			return runUpgradeSystem(args[1:], stdout, stderr)
 		case "apply-event":
 			return runApplyEvent(args[1:], stdout, stderr)
 		case "init-rabbitmq":
@@ -128,6 +129,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return runListNodeConfig(args[1:], stdout, stderr)
 		case "run":
 			return runAgent(args[1:], stdout, stderr)
+		case "initial-alignment":
+			return runInitialAlignment(args[1:], stdout, stderr)
 		}
 	}
 	return runReady(args, stdout, stderr)
@@ -197,6 +200,7 @@ func runAgent(args []string, stdout, stderr io.Writer) (runErr error) {
 	}
 	endpointRules, err := resolveEndpointRules(ctx, cfg, ruleSet, *pairPath)
 	if err != nil {
+		fmt.Fprintf(stderr, "runtime rule resolution failed: %v\n", err)
 		return err
 	}
 	switch cfg.Mode {
@@ -211,17 +215,10 @@ func runAgent(args []string, stdout, stderr io.Writer) (runErr error) {
 	if cfg.RabbitMQ.ServerURL == "" {
 		return fmt.Errorf("rabbitmq.server_url is required for %s run", cfg.Mode)
 	}
-	maintenanceDB, err := openMySQL(cfg)
-	if err != nil {
+	if err := verifyCutoverRules(ctx, cfg, ruleSet, endpointRules); err != nil {
 		return err
 	}
-	err = alignment.CheckPendingJobs(ctx, maintenanceDB)
-	_ = maintenanceDB.Close()
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return err
-	}
-	if err := agentstate.PublishRules(*configPath, *rulesPath, rulesRevision); err != nil {
+	if err := agentstate.PublishRules(*configPath, *rulesPath, rulesRevision, rules.RuntimeRevision(*ruleSet)); err != nil {
 		return err
 	}
 	logger.Info("runtime rules loaded", "rules_revision", rulesRevision)
@@ -240,9 +237,9 @@ func runAgent(args []string, stdout, stderr io.Writer) (runErr error) {
 	fmt.Fprintf(stdout, "sync-agent running mode=%s node_id=%s\n", cfg.Mode, cfg.Node.ID)
 	switch cfg.Mode {
 	case appconfig.ModeEdge:
-		return runEdgeWorkers(ctx, cfg, endpointRules, store, *maxSteps, stdout, stderr, logger)
+		return runEdgeWorkers(ctx, cfg, endpointRules, store, *maxSteps, stdout, stderr, logger, func() error { return agentstate.PublishReady(*configPath) })
 	case appconfig.ModeServer:
-		return runServerWorkers(ctx, cfg, endpointRules, splitCSV(*edges), store, *maxSteps, stdout, stderr, logger)
+		return runServerWorkers(ctx, cfg, endpointRules, splitCSV(*edges), store, *maxSteps, stdout, stderr, logger, func() error { return agentstate.PublishReady(*configPath) })
 	default:
 		return fmt.Errorf("unsupported mode %q", cfg.Mode)
 	}
@@ -273,7 +270,7 @@ func watchStopFile(ctx context.Context, path string, interval time.Duration, can
 	}
 }
 
-func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, endpoint rulecheck.EndpointRules, store *status.RuntimeStore, maxSteps int, stdout, stderr io.Writer, logger *slog.Logger) error {
+func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, endpoint rulecheck.EndpointRules, store *status.RuntimeStore, maxSteps int, stdout, stderr io.Writer, logger *slog.Logger, ready ...func() error) error {
 	ruleSet := &endpoint.Capture
 	if needsConflictRuntime(ruleSet) && !strings.EqualFold(cfg.CDC.Type, "canal") {
 		return fmt.Errorf("conflict_runtime_requires_canal")
@@ -285,20 +282,20 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, endpoint ruleche
 		return fmt.Errorf("rabbitmq.server_url is required for edge run")
 	}
 
-	localConn, err := rabbitmq.Dial(cfg.RabbitMQ.LocalURL)
+	localConn, err := rabbitmq.DialSession(ctx, cfg.RabbitMQ.LocalURL)
 	if err != nil {
 		fmt.Fprintf(stderr, "local rabbitmq connect failed: %v\n", err)
 		return err
 	}
 	defer localConn.Close()
-	serverPublishConn, err := rabbitmq.Dial(cfg.RabbitMQ.ServerURL)
+	serverPublishConn, err := rabbitmq.DialSession(ctx, cfg.RabbitMQ.ServerURL)
 	if err != nil {
 		fmt.Fprintf(stderr, "server rabbitmq connect failed: %v\n", err)
 		return err
 	}
 	defer serverPublishConn.Close()
 	// Downlink stays on Server RabbitMQ. / 下发留在 Server RabbitMQ。 / Downlink は Server RabbitMQ。
-	serverDownlinkConn, err := rabbitmq.Dial(cfg.RabbitMQ.ServerURL)
+	serverDownlinkConn, err := rabbitmq.DialSession(ctx, cfg.RabbitMQ.ServerURL)
 	if err != nil {
 		fmt.Fprintf(stderr, "server downlink rabbitmq connect failed: %v\n", err)
 		return err
@@ -312,18 +309,19 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, endpoint ruleche
 	}
 	defer db.Close()
 
-	publisher, err := rabbitmq.NewPublisher(serverPublishConn.Channel)
+	publisher := serverPublishConn
+	sqlWorker := apply.NewCheckedSQLWorker(db)
+	cutover, err := loadRuntimeCutover(ctx, db, cfg.Node.ID, endpoint)
 	if err != nil {
-		fmt.Fprintf(stderr, "publisher init failed: %v\n", err)
 		return err
 	}
-	sqlWorker := apply.NewCheckedSQLWorker(db)
+	cutover = enabledCutovers(cutover, endpoint)
 	workers := []syncruntime.Worker{
 		{
 			Config: workerConfig("edge-upload", cfg.Sync.RetryIntervalSeconds, maxSteps),
 			Stepper: syncruntime.EdgeUploadBatchRuntime{
 				Source: syncruntime.AMQPBatchGetSource{
-					Channel: localConn.Channel,
+					Session: localConn,
 					Queue:   "edge.upload.cdc.q",
 				},
 				Publisher:     publisher,
@@ -338,10 +336,10 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, endpoint ruleche
 		{
 			Config: workerConfig("edge-downlink", cfg.Sync.RetryIntervalSeconds, maxSteps),
 			Stepper: syncruntime.EdgeDownlinkBatchRuntime{
-				Source: syncruntime.AMQPBatchGetSource{
-					Channel: serverDownlinkConn.Channel,
+				Source: cutoverIncoming(syncruntime.AMQPBatchGetSource{
+					Session: serverDownlinkConn,
 					Queue:   cfg.Node.ID + ".downlink.q",
-				},
+				}, cutover),
 				Consumer:               rabbitmq.Consumer{RequeueOnError: true},
 				Rules:                  &endpoint.Incoming,
 				Worker:                 sqlWorker,
@@ -355,17 +353,13 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, endpoint ruleche
 		},
 	}
 	if strings.EqualFold(cfg.CDC.Type, "canal") {
-		cdcConn, err := rabbitmq.Dial(cfg.RabbitMQ.LocalURL)
+		cdcConn, err := rabbitmq.DialSession(ctx, cfg.RabbitMQ.LocalURL)
 		if err != nil {
 			fmt.Fprintf(stderr, "local cdc rabbitmq connect failed: %v\n", err)
 			return err
 		}
 		defer cdcConn.Close()
-		cdcPublisher, err := rabbitmq.NewPublisher(cdcConn.Channel)
-		if err != nil {
-			fmt.Fprintf(stderr, "cdc publisher init failed: %v\n", err)
-			return err
-		}
+		cdcPublisher := cdcConn
 		canalRuntime, err := newCanalUploadRuntime(cfg, ruleSet, cdc.NewMySQLOffsetStore(db), cdcPublisher, syncstore.New(db))
 		if err != nil {
 			return err
@@ -375,6 +369,7 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, endpoint ruleche
 			return err
 		}
 		canalRuntime.Source, canalRuntime.LocalVersions = source, recorder
+		canalRuntime.Source, canalRuntime.Normalizer = cutoverCapture(canalRuntime.Source, canalRuntime.Normalizer, cutover)
 		if repair != nil {
 			workers = append(workers, syncruntime.Worker{Config: workerConfig("conflict-repair", cfg.Sync.RetryIntervalSeconds, maxSteps), Stepper: repair, Status: store})
 		}
@@ -388,6 +383,11 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, endpoint ruleche
 		workers[i].Logger = logger
 	}
 	group := syncruntime.WorkerGroup{Workers: workers}
+	if len(ready) > 0 {
+		if err := ready[0](); err != nil {
+			return err
+		}
+	}
 	if err := group.Run(ctx); err != nil && err != context.Canceled {
 		return err
 	}
@@ -395,7 +395,7 @@ func runEdgeWorkers(ctx context.Context, cfg *appconfig.Config, endpoint ruleche
 	return nil
 }
 
-func runServerWorkers(ctx context.Context, cfg *appconfig.Config, endpoint rulecheck.EndpointRules, edgeNodeIDs []string, store *status.RuntimeStore, maxSteps int, stdout, stderr io.Writer, logger *slog.Logger) error {
+func runServerWorkers(ctx context.Context, cfg *appconfig.Config, endpoint rulecheck.EndpointRules, edgeNodeIDs []string, store *status.RuntimeStore, maxSteps int, stdout, stderr io.Writer, logger *slog.Logger, ready ...func() error) error {
 	ruleSet := &endpoint.Capture
 	if needsConflictRuntime(ruleSet) && !strings.EqualFold(cfg.CDC.Type, "canal") {
 		return fmt.Errorf("conflict_runtime_requires_canal")
@@ -411,39 +411,36 @@ func runServerWorkers(ctx context.Context, cfg *appconfig.Config, endpoint rulec
 	}
 	defer db.Close()
 
-	conn, err := rabbitmq.Dial(cfg.RabbitMQ.ServerURL)
+	conn, err := rabbitmq.DialSession(ctx, cfg.RabbitMQ.ServerURL)
 	if err != nil {
 		fmt.Fprintf(stderr, "rabbitmq connect failed: %v\n", err)
 		return err
 	}
 	defer conn.Close()
-	replayConn, err := rabbitmq.Dial(cfg.RabbitMQ.ServerURL)
+	replayConn, err := rabbitmq.DialSession(ctx, cfg.RabbitMQ.ServerURL)
 	if err != nil {
 		fmt.Fprintf(stderr, "rabbitmq replay connect failed: %v\n", err)
 		return err
 	}
 	defer replayConn.Close()
 
-	publisher, err := rabbitmq.NewPublisher(conn.Channel)
-	if err != nil {
-		fmt.Fprintf(stderr, "publisher init failed: %v\n", err)
-		return err
-	}
-	replayPublisher, err := rabbitmq.NewPublisher(replayConn.Channel)
-	if err != nil {
-		fmt.Fprintf(stderr, "replay publisher init failed: %v\n", err)
-		return err
-	}
+	publisher := conn
+	replayPublisher := replayConn
 	syncStore := syncstore.New(db)
 	sqlWorker := apply.NewCheckedSQLWorker(db)
+	cutover, err := loadRuntimeCutover(ctx, db, cfg.Node.ID, endpoint)
+	if err != nil {
+		return err
+	}
+	cutover = enabledCutovers(cutover, endpoint)
 	workers := []syncruntime.Worker{
 		{
 			Config: workerConfig("server-ingress", cfg.Sync.RetryIntervalSeconds, maxSteps),
 			Stepper: syncruntime.ServerIngressBatchRuntime{
-				Source: syncruntime.AMQPBatchGetSource{
-					Channel: conn.Channel,
+				Source: cutoverIncoming(syncruntime.AMQPBatchGetSource{
+					Session: conn,
 					Queue:   "server.cdc.ingress.q",
-				},
+				}, cutover),
 				Consumer:   rabbitmq.Consumer{RequeueOnError: true},
 				Rules:      &endpoint.Incoming,
 				Worker:     sqlWorker,
@@ -475,17 +472,13 @@ func runServerWorkers(ctx context.Context, cfg *appconfig.Config, endpoint rulec
 		},
 	}
 	if strings.EqualFold(cfg.CDC.Type, "canal") {
-		serverCDCConn, err := rabbitmq.Dial(cfg.RabbitMQ.ServerURL)
+		serverCDCConn, err := rabbitmq.DialSession(ctx, cfg.RabbitMQ.ServerURL)
 		if err != nil {
 			fmt.Fprintf(stderr, "rabbitmq server cdc connect failed: %v\n", err)
 			return err
 		}
 		defer serverCDCConn.Close()
-		serverCDCPublisher, err := rabbitmq.NewPublisher(serverCDCConn.Channel)
-		if err != nil {
-			fmt.Fprintf(stderr, "server cdc publisher init failed: %v\n", err)
-			return err
-		}
+		serverCDCPublisher := serverCDCConn
 		serverCDCRuntime, err := newCanalServerDispatchRuntime(cfg, ruleSet, cdc.NewMySQLOffsetStore(db), serverCDCPublisher, syncStore, edgeNodeIDs)
 		if err != nil {
 			return err
@@ -495,6 +488,7 @@ func runServerWorkers(ctx context.Context, cfg *appconfig.Config, endpoint rulec
 			return err
 		}
 		serverCDCRuntime.Source, serverCDCRuntime.LocalVersions = source, recorder
+		serverCDCRuntime.Source, serverCDCRuntime.Normalizer = cutoverCapture(serverCDCRuntime.Source, serverCDCRuntime.Normalizer, cutover)
 		if repair != nil {
 			workers = append(workers, syncruntime.Worker{Config: workerConfig("conflict-repair", cfg.Sync.RetryIntervalSeconds, maxSteps), Stepper: repair, Status: store})
 		}
@@ -508,6 +502,11 @@ func runServerWorkers(ctx context.Context, cfg *appconfig.Config, endpoint rulec
 		workers[i].Logger = logger
 	}
 	group := syncruntime.WorkerGroup{Workers: workers}
+	if len(ready) > 0 {
+		if err := ready[0](); err != nil {
+			return err
+		}
+	}
 	if err := group.Run(ctx); err != nil && err != context.Canceled {
 		return err
 	}

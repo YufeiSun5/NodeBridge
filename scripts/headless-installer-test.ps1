@@ -618,6 +618,17 @@ function Patch-CanalStartupJvmOptions {
         foreach ($pattern in @("(?i)\s*-XX:PermSize=\S+", "(?i)\s*-XX:MaxPermSize=\S+")) {
             $after = [regex]::Replace($after, $pattern, "")
         }
+        $after = [regex]::Replace($after, '(?i)-Xmx(\d+)([kmg])\b', {
+            param($match)
+            $bytes = [long]$match.Groups[1].Value
+            switch ($match.Groups[2].Value.ToLowerInvariant()) {
+                'k' { $bytes *= 1KB }
+                'm' { $bytes *= 1MB }
+                'g' { $bytes *= 1GB }
+            }
+            if ($bytes -lt 2GB) { return '-Xmx2g' }
+            return $match.Value
+        })
         if ($after -ne $before) {
             Set-Content -LiteralPath $file.FullName -Value $after -Encoding UTF8
         }

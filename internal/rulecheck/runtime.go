@@ -24,11 +24,31 @@ func CompileEndpoint(node, mode string, set rules.RuleSet, observations []Observ
 		configured[rule.ID] = rule
 	}
 	observed := map[string]bool{}
+	observations = slices.Clone(observations)
+	localGroups := map[string]bool{}
 	for _, pair := range observations {
+		if pair.EdgeNode == node && mode == "edge" {
+			if rule, ok := configured[pair.Rule.ID]; ok {
+				localGroups[pair.ServerNode+":"+pair.Server.Database+"."+pair.Server.Table] = rule.Enable
+			}
+		}
+	}
+	for index, pair := range observations {
 		rule, ok := configured[pair.Rule.ID]
-		if !ok || !reflect.DeepEqual(observedRule(rule), observedRule(pair.Rule)) {
+		if !ok && mode == "edge" && pair.EdgeNode != node {
+			if enabled, member := localGroups[pair.ServerNode+":"+pair.Server.Database+"."+pair.Server.Table]; member {
+				// Remote mappings belong to the certified topology, not the edge's
+				// editable local rule set. Durable proof verification is separate.
+				rule, ok = pair.Rule, true
+				rule.Enable = enabled
+			}
+		}
+		saved, frozen := observedRule(rule), observedRule(pair.Rule)
+		saved.Enable, frozen.Enable = false, false
+		if !ok || !reflect.DeepEqual(saved, frozen) {
 			return result, fmt.Errorf("bidirectional_observation_rule_changed: %s", pair.Rule.ID)
 		}
+		observations[index].Rule.Enable = rule.Enable
 		if (pair.ServerNode == node && mode != "server") || (pair.EdgeNode == node && mode != "edge") {
 			return result, fmt.Errorf("bidirectional_endpoint_role_mismatch")
 		}
@@ -60,6 +80,7 @@ func CompileEndpoint(node, mode string, set rules.RuleSet, observations []Observ
 
 // YAML emits empty lists where JSON may preserve nil; both represent no entries.
 func observedRule(rule rules.SyncRule) rules.SyncRule {
+	rule.Name = ""
 	rule.DeleteMode = rule.EffectiveDeleteMode()
 	for _, values := range []*[]string{&rule.SourceNodeIDs, &rule.DispatchNodeIDs, &rule.PrimaryKeys, &rule.TargetPrimaryKeys, &rule.IncludeColumns, &rule.ExcludeColumns} {
 		if len(*values) == 0 {

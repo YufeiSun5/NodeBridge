@@ -43,6 +43,68 @@ func runtimeFixture() (rules.RuleSet, []rulecheck.ObservedPair) {
 	return set, observations
 }
 
+func TestCompileEndpointAllowsDisplayNameButRejectsIdentityChange(t *testing.T) {
+	set, observations := runtimeFixture()
+	for i := range set.Rules {
+		set.Rules[i].Name = "中文规则名称"
+	}
+	if _, err := rulecheck.CompileEndpoint("edge-1", "edge", set, observations); err != nil {
+		t.Fatal(err)
+	}
+	set.Rules[0].ID = "new-id"
+	if _, err := rulecheck.CompileEndpoint("edge-1", "edge", set, observations); err == nil {
+		t.Fatal("identity replacement bypassed alignment guard")
+	}
+}
+
+func TestCompileEndpointUsesSavedEnableWithoutChangingManifest(t *testing.T) {
+	set, observations := runtimeFixture()
+	set.Rules, observations = set.Rules[:1], observations[:1]
+	set.Rules[0].Enable = false
+	compiled, err := rulecheck.CompileEndpoint("edge-1", "edge", set, observations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, group := range []rules.RuleSet{compiled.Capture, compiled.Incoming} {
+		for _, rule := range group.Rules {
+			if rule.Enable {
+				t.Fatal("disabled rule remains active")
+			}
+		}
+	}
+	if !observations[0].Rule.Enable {
+		t.Fatal("caller manifest mutated")
+	}
+	set.Rules[0].Enable = true
+	compiled, err = rulecheck.CompileEndpoint("edge-1", "edge", set, observations)
+	if err != nil || len(compiled.Capture.Rules) == 0 || !compiled.Capture.Rules[0].Enable {
+		t.Fatal(compiled, err)
+	}
+	if compiled.Capture.Validate() == nil {
+		t.Fatal("observation alone bypasses activation proof")
+	}
+}
+
+func TestCompileEndpointLocalRulesWithCertifiedRemoteProjections(t *testing.T) {
+	set, observations := runtimeFixture()
+	set.Rules = set.Rules[:1]
+	for _, enabled := range []bool{true, false} {
+		set.Rules[0].Enable = enabled
+		compiled, err := rulecheck.CompileEndpoint("edge-1", "edge", set, observations)
+		if err != nil || len(compiled.Capture.Rules) != 1 || len(compiled.Incoming.Rules) != 2 {
+			t.Fatal(compiled, err)
+		}
+		for _, rule := range append(compiled.Capture.Rules, compiled.Incoming.Rules...) {
+			if rule.Enable != enabled {
+				t.Fatal("remote projection does not follow local activation")
+			}
+		}
+	}
+	if _, err := rulecheck.CompileEndpoint("server-1", "server", set, observations); err == nil {
+		t.Fatal("server accepted an unconfigured member")
+	}
+}
+
 func TestCompileEndpointSplitsCaptureAndIncoming(t *testing.T) {
 	set, observations := runtimeFixture()
 	for _, endpoint := range []struct{ node, mode string }{{"edge-1", "edge"}, {"edge-2", "edge"}, {"server-1", "server"}} {
@@ -63,6 +125,33 @@ func TestCompileEndpointSplitsCaptureAndIncoming(t *testing.T) {
 		}
 		if compiled.Capture.Validate() == nil || compiled.Incoming.Validate() == nil {
 			t.Fatal("compilation bypassed public activation gate")
+		}
+	}
+}
+
+func TestCompileEndpointSharedRuleAcrossSameSchemaEdges(t *testing.T) {
+	_, observations := runtimeFixture()
+	shared := observations[0].Rule
+	shared.ID = "shared-rule"
+	shared.SourceNodeIDs = []string{"edge-1", "edge-2"}
+	observations[1].Edge = observations[0].Edge
+	for i := range observations {
+		observations[i].Rule = shared
+	}
+	for _, endpoint := range []struct{ node, mode string }{{"edge-1", "edge"}, {"edge-2", "edge"}, {"server-1", "server"}} {
+		for _, enabled := range []bool{false, true} {
+			shared.Enable = enabled
+			compiled, err := rulecheck.CompileEndpoint(endpoint.node, endpoint.mode, rules.RuleSet{Rules: []rules.SyncRule{shared}}, observations)
+			if err != nil || len(compiled.Capture.Rules) != 1 || len(compiled.Incoming.Rules) != 2 {
+				t.Fatal(endpoint, compiled, err)
+			}
+			seen := map[string]bool{}
+			for _, projection := range compiled.Incoming.Rules {
+				if projection.Enable != enabled || seen[projection.SourceNodeIDs[0]] {
+					t.Fatal("shared rule lost origin-specific projection")
+				}
+				seen[projection.SourceNodeIDs[0]] = true
+			}
 		}
 	}
 }

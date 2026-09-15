@@ -4,8 +4,9 @@ import { createInterface } from 'node:readline';
 import { readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 
-const [agent, version, output, config, rules] = process.argv.slice(2);
+const [agent, version, output, config, rules, expectedDiagnostics = 'ok'] = process.argv.slice(2);
 assert(agent && version && output && config && rules, 'agent, expected version, report and isolated config/rules paths are required');
+assert(['ok', 'partial'].includes(expectedDiagnostics));
 const child = spawn(agent, ['mcp-stdio', '-config', config, '-rules', rules], { windowsHide: true });
 let stderr = '', sequence = 0;
 const pending = new Map();
@@ -46,7 +47,12 @@ try {
   JSON.parse(resource.contents[0].text);
   const catalog = (await call('tools/list')).tools;
   report.tools = catalog.length;
-  assert.equal(report.tools, 39);
+  const [major, minor] = version.split('.').map(Number);
+  const multiAligned = major > 0 || minor >= 48;
+  assert.equal(report.tools, multiAligned ? 42 : 39);
+  if (multiAligned) {
+    for (const name of ['start_initial_alignment', 'initial_alignment_status', 'interrupt_initial_alignment']) assert(catalog.some(tool => tool.name === `nodebridge_${name}`), name);
+  }
   for (const name of ['capabilities', 'rule_preflight', 'event_status', 'queue_event_plan', 'queue_event_apply', 'queue_event_audit']) {
     assert(catalog.some(tool => tool.name === `nodebridge_${name}`), name);
   }
@@ -61,7 +67,10 @@ try {
   assert.equal(report.capabilities.transport, 'stdio');
   assert(!report.capabilities.features.some(feature => feature.id === 'mcp.remote_vpn'));
   assert(report.capabilities.features.some(feature => feature.id === 'sync.binary_values' && feature.supported));
-  assert(report.capabilities.features.some(feature => feature.id === 'initial_alignment.execute' && !feature.supported));
+  const alignedPair = major > 0 || minor >= 47;
+  assert(report.capabilities.features.some(feature => feature.id === 'initial_alignment.execute' && feature.supported === alignedPair));
+  assert(report.capabilities.features.some(feature => feature.id === 'sync.bidirectional' && feature.supported === alignedPair));
+  assert(report.capabilities.features.some(feature => feature.id === 'initial_alignment.online' && !feature.supported));
   const result = await call('tools/call', { name: 'nodebridge_overview', arguments: {} });
   assert(!result.isError, JSON.stringify(result));
   const overview = JSON.parse(result.content[0].text);
@@ -70,7 +79,8 @@ try {
   const diagnosticResult = await call('tools/call', { name: 'nodebridge_mysql_diagnostics', arguments: {} });
   assert(!diagnosticResult.isError, JSON.stringify(diagnosticResult));
   report.diagnostics = JSON.parse(diagnosticResult.content[0].text);
-  assert.equal(report.diagnostics.status, 'ok');
+  report.expected_diagnostics = expectedDiagnostics;
+  assert.equal(report.diagnostics.status, expectedDiagnostics);
   assert.equal(report.diagnostics.steps.length, 4);
   validated = true;
 } finally {

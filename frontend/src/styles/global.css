@@ -69,7 +69,7 @@ input[type='checkbox'] {
 .app-shell {
   display: flex;
   height: 100vh;
-  min-width: 840px;
+  min-width: 0;
   flex-direction: column;
   background: var(--bg-app);
 }
@@ -1043,6 +1043,25 @@ label {
   border-bottom: 1px solid var(--border-normal);
 }
 
+.rule-name-heading .rule-name-input {
+  width: 100%;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-title);
+}
+
+.rule-name-heading .rule-card-kicker,
+.rule-name-heading .rule-id-input,
+.rule-technical-id {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.rule-name-heading .rule-id-input {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
 .rule-card-kicker {
   display: block;
   margin-bottom: 4px;
@@ -1810,4 +1829,213 @@ label {
 .queue-audit-details dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.rules-edit-surface {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.initial-alignment-control {
+  padding: 12px 0;
+  border-block: 1px solid var(--border-normal);
+  margin-block: 10px;
+  min-width: 0;
+}
+
+.alignment-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.alignment-status > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.alignment-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+}
+
+.alignment-fields label {
+  display: grid;
+  gap: 5px;
+  flex: 1 1 200px;
+  min-width: 0;
+  max-width: 360px;
+  font-size: 11px;
+  color: var(--text-label);
+}
+
+.alignment-fields input,
+.alignment-fields select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+}
+
+.alignment-fields button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.alignment-fields button svg {
+  flex-shrink: 0;
+}
+
+.alignment-confirm {
+  display: flex;
+  flex-direction: row;
+  align-items: start;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-label);
+}
+
+.alignment-confirm input {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+}
+
+.alignment-confirm span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.alignment-member-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+}
+
+.alignment-member-options label {
+  max-width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 840px) {
+  .app-shell:has(.initial-alignment-control) {
+    min-width: 0;
+  }
+
+  .app-shell:has(.initial-alignment-control) .filter-bar {
+    overflow-x: auto;
+  }
+
+  .app-shell:has(.initial-alignment-control) .nav-button {
+    flex-shrink: 0;
+  }
+
+  .app-shell:has(.initial-alignment-control) .rule-field-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell:has(.initial-alignment-control) .rule-card-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .app-shell:has(.initial-alignment-control) .rule-card-head > div:first-child {
+    grid-column: 1 / -1;
+  }
+}
+/* Compact rule workspace: one selected rule, one field group at a time. */
+.rules-page { min-width: 0; }
+.rules-actions { position: sticky; top: -12px; z-index: 3; padding: 8px 0; background: var(--bg-app); }
+.rules-dirty { color: var(--app); font-size: 11px; }
+.rules-tools { border-bottom: 1px solid var(--border-normal); padding: 0 0 8px; min-width: 0; }
+.rules-tools > summary { cursor: pointer; color: var(--text-label); padding: 5px 0; }
+.rules-tools[open] > summary { margin-bottom: 8px; }
+.rules-tools .toolbar-row { flex-wrap: wrap; }
+.rules-tools .toolbar-row > select { min-width: 0; flex: 1 1 180px; }
+.rules-workspace { display: grid; grid-template-columns: 240px minmax(0, 1fr); align-items: start; gap: 12px; min-width: 0; }
+.rule-browser { position: sticky; top: 48px; display: grid; gap: 8px; min-width: 0; }
+.rule-search { display: grid; gap: 6px; color: var(--text-label); font-size: 11px; }
+.rule-count { font-size: 10px; color: var(--text-muted); }
+.rule-browser-list { display: grid; align-content: start; gap: 5px; max-height: calc(100dvh - 245px); overflow-y: auto; min-height: 80px; padding-right: 3px; }
+.rule-choice { display: grid; gap: 5px; width: 100%; min-width: 0; text-align: left; padding: 10px; border: 1px solid var(--border-normal); border-radius: 4px; background: var(--bg-input); color: var(--text-label); }
+.rule-choice.active { border-color: var(--sync); background: var(--bg-subtle); box-shadow: inset 3px 0 var(--sync); }
+.rule-choice:hover { border-color: var(--text-muted); }
+.rule-choice-heading { display: flex; gap: 6px; align-items: baseline; color: var(--text-title); }
+.rule-choice strong, .rule-choice > span, .rule-choice small { min-width: 0; overflow-wrap: anywhere; }
+.rule-choice small { font-size: 10px; }
+.rule-choice .status-dot { flex-shrink: 0; }
+.rule-no-results { color: var(--text-muted); }
+.rule-mobile-picker { display: none; }
+.rule-editor { min-width: 0; }
+.rule-editor-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.rule-editor-tabs button { border: 1px solid var(--border-normal); background: var(--bg-input); color: var(--text-label); border-radius: 4px; padding: 7px 10px; font-size: 11px; }
+.rule-editor-tabs button.active { color: var(--sync); border-color: var(--sync); }
+.rule-editor-tabs .rule-help-toggle { margin-left: auto; }
+.rule-editor-tabs button[aria-pressed='true'] { font-weight: 700; }
+.rule-editor .rule-section-grid, .rule-editor .rule-readonly-grid { display: block; }
+.rule-editor .rule-section, .rule-editor .rule-readonly-section { height: auto; min-height: 0; padding: 12px; }
+.rule-editor[data-section='0'] .rule-section:not(:nth-child(1)), .rule-editor[data-section='0'] .rule-readonly-section:not(:nth-child(1)),
+.rule-editor[data-section='1'] .rule-section:not(:nth-child(2)), .rule-editor[data-section='1'] .rule-readonly-section:not(:nth-child(2)),
+.rule-editor[data-section='2'] .rule-section:not(:nth-child(3)), .rule-editor[data-section='2'] .rule-readonly-section:not(:nth-child(3)),
+.rule-editor[data-section='3'] .rule-section:not(:nth-child(4)), .rule-editor[data-section='3'] .rule-readonly-section:not(:nth-child(4)) { display: none; }
+.rule-editor .rule-field-grid.routing-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.rule-editor .rule-field small { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+.rule-editor:not(.show-help) .rule-default-hint:not(.rule-danger-hint), .rule-editor:not(.show-help) .rule-readonly-item small { display: none; }
+.rule-editor .rule-id-input { max-width: none; }
+.rule-editor .rule-readonly-head strong { overflow-wrap: anywhere; }
+.rule-editor .node-option-list { max-height: 120px; overflow-y: auto; }
+.rule-editor .rule-field select { font-size: 11px; }
+.rule-editor input:focus-visible, .rule-editor select:focus-visible, .rules-page button:focus-visible { outline: 2px solid var(--sync); outline-offset: 2px; }
+@media (max-width: 1000px) {
+  .rules-workspace { grid-template-columns: 200px minmax(0, 1fr); gap: 8px; }
+  .rule-editor .rule-field-grid.routing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .rules-workspace { grid-template-columns: minmax(0, 1fr); }
+  .rule-browser { position: static; grid-template-columns: minmax(0, 1fr) auto; }
+  .rule-browser-list { display: none; }
+  .rule-mobile-picker { display: block; grid-column: 1 / -1; }
+  .rule-count { align-self: end; padding-bottom: 8px; }
+  .rule-editor .rule-field-grid.two-col, .rule-editor .rule-readonly-items.two-col, .rule-editor .rule-readonly-items.three-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-shell .filter-bar { overflow-x: auto; }
+  .app-shell .nav-button { flex-shrink: 0; }
+  .app-shell .status-bar { flex-wrap: wrap; }
+  .app-shell .license-note, .app-shell .auth-expiry { display: none; }
+}
+@media (max-width: 460px) {
+  .rule-editor .rule-field-grid.routing-grid, .rule-editor .rule-field-grid.two-col, .rule-editor .rule-readonly-items.two-col, .rule-editor .rule-readonly-items.three-col { grid-template-columns: minmax(0, 1fr); }
+  .rules-actions { gap: 5px; }
+  .rules-actions button { padding: 6px 8px; }
+}
+.rules-page { gap: 8px; }
+.rules-page .rules-actions { padding: 4px 0; }
+.rules-page .rule-section .routing-grid > .wide-field { grid-column: auto; }
+.rules-page .rule-section .routing-grid > .wide-field:last-child { grid-column: span 2; }
+.rules-page .rule-editor .rule-field-grid.two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1000px) {
+  .rules-page .rule-section .routing-grid > .wide-field:last-child { grid-column: auto; }
+}
+@media (max-width: 760px) {
+  .rules-page .rule-card-head { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .rules-page .rule-card-head > div:first-child { grid-column: auto; }
+}
+@media (max-width: 460px) {
+  .rules-page .rule-editor .rule-field-grid.two-col { grid-template-columns: minmax(0, 1fr); }
+  .rules-page .rule-card-head { grid-template-columns: minmax(0, 1fr) auto; }
+  .rules-page .rule-card-head > div:first-child { grid-column: 1 / -1; }
 }

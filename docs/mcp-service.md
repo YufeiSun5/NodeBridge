@@ -1,4 +1,6 @@
-# NodeBridge MCP v0.46.16
+# NodeBridge MCP v0.48.0
+
+0.48.0 新增首次全量 start/status/interrupt 三个工具，重试复用 start；普通 stdio 共 42 工具、5 资源。支持所有参与节点停 Agent 后的多端手动对齐，200 MiB 传输已短测验证。各节点必须保持对应 MCP 会话并轮询至完整组完成，返回 running 不等于成功。用法与 Canal 容量前提见[首次全量与双向同步](initial-alignment.md)。
 
 本版供 Windows 内网测试。另一台 Windows 或 Mac 上的 AI 客户端通过 SSH 启动被测机的 `SyncAgent.exe mcp-stdio`。MCP 不监听 HTTP 端口，SSH 提供加密和登录身份。
 
@@ -53,6 +55,10 @@ Mac 使用非默认密钥时，生成配置时加 `-ClientKeyPath '/Users/你的
 ## 工具
 
 普通和实验室模式均有：
+
+- `nodebridge_start_initial_alignment`：显式 `rule_id/peer_node_id/confirm`，异步开始或核对重试。中心 `peer_node_id` 可为逗号分隔的全部 Edge，边缘仅一个中心。
+- `nodebridge_initial_alignment_status`：返回当前会话/持久状态；unknown 不等于完成。
+- `nodebridge_interrupt_initial_alignment`：中断当前会话拥有的对齐操作，不回滚已提交数据。
 
 - `nodebridge_overview`：真实健康探测和节点概览。
 - `nodebridge_config_summary`：脱敏配置和当前权限模式。

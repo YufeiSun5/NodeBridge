@@ -14,6 +14,7 @@ import (
 var identifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 type MappedEvent struct {
+	TransactionReplay    bool
 	ConflictPolicy       string
 	ConflictSource       []byte
 	Event                event.SyncEvent

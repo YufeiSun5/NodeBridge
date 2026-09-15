@@ -129,7 +129,7 @@ func exportSnapshot(ctx context.Context, db *sql.DB, plan Plan, rule rules.SyncR
 	if db == nil || send == nil {
 		return result, errors.New("alignment_endpoint_required")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, SnapshotTimeout)
 	defer cancel()
 	tx, release, err := beginSnapshotTx(ctx, db)
 	if err != nil {
@@ -203,7 +203,7 @@ func NewSnapshotReceiver(ctx context.Context, db *sql.DB, plan Plan, rule rules.
 	if db == nil || plan.Target.HasRows {
 		return nil, errors.New("alignment_empty_target_required")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, SnapshotTimeout)
 	tx, release, err := beginSnapshotTx(ctx, db)
 	if err != nil {
 		cancel()

@@ -19,11 +19,21 @@ type BatchMessageSource interface {
 
 type AMQPBatchGetSource struct {
 	Channel *amqp091.Channel
+	Session *rabbitmq.Session
 	Queue   string
 	Sleep   func(context.Context, time.Duration) error
 }
 
 func (s AMQPBatchGetSource) GetBatch(ctx context.Context, max int, flushInterval time.Duration) ([]rabbitmq.IncomingMessage, error) {
+	if s.Session != nil {
+		var messages []rabbitmq.IncomingMessage
+		err := s.Session.WithChannel(ctx, func(channel *amqp091.Channel) error {
+			var err error
+			messages, err = (AMQPBatchGetSource{Channel: channel, Queue: s.Queue, Sleep: s.Sleep}).GetBatch(ctx, max, flushInterval)
+			return err
+		})
+		return messages, err
+	}
 	defer measurePhase(ctx, "broker_get")()
 	if max <= 0 {
 		max = DefaultBatchSize

@@ -1,5 +1,7 @@
 # UI Design Spec / UI 设计规范 / UI デザイン仕様
 
+2026-09-14 用户指定规则显示名称突出于ID：详情名称15px/600，列表名称优先；ID降为11px辅助文字，已保存ID只读。此名称标题是默认13px上限的明确用户例外。中文名称不改变对齐身份，空名称回退ID。
+
 > Scope / 范围 / 範囲: `frontend/src/**` React components and styles.
 > Style / 风格 / スタイル: Dark industrial terminal. / 暗色工业终端。 / ダークな産業端末。
 > Priority / 优先级 / 優先度: readability, density, operational clarity. / 可读、紧凑、运维清晰。 / 読みやすさ、密度、運用明快さ。
@@ -78,6 +80,9 @@ font-family: "Consolas", "JetBrains Mono", "Noto Sans SC", monospace;
 - Do not scale font size with viewport width. / 不按视口缩放字号。 / ビューポート幅で文字サイズを変えない。
 
 ## Layout / 布局 / レイアウト
+
+- 规则页采用可搜索的紧凑列表与单条详情，表映射/路由/主键/列策略按页签展示；只读与编辑使用同一选择。禁止恢复全规则四组等高表单同时展开。/ Rules use a searchable list and one selected detail with four field groups. / ルールは検索リストと選択した一件の4区分で表示します。
+- 1024×640默认规则设置须紧凑可用；760px以下改为规则选择框，允许纵向滚动、避免横向裁切。字段说明可展开，风险警告常显；保存操作保持可达。/ Narrow layouts use a rule picker and vertical scrolling. / 狭い画面では選択ボックスと縦スクロールを使用します。
 
 Use a full-height flex column:
 

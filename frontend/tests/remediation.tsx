@@ -1,4 +1,5 @@
 import { createRoot } from 'react-dom/client';
+import { App } from '../src/App';
 import { RulesPage } from '../src/pages/RulesPage';
 import { FailuresPage } from '../src/pages/FailuresPage';
 import { AuthProvider } from '../src/auth';
@@ -12,10 +13,12 @@ localStorage.setItem('NodeBridge.language', params.get('language') || 'zh');
 localStorage.setItem('nodebridge.theme', params.get('theme') || 'dark');
 let revision = 'saved-000000000001';
 let data: SyncRule[] = [{ id: 'owned-business-rule-with-a-long-identifier', database_name: 'owned_source', table_name: 'items', target_database_name: 'owned_target', target_table_name: 'items', primary_keys: ['id'], direction: 'EDGE_TO_SERVER', conflict_policy: 'NONE', delete_mode: 'HARD', enable: true, initial_alignment: { policy: 'DISABLED' } }];
+if (params.has('workspace')) data = Array.from({ length: params.has('empty') ? 0 : 18 }, (_, i) => ({ ...data[0], id: `spindle-${i + 1}-up-detection-limit-alarms`, table_name: `sys_detection_${i + 1}`, target_table_name: `central_detection_${i + 1}`, enable: i % 3 !== 2 }));
 const snapshot = () => ({ rules: structuredClone(data), saved_revision: revision, active_revision: 'old-000000000000', activation: 'restart_required' });
+if (params.has('names')) data = data.map((rule, i) => ({ ...rule, name: `检测标准双向同步 ${i + 1}` }));
 let quarantine: QueueAuditReceipt | null = null;
 window.go = { datasyncui: { App: {
-  GetAuthState: async () => ({ unlocked: true, status: 'unlocked', timeout_seconds: 300 }),
+  GetAuthState: async () => ({ unlocked: params.get('locked') !== '1', status: params.get('locked') === '1' ? 'locked' : 'unlocked', timeout_seconds: 300 }),
   GetConfig: async () => ({ ...emptyConfig, mode: 'server', node: { id: 'owned-ui', name: 'isolated', location: '' }, mysql: { host: '127.0.0.1', port: 13367, username: 'fixture', password: '', database: 'owned_meta' } }),
   GetNodeOptions: async () => ({ items: [], status: 'configured' }),
   GetSyncRules: async () => snapshot(),
@@ -41,4 +44,4 @@ window.go = { datasyncui: { App: {
   ] }),
 } } };
 
-createRoot(document.getElementById('root')!).render(<ThemeProvider><I18nProvider><AuthProvider><main className="content-area">{params.get('page') === 'failures' ? <FailuresPage /> : <RulesPage />}</main></AuthProvider></I18nProvider></ThemeProvider>);
+createRoot(document.getElementById('root')!).render(<ThemeProvider><I18nProvider>{params.has('workspace') ? <App /> : <AuthProvider><main className="content-area">{params.get('page') === 'failures' ? <FailuresPage /> : <RulesPage />}</main></AuthProvider>}</I18nProvider></ThemeProvider>);

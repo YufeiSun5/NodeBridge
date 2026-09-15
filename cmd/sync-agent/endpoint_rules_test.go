@@ -64,3 +64,38 @@ func TestResolveOneWayNeverReadsManifestOrMySQL(t *testing.T) {
 		t.Fatal("accepted missing paired endpoints")
 	}
 }
+
+func TestActivePairGroupsPreserveRemoteMappings(t *testing.T) {
+	local := rulecheck.ObservedPair{EdgeNode: "edge-1", ServerNode: "server", Server: rulecheck.Schema{Database: "center", Table: "rows"}, Rule: rules.SyncRule{ID: "local"}}
+	remote := local
+	remote.EdgeNode, remote.Rule.ID = "edge-2", "remote"
+	unrelated := local
+	unrelated.Rule.ID, unrelated.Server.Table = "disabled", "other"
+	foreign := local
+	foreign.EdgeNode, foreign.ServerNode = "foreign-edge", "foreign-server"
+	pairs := []rulecheck.ObservedPair{remote, unrelated, local, foreign}
+	before, _ := json.Marshal(pairs)
+	for _, node := range []string{"edge-1", "server"} {
+		mode := "edge"
+		if node == "server" {
+			mode = "server"
+		}
+		for _, direction := range []string{rules.DirectionBidirectional, rules.DirectionEdgeToServer} {
+			for _, enabled := range []bool{false, true} {
+				set := rules.RuleSet{Rules: []rules.SyncRule{{ID: "local", Enable: enabled, Direction: direction}, {ID: "disabled", Direction: rules.DirectionBidirectional}}}
+				got := activePairGroups(node, mode, set, pairs)
+				if enabled && direction == rules.DirectionBidirectional {
+					if !reflect.DeepEqual(got, []rulecheck.ObservedPair{remote, local}) {
+						t.Fatal("lost remote mapping or included unrelated group", node, got)
+					}
+				} else if len(got) != 0 {
+					t.Fatal("inactive group selected", node, got)
+				}
+			}
+		}
+	}
+	after, _ := json.Marshal(pairs)
+	if string(before) != string(after) {
+		t.Fatal("manifest mutated")
+	}
+}

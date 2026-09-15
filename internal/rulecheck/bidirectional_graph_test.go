@@ -66,6 +66,9 @@ func TestBidirectionalGraphSerializedDownlink(t *testing.T) {
 					if projection == nil {
 						t.Fatal("serialized source route missing")
 					}
+					if got := projection.DownlinkTargetDatabase("system_metadata"); got != destination.Edge.Database {
+						t.Fatalf("downlink override changed business database: source=%s destination=%s got=%s", source.node, destination.EdgeNode, got)
+					}
 					mapped, err := mapper.MapEvent(received, *projection)
 					if err != nil {
 						t.Fatal(err)

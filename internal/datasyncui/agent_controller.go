@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -51,11 +52,17 @@ func (c *externalAgentController) Start(ctx context.Context, configPath, rulesPa
 	defer c.mu.Unlock()
 	c.configPath = configPath
 	if c.runningLocked() {
+		if c.status != status.AgentRunning {
+			return errors.New("agent readiness has not been confirmed")
+		}
 		return errAgentAlreadyRunning
 	}
 	if state, err := agentstate.Read(configPath); err != nil {
 		return err
 	} else if state != nil {
+		if !state.Ready {
+			return errors.New("agent is starting; readiness has not been confirmed")
+		}
 		return errAgentAlreadyRunning
 	}
 	executable, err := c.resolveExecutable()
@@ -78,6 +85,16 @@ func (c *externalAgentController) Start(ctx context.Context, configPath, rulesPa
 	}
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
+	info, _ := logFile.Stat()
+	var logStart int64
+	if info != nil {
+		logStart = info.Size()
+	}
+	runtimeLog := filepath.Join(filepath.Dir(agentLogPath(configPath)), "sync-runtime.jsonl")
+	var runtimeLogStart int64
+	if info, err := os.Stat(runtimeLog); err == nil {
+		runtimeLogStart = info.Size()
+	}
 	if err := cmd.Start(); err != nil {
 		_ = logFile.Close()
 		c.status = status.AgentError
@@ -92,7 +109,7 @@ func (c *externalAgentController) Start(ctx context.Context, configPath, rulesPa
 	c.pid = cmd.Process.Pid
 	c.startedAt = time.Now()
 	c.exitedAt = time.Time{}
-	c.status = status.AgentRunning
+	c.status = "starting"
 	c.lastError = ""
 	c.logPath = agentLogPath(configPath)
 	go func() {
@@ -104,7 +121,7 @@ func (c *externalAgentController) Start(ctx context.Context, configPath, rulesPa
 			c.done = nil
 			c.pid = 0
 			c.exitedAt = time.Now()
-			if c.status == status.AgentRunning {
+			if c.status == status.AgentRunning || c.status == "starting" {
 				if err != nil {
 					c.status = status.AgentError
 					c.lastError = err.Error()
@@ -119,7 +136,71 @@ func (c *externalAgentController) Start(ctx context.Context, configPath, rulesPa
 		}
 		c.mu.Unlock()
 	}()
+	if err := waitAgentReady(ctx, configPath, c.pid, done, 30*time.Second); err != nil {
+		_ = cmd.Process.Kill()
+		c.status = status.AgentError
+		c.lastError = err.Error()
+		if tail := startupLogTail(c.logPath, logStart); tail != "" {
+			c.lastError += ": " + tail
+		}
+		if tail := startupLogTail(runtimeLog, runtimeLogStart); tail != "" {
+			c.lastError += ": " + tail
+		}
+		return errors.New(c.lastError)
+	}
+	c.status = status.AgentRunning
 	return nil
+}
+
+func waitAgentReady(ctx context.Context, config string, pid int, done <-chan error, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	var readySince time.Time
+	for {
+		select {
+		case err := <-done:
+			return fmt.Errorf("agent_start_failed: process exited before stable readiness: %v", err)
+		case <-ctx.Done():
+			return fmt.Errorf("agent_start_failed: readiness not confirmed: %w", ctx.Err())
+		case <-ticker.C:
+			state, err := agentstate.Read(config)
+			if err != nil || state == nil || state.PID != pid || !state.Ready {
+				readySince = time.Time{}
+				continue
+			}
+			if readySince.IsZero() {
+				readySince = time.Now()
+			}
+			if time.Since(readySince) >= 250*time.Millisecond {
+				select {
+				case err := <-done:
+					return fmt.Errorf("agent_start_failed: %v", err)
+				default:
+					return nil
+				}
+			}
+		}
+	}
+}
+
+func startupLogTail(path string, start int64) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return ""
+	}
+	if info.Size()-start > 4096 {
+		start = info.Size() - 4096
+	}
+	b := make([]byte, 4096)
+	n, _ := f.ReadAt(b, start)
+	return strings.TrimSpace(string(b[:n]))
 }
 
 func (c *externalAgentController) Stop(ctx context.Context, stopFile string, gracefulTimeout time.Duration) (string, error) {
@@ -199,14 +280,18 @@ func (c *externalAgentController) Status() uiapi.AgentProcessStatus {
 			return uiapi.AgentProcessStatus{Status: status.AgentError, LastError: err.Error()}
 		}
 		if state != nil {
-			return uiapi.AgentProcessStatus{Status: status.AgentRunning, PID: state.PID, StartedAt: state.StartedAt, ExecutablePath: state.Executable, LogPath: agentLogPath(c.configPath)}
+			processStatus := status.AgentRunning
+			if !state.Ready {
+				processStatus = "starting"
+			}
+			return uiapi.AgentProcessStatus{Status: processStatus, PID: state.PID, StartedAt: state.StartedAt, ExecutablePath: state.Executable, LogPath: agentLogPath(c.configPath)}
 		}
 	}
 	state := c.status
 	if state == "" {
 		state = status.AgentStopped
 	}
-	if c.runningLocked() {
+	if c.runningLocked() && c.status == status.AgentRunning {
 		state = status.AgentRunning
 	}
 	return uiapi.AgentProcessStatus{

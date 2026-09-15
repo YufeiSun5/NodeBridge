@@ -40,6 +40,8 @@ func TestRetryObservationsAndReceiptRecovery(t *testing.T) {
 			mock.ExpectQuery("SELECT database_name").WithArgs("evt").WillReturnRows(rows)
 			if tc.applied {
 				mock.ExpectQuery("SELECT event_identity,decision").WillReturnRows(sqlmock.NewRows([]string{"event_identity", "decision"}))
+			} else {
+				mock.ExpectQuery("SELECT reason FROM sync_alignment_event").WithArgs("evt").WillReturnRows(sqlmock.NewRows([]string{"reason"}))
 			}
 			result, err := (Service{DB: db, LogPath: path, RunningPID: tc.pid, Redact: func(v string) string { return strings.ReplaceAll(v, "secret", "[redacted]") }}).Query(context.Background(), Request{EventID: "evt"})
 			if err != nil || len(result.Items) != 1 {
@@ -97,6 +99,27 @@ func TestConflictReceiptOutcomeNeverClaimsLoserApplied(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestAlignmentArchiveIsSupersededNotApplied(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	mock.ExpectQuery("SELECT database_name").WithArgs("old-event").WillReturnRows(sqlmock.NewRows([]string{"source", "table", "target", "target_table", "at", "origin"}))
+	mock.ExpectQuery("SELECT reason FROM sync_alignment_event").WithArgs("old-event").WillReturnRows(sqlmock.NewRows([]string{"reason"}).AddRow("pre_alignment"))
+	result, err := (Service{DB: db, LogPath: t.TempDir() + "/missing"}).Query(context.Background(), Request{EventID: "old-event"})
+	if err != nil || len(result.Items) != 1 {
+		t.Fatal(result, err)
+	}
+	item := result.Items[0]
+	if item.State != "superseded" || item.ApplyStatus != "superseded" || item.AppliedAt != "" || item.NextRetryAt != "" {
+		t.Fatal(item)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
 

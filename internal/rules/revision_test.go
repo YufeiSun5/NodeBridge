@@ -33,6 +33,28 @@ func TestRuleCASRejectsMissingAndStaleRevision(t *testing.T) {
 	}
 }
 
+func TestRuleNameRoundTripRetainsIDAndCAS(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rules.yaml")
+	set := rules.RuleSet{Rules: []rules.SyncRule{{ID: "stable-id", DatabaseName: "owned", TableName: "items", PrimaryKeys: []string{"id"}}}}
+	revision, err := rules.SaveFileCAS(path, set, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime := rules.RuntimeRevision(set)
+	set.Rules[0].Name = "检测标准同步"
+	next, err := rules.SaveFileCAS(path, set, revision)
+	if err != nil || next == revision || rules.RuntimeRevision(set) != runtime {
+		t.Fatal(next, err)
+	}
+	loaded, _, err := rules.LoadFileWithRevision(path)
+	if err != nil || loaded.Rules[0].ID != "stable-id" || loaded.Rules[0].Name != set.Rules[0].Name {
+		t.Fatal(loaded, err)
+	}
+	if _, err := rules.SaveFileCAS(path, set, revision); err == nil {
+		t.Fatal("name change bypassed CAS")
+	}
+}
+
 func TestRuleCASConcurrentWritersHaveOneWinner(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "rules.yaml")
 	set := rules.RuleSet{Rules: []rules.SyncRule{{ID: "r", DatabaseName: "owned", TableName: "items", PrimaryKeys: []string{"id"}}}}

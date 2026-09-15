@@ -608,6 +608,42 @@ func TestServerIngressBatchRuntimePersistsCommittedPrefixOnFailedApply(t *testin
 	}
 }
 
+func TestServerIngressBatchCommittedPrefixRequiresRelayBeforeAck(t *testing.T) {
+	for _, relayFails := range []bool{false, true} {
+		t.Run(map[bool]string{false: "relay_success", true: "relay_failure"}[relayFails], func(t *testing.T) {
+			messages := []*fakeMessage{
+				{body: mustJSON(t, sampleEventWithID("evt-001", 1))},
+				{body: mustJSON(t, sampleEventWithID("evt-002", 2))},
+			}
+			dispatcher := &fakeDispatcher{}
+			if relayFails {
+				dispatcher.err = errors.New("relay unavailable")
+			}
+			result, err := (ServerIngressBatchRuntime{
+				Source:     &fakeBatchSource{messages: incomingRuntime(messages)},
+				Consumer:   rabbitmq.Consumer{RequeueOnError: true},
+				Rules:      sampleRules(),
+				Worker:     &fakeBatchWorker{err: errors.New("deadlock"), successCount: 1},
+				EventStore: &fakeEventStore{},
+				Dispatcher: dispatcher, EdgeNodes: []string{"edge-b"},
+				MaxBatch: 2,
+			}).RunOnce(context.Background())
+			if err == nil || len(dispatcher.targets) != 1 {
+				t.Fatalf("committed prefix must relay despite apply failure: result=%+v err=%v targets=%v", result, err, dispatcher.targets)
+			}
+			if messages[0].acked == relayFails || messages[0].nacked != relayFails {
+				t.Fatalf("prefix ACK must depend on relay success: %+v", messages[0])
+			}
+			if messages[1].acked || !messages[1].nacked || !messages[1].requeue {
+				t.Fatalf("failed apply must requeue: %+v", messages[1])
+			}
+			if !relayFails && result.DispatchCount != 1 {
+				t.Fatalf("missing completed relay metric: %+v", result)
+			}
+		})
+	}
+}
+
 func TestApplyBatchWithLanesKeepsSamePrimaryKeyInOrder(t *testing.T) {
 	events := []mapper.MappedEvent{
 		mappedRuntimeEvent("evt-001", 1),

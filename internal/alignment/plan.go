@@ -67,6 +67,7 @@ func Observe(ctx context.Context, db *sql.DB, nodeID, database, table string) (O
 
 // BuildPlan never authorizes a write. Execution must recheck both endpoints under locks.
 func BuildPlan(rule rules.SyncRule, left, right Observation, now time.Time) (Plan, error) {
+	rule.Name = ""
 	var p Plan
 	if err := (rules.RuleSet{Rules: []rules.SyncRule{rule}}).Validate(); err != nil {
 		return p, err
@@ -148,6 +149,7 @@ func BuildPlan(rule rules.SyncRule, left, right Observation, now time.Time) (Pla
 }
 
 func (p Plan) Validate(rule rules.SyncRule, now time.Time, confirm bool) error {
+	rule.Name = ""
 	if !confirm {
 		return errors.New("alignment_confirmation_required")
 	}

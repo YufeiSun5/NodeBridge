@@ -503,7 +503,7 @@ func requireTargetRow(ctx context.Context, tx *sql.Tx, mapped mapper.MappedEvent
 }
 
 func applyHardDelete(ctx context.Context, tx *sql.Tx, mapped mapper.MappedEvent) error {
-	if mapped.TrackDeleteReplay {
+	if mapped.TrackDeleteReplay && !mapped.TransactionReplay {
 		if err := stampDeleteReplay(ctx, tx, mapped); err != nil {
 			return err
 		}
@@ -544,6 +544,10 @@ func applySoftDelete(ctx context.Context, tx *sql.Tx, mapped mapper.MappedEvent,
 		quoteIdentifier(mapped.TargetColumn("last_event_id")),
 		where,
 	)
+	if mapped.TransactionReplay {
+		args = append([]any{1, now, mapped.Event.OriginNodeID}, whereArgs...)
+		query = fmt.Sprintf("UPDATE %s SET %s = ?, %s = ?, %s = ? WHERE %s", qualifiedTable(mapped.TargetDatabase, mapped.TargetTable), quoteIdentifier(mapped.TargetColumn("is_deleted")), quoteIdentifier(mapped.TargetColumn("deleted_at")), quoteIdentifier(mapped.TargetColumn("deleted_by_node")), where)
+	}
 	result, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("apply soft delete: %w", err)

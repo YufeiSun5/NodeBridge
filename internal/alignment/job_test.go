@@ -33,11 +33,13 @@ func TestPendingJobGate(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer db.Close()
-			q := mock.ExpectQuery(regexp.QuoteMeta("SELECT job_id FROM sync_alignment_job LIMIT 1"))
+			q := mock.ExpectQuery(regexp.QuoteMeta("SELECT job_id FROM sync_alignment_job WHERE phase<>'CANCELLED' LIMIT 1"))
 			if tc.err != nil {
 				q.WillReturnError(tc.err)
 			} else {
 				q.WillReturnRows(sqlmock.NewRows([]string{"job_id"}).AddRow(tc.job))
+				mock.ExpectQuery("SELECT job_id,node_id FROM sync_alignment_job").WillReturnRows(sqlmock.NewRows([]string{"job_id", "node_id"}).AddRow(tc.job, "edge"))
+				mock.ExpectQuery("SELECT proof_id,proof_json,phase,peer_node_id FROM sync_alignment_cutover").WithArgs(tc.job).WillReturnError(sql.ErrNoRows)
 			}
 			err = CheckPendingJobs(context.Background(), db)
 			if (err != nil) != tc.blocked {

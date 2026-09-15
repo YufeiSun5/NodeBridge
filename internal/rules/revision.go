@@ -3,6 +3,7 @@ package rules
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,16 @@ import (
 )
 
 const MissingRevision = "missing"
+
+// RuntimeRevision excludes display metadata while CAS keeps the complete file.
+func RuntimeRevision(set RuleSet) string {
+	set.Rules = append([]SyncRule(nil), set.Rules...)
+	for i := range set.Rules {
+		set.Rules[i].Name = ""
+	}
+	data, _ := json.Marshal(set)
+	return revision(data)
+}
 
 func revision(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
 

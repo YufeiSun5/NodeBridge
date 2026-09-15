@@ -28,7 +28,7 @@ type CopyResult struct {
 // Callers own endpoint access and must fence application/CDC writers separately.
 // It is deliberately not exposed by runtime, Wails or MCP before that fencing exists.
 func CopySnapshot(ctx context.Context, source, target *sql.DB, plan Plan, rule rules.SyncRule, confirm bool) (CopyResult, error) {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, SnapshotTimeout)
 	defer cancel()
 	result := CopyResult{PlanID: plan.ID}
 	if err := plan.Validate(rule, time.Now(), confirm); err != nil {

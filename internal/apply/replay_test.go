@@ -39,6 +39,16 @@ func TestReplayWriteKeepsSourceImmutableAndHonorsMappedColumns(t *testing.T) {
 	}
 }
 
+func TestTransactionReplayPreservesBusinessMarkerNames(t *testing.T) {
+	mapped := replayFixture(event.TypeUpdate, rules.SyncModeOrderedCRUD)
+	mapped.TransactionReplay = true
+	mapped.TargetAfter["last_event_id"] = "business-owned"
+	result := replayWrite(mapped)
+	if result.TargetAfter["last_event_id"] != "business-owned" || result.TargetAfter["updated_by_node"] != "previous" {
+		t.Fatal("transaction replay overwrote business columns")
+	}
+}
+
 func TestSQLWorkerSingleWritesReplayMetadataInBusinessTransaction(t *testing.T) {
 	for _, operation := range []string{event.TypeInsert, event.TypeUpdate} {
 		t.Run(operation, func(t *testing.T) {

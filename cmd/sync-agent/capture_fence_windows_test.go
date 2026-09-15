@@ -47,7 +47,7 @@ func verifyOwnedCaptureFence(t *testing.T, parent context.Context, db *sql.DB, a
 	t.Helper()
 	ctx, cancel := context.WithTimeout(parent, 25*time.Second)
 	defer cancel()
-	cfg := canal.Config{ReaderName: "owned-fence-reader", Address: address, Destination: "example", Filter: `nb_cdc_source\.(source_rows|sync_capture_fence)`, BatchSize: 16}
+	cfg := canal.Config{ReaderName: "owned-fence-reader", Address: address, Destination: "example", Filter: `nb_cdc_source\.(source_rows|sync_capture_fence|sync_replay_marker)`, BatchSize: 16}
 	client, err := canal.NewWithlinClient(cfg)
 	if err != nil {
 		t.Fatal(err)

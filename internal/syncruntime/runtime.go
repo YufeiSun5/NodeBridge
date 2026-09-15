@@ -448,10 +448,10 @@ func (r ServerIngressBatchRuntime) RunOnce(ctx context.Context) (StepResult, err
 		if eventID != "" {
 			lastEventID = eventID
 		}
+		dispatchTotal += dispatchCount
 		if err != nil {
 			return successCount, err
 		}
-		dispatchTotal += dispatchCount
 		return successCount, nil
 	})
 	if err != nil {
@@ -492,19 +492,17 @@ func (r ServerIngressBatchRuntime) applyIngressBatchBodies(ctx context.Context, 
 		lastEventID = entries[len(entries)-1].evt.EventID
 	}
 
+	var applyErr error
 	if len(applyEvents) > 0 {
 		result, err := applyBatchWithLanes(ctx, r.Worker, applyEvents, r.ApplyLanes)
 		if err != nil {
 			successCount := messageSuccessCountForApplyResults(entries, len(result.Results))
-			if successCount > 0 && r.EventStore != nil {
-				if logErr := r.persistAppliedEntries(ctx, entries[:successCount]); logErr != nil {
-					return 0, lastEventID, 0, fmt.Errorf("%w; persist applied prefix failed: %v", err, logErr)
-				}
-			}
 			if len(result.Results) < len(applyEvents) {
 				lastEventID = eventIDForApplyIndex(entries, len(result.Results))
 			}
-			return successCount, lastEventID, 0, fmt.Errorf("apply ingress batch: %w", err)
+			// Committed writes still need durable relay before acknowledging ingress.
+			entries = entries[:successCount]
+			applyErr = fmt.Errorf("apply ingress batch: %w", err)
 		}
 	}
 
@@ -529,7 +527,7 @@ func (r ServerIngressBatchRuntime) applyIngressBatchBodies(ctx context.Context, 
 		}
 		dispatchTotal += count
 	}
-	return len(entries), lastEventID, dispatchTotal, nil
+	return len(entries), lastEventID, dispatchTotal, applyErr
 }
 
 func (r ServerIngressBatchRuntime) persistAppliedEntries(ctx context.Context, entries []mappedBatchEntry) error {

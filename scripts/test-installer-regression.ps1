@@ -71,6 +71,16 @@ Set-Content -LiteralPath $existingConfig -Value "security:`n  admin_password: ex
 $copyState = Copy-DefaultConfigIfMissing -Source $defaultConfig -Target $existingConfig
 Assert-True ($copyState -eq 'kept-existing') 'incomplete existing config is preserved'
 Assert-True ((Get-Content -LiteralPath $existingConfig -Raw) -match 'existing') 'existing config content is unchanged'
+$canalFixture = Join-Path $runtimeDir 'owned-canal/bin'
+New-Item -ItemType Directory -Path $canalFixture -Force | Out-Null
+$startupFixture = Join-Path $canalFixture 'startup.bat'
+Set-Content -LiteralPath $startupFixture -Value 'set JAVA_MEM_OPTS= -Xms128m -Xmx512m -XX:PermSize=128m' -Encoding UTF8
+Patch-CanalStartupJvmOptions -CanalRoot (Split-Path -Parent $canalFixture)
+$patchedStartup = Get-Content -LiteralPath $startupFixture -Raw
+Assert-True ($patchedStartup -match '-Xmx2g' -and $patchedStartup -notmatch 'PermSize') 'Canal snapshot heap floor and Java17 compatibility'
+Set-Content -LiteralPath $startupFixture -Value 'set JAVA_MEM_OPTS= -Xms256m -Xmx4g' -Encoding UTF8
+Patch-CanalStartupJvmOptions -CanalRoot (Split-Path -Parent $canalFixture)
+Assert-True ((Get-Content -LiteralPath $startupFixture -Raw) -match '-Xmx4g') 'Canal custom larger heap is preserved'
 $powershell = Join-Path $PSHOME 'powershell.exe'
 if (-not (Test-Path -LiteralPath $powershell)) { $powershell = Join-Path $PSHOME 'pwsh.exe' }
 $fixtureDir = Join-Path $runtimeDir 'space path'

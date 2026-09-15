@@ -274,6 +274,23 @@ try {
         Add-Step -Name "managed-node-configuration" -Status "skipped" -Message "Node identity and MySQL database will be configured through UI or MCP."
     }
 
+    Add-Step -Name "system-database-upgrade" -Status "running"
+    try {
+        $upgradeOutput = & $syncAgentExe "upgrade-system" "-config" $programDataConfig "-allow-unconfigured"
+        if ($LASTEXITCODE -ne 0) { throw "System database upgrade failed with exit code $LASTEXITCODE. Keep synchronization stopped and retry after resolving the database/configuration error." }
+        $upgradeOutput | Set-Content -LiteralPath (Join-Path $runtimeDir "system-database-upgrade.json") -Encoding UTF8
+        $upgrade = ($upgradeOutput -join "`n") | ConvertFrom-Json
+        if ($upgrade.status -notin @("upgraded", "not_configured")) { throw "Invalid system database upgrade result" }
+        if ($upgrade.status -eq "not_configured") {
+            Set-Step -Name "system-database-upgrade" -Status "skipped" -Message "Fresh installation has no node/MySQL configuration. Complete configuration and run upgrade-system before starting synchronization."
+        } else {
+            Set-Step -Name "system-database-upgrade" -Status "passed" -Message "NodeBridge system database is up to date."
+        }
+    } catch {
+        Set-Step -Name "system-database-upgrade" -Status "failed" -Message $_.Exception.Message
+        throw
+    }
+
     if ($TestOnlySkipAdminCheck) {
         Add-Step -Name "restore-ui" -Status "skipped" -Message "UI restore is disabled in installer test mode."
     } else {

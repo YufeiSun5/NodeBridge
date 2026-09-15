@@ -164,7 +164,11 @@ func ValidateLocal(rule rules.SyncRule, schema Schema, side string) []Finding {
 			}
 		}
 		if rule.EffectiveDeleteMode() == rules.DeleteSoft && rule.SyncMode != rules.SyncModeAppendOnly {
-			for _, name := range []string{"is_deleted", "deleted_at", "deleted_by_node", "updated_by_node", "last_event_id"} {
+			softColumns := []string{"is_deleted", "deleted_at", "deleted_by_node"}
+			if rule.ConflictPolicy != rules.ConflictLastWriteWin {
+				softColumns = append(softColumns, "updated_by_node", "last_event_id")
+			}
+			for _, name := range softColumns {
 				target := name
 				if mappings[name] != "" {
 					target = mappings[name]

@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -23,7 +24,6 @@ import (
 	"github.com/YufeiSun5/NodeBridge/internal/eventstatus"
 	"github.com/YufeiSun5/NodeBridge/internal/mysqlconn"
 	"github.com/YufeiSun5/NodeBridge/internal/rabbitmq"
-	"github.com/YufeiSun5/NodeBridge/internal/rulecheck"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
 	"github.com/go-sql-driver/mysql"
 	"github.com/rabbitmq/amqp091-go"
@@ -59,24 +59,49 @@ func TestOwnedBidirectionalPipeline(t *testing.T) {
 	port, _ := strconv.Atoi(portText)
 	my.ParseTime = true
 	my.Timeout, my.ReadTimeout, my.WriteTimeout = 3*time.Second, 5*time.Second, 5*time.Second
+	secondMySQL, err := mysql.ParseDSN(os.Getenv("NODEBRIDGE_CDC_TEST_SECOND_DSN"))
+	if err != nil || secondMySQL.Net != "tcp" || secondMySQL.DBName != "" || secondMySQL.Addr == my.Addr {
+		t.Fatal("two independent owned MySQL instances required", err)
+	}
+	secondHost, secondPortText, err := net.SplitHostPort(secondMySQL.Addr)
+	if err != nil || secondHost != "127.0.0.1" {
+		t.Fatal("second MySQL must bind loopback", err)
+	}
+	secondPort, _ := strconv.Atoi(secondPortText)
+	secondMySQL.ParseTime = true
+	secondMySQL.Timeout, secondMySQL.ReadTimeout, secondMySQL.WriteTimeout = my.Timeout, my.ReadTimeout, my.WriteTimeout
+	dbConfigs, dbPorts := []*mysql.Config{my, secondMySQL}, []int{port, secondPort}
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	t.Cleanup(cancel)
-	admin, err := sql.Open("mysql", my.FormatDSN())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { admin.Close() })
 	databases := []string{"nb_cdc_source", "nb_cdc_target"}
 	tables, keys, values := []string{"source_rows", "target_rows"}, []string{"edge_id", "server_id"}, []string{"edge_value", "server_value"}
 	modes, nodes := []string{"edge", "server"}, []string{"owned-bidi-edge", "owned-bidi-server"}
 	var dbs [2]*sql.DB
+	commandTime := time.Now().Unix()
 	execute := func(db *sql.DB, query string, args ...any) {
 		t.Helper()
-		if _, err := db.ExecContext(ctx, query, args...); err != nil {
+		// The owned host can step its wall clock backwards. Pin only test-issued
+		// commands to explicit source seconds; Agent sessions stay untouched.
+		commandTime++
+		connection, err := db.Conn(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer connection.Close()
+		defer func() { _ = connection.Raw(func(any) error { return driver.ErrBadConn }) }()
+		if _, err := connection.ExecContext(ctx, "SET TIMESTAMP=?", commandTime); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := connection.ExecContext(ctx, query, args...); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for i, name := range databases {
+		admin, err := sql.Open("mysql", dbConfigs[i].FormatDSN())
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { admin.Close() })
 		execute(admin, "CREATE DATABASE `"+name+"`")
 		t.Cleanup(func() {
 			cleanup, done := context.WithTimeout(context.Background(), 5*time.Second)
@@ -85,7 +110,7 @@ func TestOwnedBidirectionalPipeline(t *testing.T) {
 				t.Error(err)
 			}
 		})
-		cfg := *my
+		cfg := *dbConfigs[i]
 		cfg.DBName = name
 		db, err := sql.Open("mysql", cfg.FormatDSN())
 		if err != nil {
@@ -96,7 +121,16 @@ func TestOwnedBidirectionalPipeline(t *testing.T) {
 		if err := mysqlconn.RunMigrations(ctx, db, "../../migrations/"+modes[i]); err != nil {
 			t.Fatal(err)
 		}
-		execute(db, "CREATE TABLE "+tables[i]+" ("+keys[i]+" BIGINT UNSIGNED PRIMARY KEY,"+values[i]+" DECIMAL(30,10) NOT NULL,raw_bytes VARBINARY(8),note VARCHAR(32),last_event_id VARCHAR(128) NOT NULL DEFAULT '',updated_by_node VARCHAR(64) NOT NULL DEFAULT '') ENGINE=InnoDB")
+		execute(db, "CREATE TABLE "+tables[i]+" ("+keys[i]+" BIGINT UNSIGNED PRIMARY KEY,"+values[i]+" DECIMAL(30,10) NOT NULL,raw_bytes VARBINARY(8),note VARCHAR(32)) ENGINE=InnoDB")
+	}
+	var uuids [2]string
+	for i := range dbs {
+		if err := dbs[i].QueryRowContext(ctx, "SELECT @@server_uuid").Scan(&uuids[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if uuids[0] == uuids[1] {
+		t.Fatal("paired pipeline must use different MySQL instances")
 	}
 	conn, err := amqp091.Dial(broker)
 	if err != nil {
@@ -114,37 +148,26 @@ func TestOwnedBidirectionalPipeline(t *testing.T) {
 		}
 	}
 	rule := rules.SyncRule{ID: "owned-bidi", Enable: true, DatabaseName: databases[0], TableName: tables[0], TargetDatabaseName: databases[1], TargetTableName: tables[1], PrimaryKeys: []string{keys[0]}, TargetPrimaryKeys: []string{keys[1]}, SourceNodeIDs: []string{nodes[0]}, Direction: rules.DirectionBidirectional, ConflictPolicy: rules.ConflictLastWriteWin, DeleteMode: rules.DeleteHard, ColumnMappings: []rules.ColumnMapping{{SourceColumn: values[0], TargetColumn: values[1]}}}
-	edge, err := rulecheck.ReadSchema(ctx, dbs[0], databases[0], tables[0])
-	if err != nil {
-		t.Fatal(err)
+	if os.Getenv("NODEBRIDGE_CDC_INITIAL_ALIGNMENT") != "1" {
+		t.Setenv("NODEBRIDGE_CDC_ALIGNMENT_SOURCE", "empty")
 	}
-	server, err := rulecheck.ReadSchema(ctx, dbs[1], databases[1], tables[1])
-	if err != nil {
-		t.Fatal(err)
-	}
-	manifest, err := json.Marshal(pairManifest{Version: 1, Pairs: []rulecheck.ObservedPair{{Rule: rule, EdgeNode: nodes[0], ServerNode: nodes[1], Edge: edge, Server: server}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Public UI activation stays gated; the owned fixture supplies an explicit
-	// paired manifest to the production run command, with actual schemas.
+	rule.Enable = false
+	rule.InitialAlignment.Policy = rules.AlignmentManual
 	ruleBytes, err := yaml.Marshal(rules.RuleSet{Rules: []rules.SyncRule{rule}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i, mode := range modes {
 		dir := filepath.Join(root, mode)
-		cfg := appconfig.Config{Mode: mode, Node: appconfig.NodeConfig{ID: nodes[i]}, MySQL: appconfig.MySQLConfig{Host: host, Port: port, Username: my.User, Password: my.Passwd, Database: databases[i]}, RabbitMQ: appconfig.RabbitMQConfig{Mode: "external", LocalURL: broker, ServerURL: broker}, CDC: appconfig.CDCConfig{Type: "canal", Mode: "external", CanalAddr: canals[i], Destination: "example", ReaderName: "owned-bidi-reader", Filter: databases[i] + `\.` + tables[i], BatchSize: 16}, Sync: appconfig.SyncConfig{UploadBatchSize: 16, DispatchBatchSize: 16, FlushIntervalMillis: 50, RetryIntervalSeconds: 1}}
+		cfg := appconfig.Config{Mode: mode, Node: appconfig.NodeConfig{ID: nodes[i]}, MySQL: appconfig.MySQLConfig{Host: host, Port: dbPorts[i], Username: dbConfigs[i].User, Password: dbConfigs[i].Passwd, Database: databases[i]}, RabbitMQ: appconfig.RabbitMQConfig{Mode: "external", LocalURL: broker, ServerURL: broker}, CDC: appconfig.CDCConfig{Type: "canal", Mode: "external", CanalAddr: canals[i], Destination: "example", ReaderName: "owned-bidi-reader", Filter: databases[i] + `\.` + tables[i], BatchSize: 1}, Sync: appconfig.SyncConfig{UploadBatchSize: 16, DispatchBatchSize: 16, FlushIntervalMillis: 50, RetryIntervalSeconds: 1}}
 		if err := appconfig.SaveFile(filepath.Join(dir, "config.yaml"), cfg); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(dir, "rules.yaml"), ruleBytes, 0600); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, "rules.yaml.pairs.json"), manifest, 0600); err != nil {
-			t.Fatal(err)
-		}
 	}
+	prepareOwnedInitialAlignment(t, ctx, root, dbs, ch, rule)
 	start := func(i int) func() {
 		t.Helper()
 		dir := filepath.Join(root, modes[i])
@@ -187,7 +210,7 @@ func TestOwnedBidirectionalPipeline(t *testing.T) {
 		state := map[string]any{"failure": label}
 		for i, db := range dbs {
 			node := map[string]any{}
-			for _, table := range []string{tables[i], "sync_row_version", "sync_conflict_event", "sync_conflict_state", "sync_apply_log", "sync_delete_replay", "sync_repair_replay", "sync_capture_fence"} {
+			for _, table := range []string{tables[i], "sync_row_version", "sync_conflict_event", "sync_conflict_state", "sync_apply_log", "sync_delete_replay", "sync_repair_replay", "sync_capture_fence", "sync_replay_marker", "sync_replay_position"} {
 				queryCtx, done := context.WithTimeout(context.Background(), 3*time.Second)
 				rows, err := db.QueryContext(queryCtx, "SELECT * FROM "+table+" LIMIT 100")
 				if err != nil {
@@ -264,6 +287,27 @@ func TestOwnedBidirectionalPipeline(t *testing.T) {
 			var n int
 			return dbs[1-i].QueryRowContext(ctx, "SELECT COUNT(*) FROM "+tables[1-i]+" WHERE "+keys[1-i]+">=? AND "+keys[1-i]+"<?", 1000+i*1000, 2000+i*1000).Scan(&n) == nil && n > 0
 		})
+	}
+	{
+		wait("post-snapshot pre-start write", func() bool { return read(0, 8, "before-agent-start") && read(1, 8, "before-agent-start") })
+		for i := range nodes {
+			wait("legacy isolation "+modes[i], func() bool {
+				var n int
+				return dbs[i].QueryRowContext(ctx, "SELECT COUNT(*) FROM sync_alignment_event WHERE event_id=?", "legacy-before-alignment-"+modes[1-i]).Scan(&n) == nil && n == 1
+			})
+			archiveStatus, err := (eventstatus.Service{DB: dbs[i], LogPath: filepath.Join(root, modes[i], "logs", "sync-runtime.jsonl")}).Query(ctx, eventstatus.Request{EventID: "legacy-before-alignment-" + modes[1-i]})
+			if err != nil || len(archiveStatus.Items) != 1 || archiveStatus.Items[0].ApplyStatus != "superseded" || archiveStatus.Items[0].AppliedAt != "" {
+				t.Fatal("archived old input reported as applied or unknown", archiveStatus, err)
+			}
+			if os.Getenv("NODEBRIDGE_CDC_ALIGNMENT_SOURCE") == "empty" {
+				if !absent(i, 7) {
+					t.Fatal("old INSERT resurrected a both-empty table")
+				}
+			} else if !read(i, 7, "snapshot") {
+				t.Fatal("legacy input overwrote snapshot")
+			}
+		}
+		t.Log("PASS: first-copy cutover keeps pre-start writes and archives old messages on both endpoints without overwriting/resurrecting the baseline")
 	}
 	const key uint64 = 18446744073709551615
 	const amount = "12345678901234567890.1234567890"
@@ -372,7 +416,7 @@ func TestOwnedBidirectionalPipeline(t *testing.T) {
 	stops[0]()
 	stops[1]()
 	for i := range 2 {
-		execute(dbs[i], "INSERT INTO sync_alignment_job (job_id,scope_hash,plan_id,node_id,endpoint_role,phase,plan_json,updated_at) VALUES (?,?,?,?,?,'PREPARED','{}',UTC_TIMESTAMP(6))", strings.Repeat("a", 64), strings.Repeat("b", 64), strings.Repeat("c", 64), nodes[i], []string{"SOURCE", "TARGET"}[i])
+		execute(dbs[i], "INSERT INTO sync_alignment_job (job_id,scope_hash,plan_id,node_id,endpoint_role,phase,plan_json,updated_at) VALUES (?,?,?,?,?,'PREPARED','{}',UTC_TIMESTAMP(6))", strings.Repeat("a", 64), ownedTableScope(databases[i], tables[i]), strings.Repeat("c", 64), nodes[i], []string{"SOURCE", "TARGET"}[i])
 		dir := filepath.Join(root, modes[i])
 		blockedCtx, done := context.WithTimeout(ctx, 8*time.Second)
 		cmd := exec.CommandContext(blockedCtx, filepath.Join(root, "SyncAgent.exe"), "run", "-config", filepath.Join(dir, "config.yaml"), "-rules", filepath.Join(dir, "rules.yaml"), "-stop-file", filepath.Join(dir, "stop.request"), "-edges", nodes[0])
@@ -383,6 +427,6 @@ func TestOwnedBidirectionalPipeline(t *testing.T) {
 			t.Fatalf("%s Agent did not block unresolved alignment: %v %s", modes[i], err, output)
 		}
 	}
-	t.Log("PASS: two production Agent processes with actual paired schemas; separate live Canal readers, RabbitMQ, mapped lossless CRUD, retained markers, source-time LWW in both arrival directions, offline delete tombstone, restart, receipt rollback/retry and durable repair drain. Not first alignment or long testing.")
+	t.Log("PASS: two production Agents with no business replay columns, batch-size-one Canal readers, RabbitMQ, lossless CRUD, local edits after replay, source-time LWW, offline delete tombstone, restart, receipt rollback/retry and repair drain. Short test only.")
 	t.Log("PASS: both production Agent modes refuse to start with an unresolved durable alignment job")
 }

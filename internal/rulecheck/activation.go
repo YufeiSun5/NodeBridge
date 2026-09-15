@@ -19,7 +19,7 @@ func CheckActivation(ctx context.Context, cfg appconfig.Config, previous, next r
 		}
 		unchanged := false
 		for _, old := range previous.Rules {
-			if old.Enable && reflect.DeepEqual(old, rule) {
+			if old.Enable && reflect.DeepEqual(observedRule(old), observedRule(rule)) {
 				unchanged = true
 				break
 			}
@@ -42,10 +42,7 @@ func CheckActivation(ctx context.Context, cfg appconfig.Config, previous, next r
 	}
 	defer db.Close()
 	for _, rule := range checks {
-		side := "source"
-		if cfg.Mode == appconfig.ModeServer && rule.Direction == rules.DirectionEdgeToServer || cfg.Mode == appconfig.ModeEdge && rule.Direction == rules.DirectionServerToEdge {
-			side = "target"
-		}
+		side := activationSide(cfg.Mode, rule.Direction)
 		if cfg.Mode == appconfig.ModeEdge && side == "source" && len(rule.SourceNodeIDs) > 0 {
 			local := false
 			for _, node := range rule.SourceNodeIDs {
@@ -73,4 +70,11 @@ func CheckActivation(ctx context.Context, cfg appconfig.Config, previous, next r
 		}
 	}
 	return nil
+}
+
+func activationSide(mode, direction string) string {
+	if mode == appconfig.ModeServer && (direction == rules.DirectionEdgeToServer || direction == rules.DirectionBidirectional) || mode == appconfig.ModeEdge && direction == rules.DirectionServerToEdge {
+		return "target"
+	}
+	return "source"
 }

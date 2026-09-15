@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "0.46.16",
+    [string]$Version = "0.48.7",
     [string]$DateStamp = "",
     [string]$MakensisPath = "",
     [switch]$NoBuild,
@@ -133,7 +133,8 @@ foreach ($doc in @(
     "docs/trial-runbook.md",
     "docs/lan-deployment-guide.md",
     "docs/mcp-service.md",
-    "docs/mcp-business-ai-handoff.md"
+    "docs/mcp-business-ai-handoff.md",
+    "docs/initial-alignment.md"
 )) {
     $source = Join-Path $root $doc
     if (Test-Path -LiteralPath $source) {
@@ -167,7 +168,9 @@ Reuse skips system installers, managed password migration, and component configu
 For a new native environment, explicitly choose Install local system components.
 Silent installation also defaults to reuse. Use /InstallSystemComponents to opt in;
 /SkipSystemComponents remains supported. Do not combine both flags.
-No automatic Docker discovery or connection validation is performed by this choice.
+No automatic Docker discovery is performed by this choice.
+Both modes upgrade the configured NodeBridge system database before completion.
+Database upgrade failure blocks completion; fresh unconfigured nodes are explicitly deferred.
 
 Installed app:
 

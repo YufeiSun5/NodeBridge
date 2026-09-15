@@ -38,6 +38,7 @@ const (
 type SyncRule struct {
 	pairedRuntime      bool
 	ID                 string           `json:"id" yaml:"id"`
+	Name               string           `json:"name,omitempty" yaml:"name,omitempty"`
 	DatabaseName       string           `json:"database_name" yaml:"database_name"`
 	TableName          string           `json:"table_name" yaml:"table_name"`
 	SourceNodeIDs      []string         `json:"source_node_ids,omitempty" yaml:"source_node_ids,omitempty"`

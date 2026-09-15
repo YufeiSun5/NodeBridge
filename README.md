@@ -1,69 +1,44 @@
 # NodeBridge
 
-NodeBridge 是面向 Windows 内网环境的 MySQL 数据同步程序。它在一个中心节点和多个边缘节点之间，通过 Canal CDC、RabbitMQ 和 `SyncAgent` 同步业务数据，并提供 Wails 管理界面、失败重试、诊断和基于 SSH stdio 的 MCP 管理入口。
+**English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [Welcome](https://yufeisun5.github.io/NodeBridge/)
 
-```text
-边缘 MySQL -> Canal -> 边缘 RabbitMQ -> 中心 RabbitMQ -> 中心 MySQL
-中心 MySQL -> Canal -> 中心 RabbitMQ -> 指定边缘 MySQL
-```
+MySQL synchronization for Windows edge networks. Connect a central server and multiple edge nodes through Canal CDC, RabbitMQ and SyncAgent, with a local Wails management application.
 
-## 当前发行版
+## Download and upgrade
 
-当前 Beta：[`v0.46.3`](https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.46.3)
+[Windows x64 — v0.48.7 Beta](https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7)
 
-Windows x64 安装包包含 NodeBridge、SyncAgent、Erlang/OTP、RabbitMQ、Java Runtime、Canal 和 WinSW。MySQL 不包含在安装包中，需要在中心服务器和各边缘节点独立准备。
+Fixes RabbitMQ recovery after disconnection, forwarding of partially committed batches, and bidirectional target database selection. Includes a compact rule editor, prominent display names and automatic NodeBridge system database upgrades during installation.
 
-安装目录和数据目录：
+The installer includes NodeBridge, SyncAgent, Erlang/OTP, RabbitMQ, Java, Canal and WinSW. **Install MySQL separately.** Back up configuration, rules and databases before upgrading. Run the installer as administrator using the intended Windows account. Migration failure blocks installation completion. These fixes require no new business table columns; rename display names without replacing rule IDs or deleting alignment records.
 
-```text
-C:\Program Files\NodeBridge\app
-C:\ProgramData\NodeBridge
-```
+Application files: `C:\Program Files\NodeBridge\app`. Configuration and runtime data: `C:\ProgramData\NodeBridge`. Closing the window keeps the app in the tray; explicit exit requires the configured password.
 
-安装时请使用计划运行 NodeBridge 的 Windows 账户，并以管理员身份启动安装包。管理界面关闭后会驻留系统托盘；退出需要配置中的退出密码。
+This is a beta. Isolated tests covered three Windows Agent processes, CRUD convergence, RabbitMQ service interruption and communication pauses. They do not establish performance on three physical computers or a production SLA. [Verification report (Chinese)](docs/v0.48.7-reconnect-handoff-20260915.md).
 
-## 部署入口
+## Operation
 
-- [中心服务器、N 个边缘节点和调试电脑部署手册](docs/lan-deployment-guide.md)
-- [MCP 工具和字段说明](docs/mcp-service.md)
-- [同步方向和分发策略](docs/sync-routing-policy.md)
-- [受管组件边界](docs/managed-components.md)
-- [现场试运行手册](docs/trial-runbook.md)
+Assign each node a unique `node.id`, such as `server-001` or `edge-001`. Configure source/target database, table and column mappings explicitly. Messages are acknowledged after committed writes; uncertain delivery is retried with event idempotency.
 
-## 节点角色
+- [LAN deployment guide (Chinese)](docs/lan-deployment-guide.md)
+- [Initial alignment](docs/initial-alignment.md)
+- [Routing policies](docs/sync-routing-policy.md)
+- [Managed components](docs/managed-components.md)
+- [Trial runbook](docs/trial-runbook.md)
+- [MCP management](docs/mcp-service.md): SSH stdio using `SyncAgent.exe mcp-stdio`; no HTTP listener.
 
-| 角色 | 数量 | 主要职责 |
-| --- | ---: | --- |
-| 中心服务器 | 1 | 中心 MySQL、中心 RabbitMQ、汇总 Apply、节点注册和下发 |
-| 边缘节点 | N | 本地 MySQL、Canal CDC、本地断网缓冲、中心上传和下发 Apply |
-| 调试电脑 | 1-N | 通过 SSH 公钥启动远程 MCP stdio，不部署同步运行时 |
-
-每台 NodeBridge 电脑必须使用唯一 `node.id`。推荐中心使用 `server-001`，边缘依次使用 `edge-001`、`edge-002`。
-
-## MCP 管理
-
-MCP 不监听 HTTP 端口。调试电脑通过 SSH 登录目标 Windows，再启动目标机上的：
-
-```text
-SyncAgent.exe mcp-stdio
-```
-
-每位调试人员、每台调试电脑应使用独立 SSH 密钥。Windows 与 Mac 的授权、Codex 注册和撤权步骤见[部署手册](docs/lan-deployment-guide.md#mcp-与调试电脑授权)。
-
-## 开发验证
+## Development
 
 ```powershell
 go test ./...
 go vet ./...
 golangci-lint run ./...
-```
-
-前端验证：
-
-```powershell
 cd frontend
-npm run test
+npm ci
+npm test
 npm run build
 ```
 
-许可证：[MIT](LICENSE)。
+The welcome page detects browser language (Chinese, Japanese, otherwise English) and remembers manual selection. GitHub README language is selected through the links above.
+
+License: [MIT](LICENSE).

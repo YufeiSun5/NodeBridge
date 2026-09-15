@@ -14,12 +14,36 @@ import (
 var ErrRunning = errors.New("agent already running for this configuration")
 
 type State struct {
-	PID           int    `json:"pid"`
-	Executable    string `json:"executable"`
-	StartedAt     string `json:"started_at"`
-	StopFile      string `json:"stop_file"`
-	RulesPath     string `json:"rules_path,omitempty"`
-	RulesRevision string `json:"rules_revision,omitempty"`
+	Ready                bool   `json:"ready"`
+	PID                  int    `json:"pid"`
+	Executable           string `json:"executable"`
+	StartedAt            string `json:"started_at"`
+	StopFile             string `json:"stop_file"`
+	RulesPath            string `json:"rules_path,omitempty"`
+	RulesRevision        string `json:"rules_revision,omitempty"`
+	RulesRuntimeRevision string `json:"rules_runtime_revision,omitempty"`
+}
+
+// PublishReady is emitted only after startup gates and worker construction.
+func PublishReady(config string) error {
+	_, path := paths(config)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var state State
+	if err := json.Unmarshal(data, &state); err != nil {
+		return err
+	}
+	if state.PID != os.Getpid() {
+		return errors.New("only the running agent can publish readiness")
+	}
+	state.Ready = true
+	data, err = json.Marshal(state)
+	if err != nil {
+		return err
+	}
+	return atomicfile.Write(path, data, 0o600)
 }
 
 func paths(config string) (string, string) {
@@ -81,7 +105,7 @@ func Read(config string) (*State, error) {
 	return &state, nil
 }
 
-func PublishRules(config, rulesPath, revision string) error {
+func PublishRules(config, rulesPath, revision string, runtimeRevision ...string) error {
 	_, path := paths(config)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -99,6 +123,9 @@ func PublishRules(config, rulesPath, revision string) error {
 		return err
 	}
 	state.RulesRevision = revision
+	if len(runtimeRevision) > 0 {
+		state.RulesRuntimeRevision = runtimeRevision[0]
+	}
 	data, err = json.Marshal(state)
 	if err != nil {
 		return err

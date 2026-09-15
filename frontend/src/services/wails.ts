@@ -86,6 +86,7 @@ export interface ColumnMapping {
 }
 
 export interface SyncRule {
+	name?: string;
   id: string;
   source_node_ids?: string[];
   database_name: string;
@@ -244,6 +245,9 @@ type OverviewDTO = {
 };
 
 type BackendApp = {
+  GetInitialAlignmentStatus?: () => Promise<InitialAlignmentStatus>;
+  StartInitialAlignment?: (req: InitialAlignmentRequest) => Promise<InitialAlignmentStatus>;
+  InterruptInitialAlignment?: () => Promise<InitialAlignmentStatus>;
   GetOverview?: () => Promise<OverviewDTO>;
   GetConfig?: () => Promise<ConfigDTO>;
   SaveConfig?: (req: { config: ConfigDTO }) => Promise<ConfigDTO>;
@@ -496,6 +500,42 @@ export async function preflightSyncRule(rule_id: string, side: 'source' | 'targe
   const fn = app()?.PreflightSyncRule;
   if (!fn) throw new Error('Wails PreflightSyncRule binding is not available');
   return fn({ rule_id, side });
+}
+
+export interface InitialAlignmentRequest {
+  rule_id: string;
+  peer_node_id: string;
+  confirm: boolean;
+}
+
+export interface InitialAlignmentStatus {
+  rule_id: string;
+  peer_node_id: string;
+  running: boolean;
+  stage: string;
+  plan_id?: string;
+  rows: number;
+  message?: string;
+  started_at?: string;
+  updated_at?: string;
+}
+
+export async function getInitialAlignmentStatus(): Promise<InitialAlignmentStatus> {
+  const fn = app()?.GetInitialAlignmentStatus;
+  if (!fn) throw new Error('Wails GetInitialAlignmentStatus binding is not available');
+  return fn();
+}
+
+export async function startInitialAlignment(request: InitialAlignmentRequest): Promise<InitialAlignmentStatus> {
+  const fn = app()?.StartInitialAlignment;
+  if (!fn) throw new Error('Wails StartInitialAlignment binding is not available');
+  return fn(request);
+}
+
+export async function interruptInitialAlignment(): Promise<InitialAlignmentStatus> {
+  const fn = app()?.InterruptInitialAlignment;
+  if (!fn) throw new Error('Wails InterruptInitialAlignment binding is not available');
+  return fn();
 }
 
 export async function saveSyncRules(rules: SyncRule[], expected_revision: string): Promise<SyncRulesSnapshot> {

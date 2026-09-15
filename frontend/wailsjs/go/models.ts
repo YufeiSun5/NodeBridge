@@ -1,5 +1,5 @@
 export namespace appconfig {
-	
+
 	export class CDCConfig {
 	    type: string;
 	    mode?: string;
@@ -14,11 +14,11 @@ export namespace appconfig {
 	    filter?: string;
 	    batch_size?: number;
 	    use_gtid?: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CDCConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.type = source["type"];
@@ -39,11 +39,11 @@ export namespace appconfig {
 	export class SecurityConfig {
 	    admin_password?: string;
 	    exit_password?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SecurityConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.admin_password = source["admin_password"];
@@ -52,11 +52,11 @@ export namespace appconfig {
 	}
 	export class MCPServerConfig {
 	    enable: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new MCPServerConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enable = source["enable"];
@@ -67,11 +67,11 @@ export namespace appconfig {
 	    bind: string;
 	    port: number;
 	    token: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LogWebConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enable = source["enable"];
@@ -89,11 +89,11 @@ export namespace appconfig {
 	    retry_interval_seconds: number;
 	    heartbeat_interval_seconds?: number;
 	    node_timeout_seconds?: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SyncConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.upload_batch_size = source["upload_batch_size"];
@@ -115,11 +115,11 @@ export namespace appconfig {
 	    username?: string;
 	    password?: string;
 	    vhost?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new RabbitMQConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mode = source["mode"];
@@ -138,11 +138,11 @@ export namespace appconfig {
 	    username: string;
 	    password: string;
 	    database: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new MySQLConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.host = source["host"];
@@ -156,11 +156,11 @@ export namespace appconfig {
 	    id: string;
 	    name: string;
 	    location?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new NodeConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -178,11 +178,11 @@ export namespace appconfig {
 	    log_web: LogWebConfig;
 	    mcp_server?: MCPServerConfig;
 	    security?: SecurityConfig;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Config(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mode = source["mode"];
@@ -195,7 +195,7 @@ export namespace appconfig {
 	        this.mcp_server = this.convertValues(source["mcp_server"], MCPServerConfig);
 	        this.security = this.convertValues(source["security"], SecurityConfig);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -214,17 +214,17 @@ export namespace appconfig {
 		    return a;
 		}
 	}
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
 
 }
 
 export namespace datasyncui {
-	
+
 	export class QueueAuditPlanDTO {
 	    plan_id: string;
 	    node_id: string;
@@ -236,11 +236,11 @@ export namespace datasyncui {
 	    event_id: string;
 	    fingerprint: string;
 	    expires_at: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new QueueAuditPlanDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.plan_id = source["plan_id"];
@@ -259,18 +259,18 @@ export namespace datasyncui {
 	    plan: QueueAuditPlanDTO;
 	    state: string;
 	    updated_at: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new QueueAuditReceiptDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.plan = this.convertValues(source["plan"], QueueAuditPlanDTO);
 	        this.state = source["state"];
 	        this.updated_at = source["updated_at"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -292,11 +292,11 @@ export namespace datasyncui {
 	export class QueueEventApplyRequest {
 	    plan_id: string;
 	    confirm: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new QueueEventApplyRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.plan_id = source["plan_id"];
@@ -305,11 +305,11 @@ export namespace datasyncui {
 	}
 	export class QueueEventAuditRequest {
 	    plan_id: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new QueueEventAuditRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.plan_id = source["plan_id"];
@@ -319,11 +319,11 @@ export namespace datasyncui {
 	    queue: string;
 	    rule_id: string;
 	    event_id: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new QueueEventPlanRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.queue = source["queue"];
@@ -335,18 +335,18 @@ export namespace datasyncui {
 	    rule_id: string;
 	    side: string;
 	    source_schema?: rulecheck.Schema;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new RulePreflightRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.rule_id = source["rule_id"];
 	        this.side = source["side"];
 	        this.source_schema = this.convertValues(source["source_schema"], rulecheck.Schema);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -369,7 +369,7 @@ export namespace datasyncui {
 }
 
 export namespace eventstatus {
-	
+
 	export class Observation {
 	    event_id: string;
 	    rule_id?: string;
@@ -389,11 +389,11 @@ export namespace eventstatus {
 	    last_error_at?: string;
 	    next_retry_at?: string;
 	    consecutive_errors?: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Observation(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.event_id = source["event_id"];
@@ -420,11 +420,11 @@ export namespace eventstatus {
 	    event_id?: string;
 	    rule_id?: string;
 	    limit?: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Request(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.event_id = source["event_id"];
@@ -437,11 +437,11 @@ export namespace eventstatus {
 	    scope: string;
 	    warnings: string[];
 	    complete: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Response(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.items = this.convertValues(source["items"], Observation);
@@ -449,7 +449,7 @@ export namespace eventstatus {
 	        this.warnings = source["warnings"];
 	        this.complete = source["complete"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -472,7 +472,7 @@ export namespace eventstatus {
 }
 
 export namespace rulecheck {
-	
+
 	export class Column {
 	    name: string;
 	    type: string;
@@ -480,11 +480,11 @@ export namespace rulecheck {
 	    has_default: boolean;
 	    extra: string;
 	    collation?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Column(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -499,11 +499,11 @@ export namespace rulecheck {
 	    code: string;
 	    severity: string;
 	    message: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Finding(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.code = source["code"];
@@ -514,11 +514,11 @@ export namespace rulecheck {
 	export class Index {
 	    name: string;
 	    columns: string[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Index(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -532,11 +532,11 @@ export namespace rulecheck {
 	    columns: Column[];
 	    primary_keys: string[];
 	    unique_indexes: Index[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Schema(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.database = source["database"];
@@ -546,7 +546,7 @@ export namespace rulecheck {
 	        this.primary_keys = source["primary_keys"];
 	        this.unique_indexes = this.convertValues(source["unique_indexes"], Index);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -573,11 +573,11 @@ export namespace rulecheck {
 	    findings: Finding[];
 	    checked_permissions: string[];
 	    unverified: string[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Result(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.rule_id = source["rule_id"];
@@ -588,7 +588,7 @@ export namespace rulecheck {
 	        this.checked_permissions = source["checked_permissions"];
 	        this.unverified = source["unverified"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -611,15 +611,15 @@ export namespace rulecheck {
 }
 
 export namespace rules {
-	
+
 	export class ColumnMapping {
 	    source_column: string;
 	    target_column: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ColumnMapping(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.source_column = source["source_column"];
@@ -628,11 +628,11 @@ export namespace rules {
 	}
 	export class InitialAlignment {
 	    policy?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new InitialAlignment(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.policy = source["policy"];
@@ -641,11 +641,11 @@ export namespace rules {
 	export class SchemaSync {
 	    add_columns: boolean;
 	    drop_columns: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SchemaSync(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.add_columns = source["add_columns"];
@@ -654,6 +654,7 @@ export namespace rules {
 	}
 	export class SyncRule {
 	    id: string;
+	    name?: string;
 	    database_name: string;
 	    table_name: string;
 	    source_node_ids?: string[];
@@ -673,14 +674,15 @@ export namespace rules {
 	    schema_sync?: SchemaSync;
 	    initial_alignment?: InitialAlignment;
 	    delete_mode?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SyncRule(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.name = source["name"];
 	        this.database_name = source["database_name"];
 	        this.table_name = source["table_name"];
 	        this.source_node_ids = source["source_node_ids"];
@@ -701,7 +703,7 @@ export namespace rules {
 	        this.initial_alignment = this.convertValues(source["initial_alignment"], InitialAlignment);
 	        this.delete_mode = source["delete_mode"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -724,7 +726,7 @@ export namespace rules {
 }
 
 export namespace status {
-	
+
 	export class Overview {
 	    product_name: string;
 	    mode: string;
@@ -746,11 +748,11 @@ export namespace status {
 	    failed_event_count: number;
 	    conflict_count: number;
 	    version: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Overview(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.product_name = source["product_name"];
@@ -779,7 +781,7 @@ export namespace status {
 }
 
 export namespace uiapi {
-	
+
 	export class AgentProcessStatus {
 	    executable_path?: string;
 	    pid?: number;
@@ -788,11 +790,11 @@ export namespace uiapi {
 	    exited_at?: string;
 	    last_error?: string;
 	    log_path?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AgentProcessStatus(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.executable_path = source["executable_path"];
@@ -810,11 +812,11 @@ export namespace uiapi {
 	    expires_at?: string;
 	    timeout_seconds: number;
 	    message?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AuthState(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.unlocked = source["unlocked"];
@@ -828,11 +830,11 @@ export namespace uiapi {
 	    enabled: boolean;
 	    status: string;
 	    message?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AutoStartStatus(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
@@ -845,11 +847,11 @@ export namespace uiapi {
 	    required_scope?: string;
 	    available: boolean;
 	    read_only: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ToolCapability(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -863,11 +865,11 @@ export namespace uiapi {
 	    supported: boolean;
 	    modes?: string[];
 	    message?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new FeatureCapability(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -882,11 +884,11 @@ export namespace uiapi {
 	    features: FeatureCapability[];
 	    tools?: ToolCapability[];
 	    lab_full_access: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CapabilitiesResponse(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.version = source["version"];
@@ -895,7 +897,7 @@ export namespace uiapi {
 	        this.tools = this.convertValues(source["tools"], ToolCapability);
 	        this.lab_full_access = source["lab_full_access"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -924,11 +926,11 @@ export namespace uiapi {
 	    log_web: appconfig.LogWebConfig;
 	    mcp_server?: appconfig.MCPServerConfig;
 	    security?: appconfig.SecurityConfig;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ConfigDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mode = source["mode"];
@@ -941,7 +943,7 @@ export namespace uiapi {
 	        this.mcp_server = this.convertValues(source["mcp_server"], appconfig.MCPServerConfig);
 	        this.security = this.convertValues(source["security"], appconfig.SecurityConfig);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -966,11 +968,11 @@ export namespace uiapi {
 	    body_preview: string;
 	    body_size: number;
 	    headers?: Record<string, string>;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new DeadLetterMessageDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.queue = source["queue"];
@@ -983,11 +985,11 @@ export namespace uiapi {
 	export class DeadLetterRequest {
 	    queue?: string;
 	    limit?: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new DeadLetterRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.queue = source["queue"];
@@ -996,16 +998,16 @@ export namespace uiapi {
 	}
 	export class DeadLetterResponse {
 	    items: DeadLetterMessageDTO[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new DeadLetterResponse(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.items = this.convertValues(source["items"], DeadLetterMessageDTO);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1026,11 +1028,11 @@ export namespace uiapi {
 	}
 	export class DiagnosticPackageResponse {
 	    path: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new DiagnosticPackageResponse(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -1042,11 +1044,11 @@ export namespace uiapi {
 	    status: string;
 	    error_message: string;
 	    created_at?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new FailedEventDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.event_id = source["event_id"];
@@ -1058,11 +1060,11 @@ export namespace uiapi {
 	}
 	export class FailedEventsRequest {
 	    limit: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new FailedEventsRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.limit = source["limit"];
@@ -1070,16 +1072,16 @@ export namespace uiapi {
 	}
 	export class FailedEventsResponse {
 	    items: FailedEventDTO[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new FailedEventsResponse(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.items = this.convertValues(source["items"], FailedEventDTO);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1098,17 +1100,61 @@ export namespace uiapi {
 		    return a;
 		}
 	}
-	
+
+	export class InitialAlignmentRequest {
+	    rule_id: string;
+	    peer_node_id: string;
+	    confirm: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new InitialAlignmentRequest(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.rule_id = source["rule_id"];
+	        this.peer_node_id = source["peer_node_id"];
+	        this.confirm = source["confirm"];
+	    }
+	}
+	export class InitialAlignmentStatus {
+	    rule_id: string;
+	    peer_node_id: string;
+	    running: boolean;
+	    stage: string;
+	    plan_id?: string;
+	    rows: number;
+	    message?: string;
+	    started_at?: string;
+	    updated_at?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new InitialAlignmentStatus(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.rule_id = source["rule_id"];
+	        this.peer_node_id = source["peer_node_id"];
+	        this.running = source["running"];
+	        this.stage = source["stage"];
+	        this.plan_id = source["plan_id"];
+	        this.rows = source["rows"];
+	        this.message = source["message"];
+	        this.started_at = source["started_at"];
+	        this.updated_at = source["updated_at"];
+	    }
+	}
 	export class LogEntry {
 	    time: string;
 	    level: string;
 	    module: string;
 	    message: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LogEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.time = source["time"];
@@ -1121,11 +1167,11 @@ export namespace uiapi {
 	    level?: string;
 	    module?: string;
 	    limit?: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LogQuery(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.level = source["level"];
@@ -1135,16 +1181,16 @@ export namespace uiapi {
 	}
 	export class LogsResponse {
 	    items: LogEntry[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LogsResponse(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.items = this.convertValues(source["items"], LogEntry);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1170,11 +1216,11 @@ export namespace uiapi {
 	    transport?: string;
 	    ephemeral: boolean;
 	    restart_resets: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new MCPServerStatus(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
@@ -1191,11 +1237,11 @@ export namespace uiapi {
 	    target?: string;
 	    status: string;
 	    message?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ManagedInstallOperationDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.component = source["component"];
@@ -1207,11 +1253,11 @@ export namespace uiapi {
 	}
 	export class ManagedInstallRequest {
 	    manifest_path?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ManagedInstallRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.manifest_path = source["manifest_path"];
@@ -1221,18 +1267,18 @@ export namespace uiapi {
 	    mode: string;
 	    manifest_path: string;
 	    operations: ManagedInstallOperationDTO[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ManagedInstallResponse(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mode = source["mode"];
 	        this.manifest_path = source["manifest_path"];
 	        this.operations = this.convertValues(source["operations"], ManagedInstallOperationDTO);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1258,11 +1304,11 @@ export namespace uiapi {
 	    status: string;
 	    location?: string;
 	    last_heartbeat_at?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new NodeOptionDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.node_id = source["node_id"];
@@ -1277,18 +1323,18 @@ export namespace uiapi {
 	    items: NodeOptionDTO[];
 	    status: string;
 	    message?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new NodeOptionsResponse(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.items = this.convertValues(source["items"], NodeOptionDTO);
 	        this.status = source["status"];
 	        this.message = source["message"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1311,11 +1357,11 @@ export namespace uiapi {
 	    ok: boolean;
 	    status: string;
 	    message?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new OperationResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ok = source["ok"];
@@ -1329,11 +1375,11 @@ export namespace uiapi {
 	    messages: number;
 	    consumers: number;
 	    status: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new QueueStatusDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -1345,16 +1391,16 @@ export namespace uiapi {
 	}
 	export class QueueStatusResponse {
 	    queues: QueueStatusDTO[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new QueueStatusResponse(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.queues = this.convertValues(source["queues"], QueueStatusDTO);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1376,11 +1422,11 @@ export namespace uiapi {
 	export class RetryFailedEventRequest {
 	    event_id: string;
 	    target_node_id: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new RetryFailedEventRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.event_id = source["event_id"];
@@ -1389,11 +1435,11 @@ export namespace uiapi {
 	}
 	export class RetryFailedEventsRequest {
 	    limit: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new RetryFailedEventsRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.limit = source["limit"];
@@ -1401,16 +1447,16 @@ export namespace uiapi {
 	}
 	export class SaveConfigRequest {
 	    config: ConfigDTO;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SaveConfigRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.config = this.convertValues(source["config"], ConfigDTO);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1432,17 +1478,17 @@ export namespace uiapi {
 	export class SaveSyncRulesRequest {
 	    rules: rules.SyncRule[];
 	    expected_revision?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SaveSyncRulesRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.rules = this.convertValues(source["rules"], rules.SyncRule);
 	        this.expected_revision = source["expected_revision"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1463,11 +1509,11 @@ export namespace uiapi {
 	}
 	export class SetAutoStartRequest {
 	    enabled: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SetAutoStartRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
@@ -1475,11 +1521,11 @@ export namespace uiapi {
 	}
 	export class SetMCPServerEnabledRequest {
 	    enabled: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SetMCPServerEnabledRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.enabled = source["enabled"];
@@ -1490,11 +1536,11 @@ export namespace uiapi {
 	    saved_revision?: string;
 	    active_revision?: string;
 	    activation?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SyncRulesDTO(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.rules = this.convertValues(source["rules"], rules.SyncRule);
@@ -1502,7 +1548,7 @@ export namespace uiapi {
 	        this.active_revision = source["active_revision"];
 	        this.activation = source["activation"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1525,11 +1571,11 @@ export namespace uiapi {
 	    ok: boolean;
 	    status: string;
 	    message?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new TestResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ok = source["ok"];
@@ -1537,14 +1583,14 @@ export namespace uiapi {
 	        this.message = source["message"];
 	    }
 	}
-	
+
 	export class UnlockAdminRequest {
 	    password: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new UnlockAdminRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.password = source["password"];
@@ -1552,11 +1598,11 @@ export namespace uiapi {
 	}
 	export class VerifyExitPasswordRequest {
 	    password: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new VerifyExitPasswordRequest(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.password = source["password"];
@@ -1564,4 +1610,3 @@ export namespace uiapi {
 	}
 
 }
-

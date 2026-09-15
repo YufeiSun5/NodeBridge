@@ -12,6 +12,7 @@ import (
 
 	"github.com/YufeiSun5/NodeBridge/internal/agentlog"
 	"github.com/YufeiSun5/NodeBridge/internal/conflict"
+	"github.com/go-sql-driver/mysql"
 )
 
 type Request struct {
@@ -176,6 +177,15 @@ func (s Service) Query(ctx context.Context, req Request) (Response, error) {
 				}
 			case errors.Is(err, sql.ErrNoRows):
 				item.ApplyStatus = "not_recorded"
+				var reason string
+				archiveErr := s.DB.QueryRowContext(ctx, "SELECT reason FROM sync_alignment_event WHERE event_id=? LIMIT 1", item.EventID).Scan(&reason)
+				var missing *mysql.MySQLError
+				if archiveErr == nil {
+					item.ApplyStatus, item.State, item.NextRetryAt = "superseded", "superseded", ""
+					result.Warnings = append(result.Warnings, "Event was superseded by the initial-alignment baseline, not applied as an incremental business write.")
+				} else if !errors.Is(archiveErr, sql.ErrNoRows) && (!errors.As(archiveErr, &missing) || missing.Number != 1146) {
+					result.Warnings = append(result.Warnings, "alignment_archive_query_failed: "+archiveErr.Error())
+				}
 			default:
 				result.Warnings = append(result.Warnings, "apply_receipt_query_failed: "+err.Error())
 			}

@@ -18,6 +18,7 @@ const (
 	JobSourceReady     = "SOURCE_READY"
 	JobTargetCommitted = "TARGET_COMMITTED"
 	JobTargetConfirmed = "TARGET_CONFIRMED"
+	JobCancelled       = "CANCELLED"
 )
 
 // SnapshotJob is a durable fence, not authorization to enable CDC. No phase here
@@ -49,7 +50,17 @@ func jobIdentity(plan Plan, nodeID string) (id, scope, role string, err error) {
 // PrepareSnapshotJob must be called while owning the local Agent maintenance
 // lease. A second plan cannot displace the same table's unresolved job.
 func PrepareSnapshotJob(ctx context.Context, db *sql.DB, plan Plan, rule rules.SyncRule, nodeID string, confirm bool) (SnapshotJob, error) {
-	if err := validateStreamPlan(plan, rule, confirm); err != nil {
+	return prepareSnapshotJob(ctx, db, plan, rule, nodeID, confirm, false)
+}
+
+func prepareSnapshotJob(ctx context.Context, db *sql.DB, plan Plan, rule rules.SyncRule, nodeID string, confirm, restoreFence bool) (SnapshotJob, error) {
+	err := validateStreamPlan(plan, rule, confirm)
+	if restoreFence && !rule.Enable {
+		// Recreate only the fence for a peer's existing attempt. Copy entry points
+		// still reject expiry; the pair session cancels an expired attempt.
+		err = plan.Validate(rule, plan.CreatedAt, confirm)
+	}
+	if err != nil {
 		return SnapshotJob{}, err
 	}
 	if db == nil {
@@ -134,6 +145,12 @@ func readSnapshotJob(ctx context.Context, query jobQuery, plan Plan, nodeID stri
 	if err := json.Unmarshal(b, &stored); err != nil {
 		return SnapshotJob{}, err
 	}
+	if phase == JobCancelled {
+		scope = hash([]string{"cancelled", id})
+	}
+	if (phase == JobTargetCommitted || phase == JobTargetConfirmed) && actualScope == hash([]string{"active", id}) {
+		scope = actualScope
+	}
 	if actualScope != scope || planID != plan.ID || actualNode != nodeID || actualRole != role || hash(stored) != hash(plan) {
 		return SnapshotJob{}, errors.New("alignment_job_identity_changed")
 	}
@@ -169,6 +186,11 @@ func readSnapshotJob(ctx context.Context, query jobQuery, plan Plan, nodeID stri
 		job.CaptureBoundary = &boundary
 	}
 	switch phase {
+	case JobCancelled:
+		// Preserve the original source evidence for audit, never for activation.
+		if count.Valid && digest.Valid {
+			job.Result = &CopyResult{PlanID: plan.ID, Rows: count.Int64, Digest: digest.String}
+		}
 	case JobPrepared:
 		if count.Valid || digest.Valid {
 			return SnapshotJob{}, errors.New("alignment_job_result_invalid")
@@ -194,14 +216,14 @@ func readSnapshotJob(ctx context.Context, query jobQuery, plan Plan, nodeID stri
 	return job, nil
 }
 
-// CheckPendingJobs is fail-closed for every existing job until cutover is built.
-// A pre-feature database without this table has no jobs; other SQL errors fail.
+// A copy receipt alone never permits startup. Every job needs a validated active
+// cutover proof, including jobs belonging to currently disabled rules.
 func CheckPendingJobs(ctx context.Context, db *sql.DB) error {
 	if db == nil {
 		return errors.New("alignment_endpoint_required")
 	}
 	var id string
-	err := db.QueryRowContext(ctx, "SELECT job_id FROM sync_alignment_job LIMIT 1").Scan(&id)
+	err := db.QueryRowContext(ctx, "SELECT job_id FROM sync_alignment_job WHERE phase<>'CANCELLED' LIMIT 1").Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -212,7 +234,10 @@ func CheckPendingJobs(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("alignment_job_check_failed: %w", err)
 	}
-	return fmt.Errorf("alignment_cutover_pending: job_id=%s", id)
+	if _, err := LoadActiveCutovers(ctx, db); err != nil {
+		return fmt.Errorf("alignment_cutover_pending: job_id=%s: %w", id, err)
+	}
+	return nil
 }
 
 func (r *SnapshotReceiver) recordCommit(ctx context.Context, result CopyResult) error {

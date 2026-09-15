@@ -116,6 +116,18 @@ func TestRulesDTOReportsActiveAndSavedSeparately(t *testing.T) {
 	if changed.Activation != "restart_required" || changed.ActiveRevision != "running-revision" || changed.SavedRevision != "new-saved-revision" {
 		t.Fatal(changed)
 	}
+	set := rules.RuleSet{Rules: []rules.SyncRule{{ID: "stable-id"}}}
+	if err := agentstate.PublishRules(config, path, "running-revision", rules.RuntimeRevision(set)); err != nil {
+		t.Fatal(err)
+	}
+	set.Rules[0].Name = "中文名称"
+	if dto := app.rulesDTO(set.Rules, "name-only-revision"); dto.Activation != "active" {
+		t.Fatal(dto)
+	}
+	set.Rules[0].Enable = true
+	if dto := app.rulesDTO(set.Rules, "enabled-revision"); dto.Activation != "restart_required" {
+		t.Fatal(dto)
+	}
 }
 
 func TestEdgeRuleDatabaseUsesRuntimeDownlinkMapping(t *testing.T) {

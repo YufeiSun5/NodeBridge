@@ -12,6 +12,7 @@ import (
 	"github.com/YufeiSun5/NodeBridge/internal/conflict"
 	"github.com/YufeiSun5/NodeBridge/internal/event"
 	"github.com/YufeiSun5/NodeBridge/internal/mapper"
+	"github.com/YufeiSun5/NodeBridge/internal/replay"
 	"github.com/YufeiSun5/NodeBridge/internal/rulecheck"
 	"github.com/YufeiSun5/NodeBridge/internal/rules"
 )
@@ -83,34 +84,15 @@ func (w *SQLWorker) applyConflict(ctx context.Context, mapped mapper.MappedEvent
 		return Result{}, err
 	}
 	decision, err := conflict.ApplyInTx(ctx, tx, key, version, func(ctx context.Context, tx *sql.Tx) error {
-		switch mapped.Event.EventType {
-		case event.TypeInsert, event.TypeUpdate:
-			if exists {
-				return applyUpdate(ctx, tx, mapped)
-			}
-			return applyInsert(ctx, tx, mapped)
-		case event.TypeDelete:
-			if mapped.DeleteMode == rules.DeleteHard {
-				if !exists {
-					return nil
-				}
-				mapped.TrackDeleteReplay = true
-				return applyHardDelete(ctx, tx, mapped)
-			}
-			if !exists {
-				soft := mapped
-				soft.TargetAfter = make(map[string]any, len(mapped.TargetBefore))
-				for column, value := range mapped.TargetBefore {
-					soft.TargetAfter[column] = value
-				}
-				soft.TargetAfter[mapped.TargetColumn("is_deleted")] = 1
-				soft.TargetAfter[mapped.TargetColumn("deleted_at")] = version.Time
-				soft.TargetAfter[mapped.TargetColumn("deleted_by_node")] = mapped.Event.OriginNodeID
-				return applyInsert(ctx, tx, soft)
-			}
-			return applySoftDelete(ctx, tx, mapped, version.Time)
+		mapped.TransactionReplay = true
+		token, err := replay.Begin(ctx, tx, mapped.TargetDatabase, mapped.TargetTable)
+		if err != nil {
+			return err
 		}
-		return errors.New("conflict_unsupported_event_type")
+		if err := applyConflictWrite(ctx, tx, mapped, exists, version.Time); err != nil {
+			return err
+		}
+		return replay.End(ctx, tx, token, mapped.TargetDatabase, mapped.TargetTable)
 	}, func(ctx context.Context, tx *sql.Tx, decision string) error {
 		applied, err := alreadyApplied(ctx, tx, mapped.Event.EventID)
 		if err != nil {
@@ -143,6 +125,37 @@ func (w *SQLWorker) applyConflict(ctx context.Context, mapped mapper.MappedEvent
 		return Result{}, fmt.Errorf("commit conflict apply (outcome may be unknown): %w", err)
 	}
 	return Result{EventID: mapped.Event.EventID, SourceTable: mapped.SourceTable, TargetTable: mapped.TargetTable, AlreadyApplied: decision == conflict.Duplicate, ConflictDecision: decision}, nil
+}
+
+func applyConflictWrite(ctx context.Context, tx *sql.Tx, mapped mapper.MappedEvent, exists bool, versionTime time.Time) error {
+	switch mapped.Event.EventType {
+	case event.TypeInsert, event.TypeUpdate:
+		if exists {
+			return applyUpdate(ctx, tx, mapped)
+		}
+		return applyInsert(ctx, tx, mapped)
+	case event.TypeDelete:
+		if mapped.DeleteMode == rules.DeleteHard {
+			if !exists {
+				return nil
+			}
+			mapped.TrackDeleteReplay = true
+			return applyHardDelete(ctx, tx, mapped)
+		}
+		if !exists {
+			soft := mapped
+			soft.TargetAfter = make(map[string]any, len(mapped.TargetBefore))
+			for column, value := range mapped.TargetBefore {
+				soft.TargetAfter[column] = value
+			}
+			soft.TargetAfter[mapped.TargetColumn("is_deleted")] = 1
+			soft.TargetAfter[mapped.TargetColumn("deleted_at")] = versionTime
+			soft.TargetAfter[mapped.TargetColumn("deleted_by_node")] = mapped.Event.OriginNodeID
+			return applyInsert(ctx, tx, soft)
+		}
+		return applySoftDelete(ctx, tx, mapped, versionTime)
+	}
+	return errors.New("conflict_unsupported_event_type")
 }
 
 func validateConflictProjection(original event.SyncEvent, mapped mapper.MappedEvent) error {
@@ -219,11 +232,6 @@ func validateConflictTarget(ctx context.Context, tx *sql.Tx, schema rulecheck.Sc
 		}
 		if _, ok := image[c.Name]; !ok {
 			return fmt.Errorf("conflict_full_target_image_required: %s", c.Name)
-		}
-	}
-	for _, marker := range []string{"last_event_id", "updated_by_node"} {
-		if _, ok := image[mapped.TargetColumn(marker)]; !ok {
-			return fmt.Errorf("conflict_replay_metadata_required: %s", marker)
 		}
 	}
 	return nil

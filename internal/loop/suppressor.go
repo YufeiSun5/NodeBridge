@@ -66,6 +66,9 @@ func (s *Suppressor) ShouldUpload(ctx context.Context, change cdc.ChangeEvent) (
 		}
 	}
 
+	if change.ReplayChecked && rule.Direction == rules.DirectionBidirectional {
+		return Decision{Upload: true, Reason: "local business change outside replay transaction"}, nil
+	}
 	eventColumn := sourceMetadataColumn(*rule, "last_event_id")
 	nodeColumn := sourceMetadataColumn(*rule, "updated_by_node")
 	if change.Operation == cdc.OperationDelete {

@@ -143,7 +143,7 @@ func TestMCPLabToolCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	tools := s.Tools()
-	if len(tools) < 39 {
+	if len(tools) < 42 {
 		t.Fatalf("expected legacy tools plus capabilities and remediation tools, got %d", len(tools))
 	}
 	seen := map[string]bool{}
@@ -167,6 +167,7 @@ func TestMCPLabToolCatalog(t *testing.T) {
 		"nodebridge_mysql_schema_change_plan", "nodebridge_mysql_schema_change_apply",
 		"nodebridge_apply_managed_install", "nodebridge_ensure_server_edge_user",
 		"nodebridge_capabilities",
+		"nodebridge_start_initial_alignment", "nodebridge_initial_alignment_status", "nodebridge_interrupt_initial_alignment",
 		"nodebridge_rule_preflight", "nodebridge_event_status",
 		"nodebridge_queue_event_plan", "nodebridge_queue_event_apply", "nodebridge_queue_event_audit",
 	} {
@@ -287,6 +288,9 @@ func TestAgentDiscoveryAndStopAcrossControllers(t *testing.T) {
 	cleanup := func() { once.Do(release) }
 	t.Cleanup(cleanup)
 	controller := newExternalAgentController()
+	if err := agentstate.PublishReady(config); err != nil {
+		t.Fatal(err)
+	}
 	controller.configPath = config
 	if !controller.Running() || controller.Status().PID != os.Getpid() {
 		t.Fatal("other controller did not discover agent")

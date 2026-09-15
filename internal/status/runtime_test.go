@@ -41,6 +41,28 @@ func TestRuntimeStoreRecordsWorkerLifecycle(t *testing.T) {
 	}
 }
 
+func TestRuntimeStoreConsecutiveErrorsPreserveLastSuccess(t *testing.T) {
+	s := NewRuntimeStore()
+	s.RecordProcessed("upload", "first", "forwarded", 0)
+	before := s.Snapshot().Workers[0].LastProcessedAt
+	s.RecordError("upload", errors.New("disconnected"))
+	s.RecordError("upload", errors.New("reconnect failed"))
+	got := s.Snapshot().Workers[0]
+	if got.ConsecutiveErrors != 2 || !got.LastProcessedAt.Equal(before) || got.State != WorkerError {
+		t.Fatalf("unexpected failed status: %+v", got)
+	}
+	s.RecordIdle("upload")
+	got = s.Snapshot().Workers[0]
+	if got.ConsecutiveErrors != 0 || !got.LastProcessedAt.Equal(before) || got.ErrorCount != 2 {
+		t.Fatalf("idle recovery erased history: %+v", got)
+	}
+	s.RecordError("upload", errors.New("failed again"))
+	s.RecordProcessed("upload", "next", "forwarded", 0)
+	if s.Snapshot().Workers[0].ConsecutiveErrors != 0 {
+		t.Fatal("successful processing must reset consecutive errors")
+	}
+}
+
 func TestRuntimeStoreKeepsLogRing(t *testing.T) {
 	store := NewRuntimeStore()
 	store.logLimit = 2
