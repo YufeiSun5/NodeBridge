@@ -1,14 +1,80 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="description" content="NodeBridge — MySQL synchronization for Windows edge networks"><title>NodeBridge</title><link rel="icon" href="data:,"><link rel="stylesheet" href="style.css"></head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="NodeBridge — MySQL synchronization for Windows edge networks. Local control, durable queues, automatic reconnection.">
+  <meta name="theme-color" content="#f5f7f2">
+  <title>NodeBridge — Data, connected.</title>
+  <link rel="icon" type="image/svg+xml" href="mark.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
 <body>
-<header><a class="brand" href="./">NodeBridge</a><label><span id="languageLabel">Language</span> <select id="language" aria-labelledby="languageLabel"><option value="en">English</option><option value="zh">简体中文</option><option value="ja">日本語</option></select></label></header>
-<main>
-<p class="eyebrow">WINDOWS x64 · v0.48.7 BETA</p>
-<h1 data-text="title">Keep your edge data connected.</h1>
-<p class="lead" data-text="intro">MySQL synchronization between a central server and multiple edge nodes, with local management and durable message queues.</p>
-<nav><a class="primary" href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7" data-text="download">Download for Windows</a><a id="readme" href="https://github.com/YufeiSun5/NodeBridge/blob/main/README.md" data-text="guide">Read the guide</a></nav>
-<section class="cards"><article><h2 data-text="recovery">Automatic recovery</h2><p data-text="recoveryBody">Rebuilds failed RabbitMQ connections so synchronization can resume without restarting the Agent.</p></article><article><h2 data-text="rules">Clearer rules</h2><p data-text="rulesBody">Compact editing and prominent display names, while keeping stable rule IDs and alignment records.</p></article><article><h2 data-text="upgrade">Built-in upgrades</h2><p data-text="upgradeBody">Updates configured NodeBridge system databases during installation; migration failures block completion.</p></article></section>
-<section class="setup"><h2 data-text="start">Before you start</h2><p data-text="setup">Prepare MySQL separately. Back up configuration, rules and databases, then run the installer as administrator. This beta has isolated three-Agent recovery coverage; on-site validation remains necessary.</p></section>
-</main><footer><span data-text="footer">Open source under the MIT license.</span><a href="https://github.com/YufeiSun5/NodeBridge">GitHub ↗</a></footer>
-<script src="app.js"></script></body></html>
+<a class="skip-link" href="#main" data-text="skip">Skip to content</a>
+<header class="header wrap">
+  <a class="brand" href="./" aria-label="NodeBridge"><img src="mark.svg" width="32" height="32" alt="">NodeBridge</a>
+  <nav class="header-nav" aria-label="Main"><a href="#product" data-text="navProduct">Product</a><a href="#deploy" data-text="navDeploy">Get started</a><a href="https://github.com/YufeiSun5/NodeBridge" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a></nav>
+  <label class="language-control"><span id="languageLabel" class="sr-only">Language</span><span aria-hidden="true">◎</span><select id="language" aria-labelledby="languageLabel"><option value="en">English</option><option value="zh">简体中文</option><option value="ja">日本語</option></select></label>
+</header>
+<main id="main">
+  <section class="hero wrap">
+    <div class="hero-copy">
+      <a class="release-pill" href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7"><span class="dot"></span>v0.48.7 BETA <span class="pill-divider"></span><span data-text="release">Built to reconnect</span><span aria-hidden="true">↗</span></a>
+      <h1><span data-text="title">Your data.</span><br><span class="accent" data-text="titleAccent">Closer together.</span></h1>
+      <p class="lead" data-text="intro">From the factory floor to your central server. Keep MySQL data moving across Windows edge networks, with control that stays in your hands.</p>
+      <div class="hero-actions"><a class="button primary" href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7"><span class="windows-mark" aria-hidden="true">⊞</span><span data-text="download">Download for Windows</span><span aria-hidden="true">↗</span></a><a class="text-link" id="readme" href="https://github.com/YufeiSun5/NodeBridge/blob/main/README.md"><span data-text="guide">Explore the docs</span><span aria-hidden="true">→</span></a></div>
+      <p class="hero-meta"><span>Windows x64</span><span>MIT Open Source</span><span data-text="localFirst">Local control</span></p>
+    </div>
+    <div class="hero-visual" id="product">
+      <div class="preview-caption"><span class="tiny-square"></span><span data-text="previewLabel">A closer look</span><span class="caption-right" data-text="demo">Illustrative preview</span></div>
+      <div class="console">
+        <div class="console-bar"><span class="console-brand"><img src="mark.svg" alt="" width="19" height="19">NodeBridge</span><span class="console-mode">WORKSPACE / 01</span><span class="window-dots" aria-hidden="true">···</span></div>
+        <div class="preview-tabs" role="tablist" aria-label="Preview">
+          <button id="tab-overview" type="button" role="tab" aria-selected="true" aria-controls="panel-overview" data-panel="overview" data-text="tabOverview">Overview</button>
+          <button id="tab-rules" type="button" role="tab" aria-selected="false" aria-controls="panel-rules" tabindex="-1" data-panel="rules" data-text="tabRules">Rules</button>
+          <button id="tab-recovery" type="button" role="tab" aria-selected="false" aria-controls="panel-recovery" tabindex="-1" data-panel="recovery" data-text="tabRecovery">Recovery</button>
+        </div>
+        <div class="preview-body">
+          <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
+            <div class="panel-heading"><div><p class="console-eyebrow" data-text="network">YOUR SYNC NETWORK</p><h2 data-text="oneView">Every node. One view.</h2></div><span class="status-chip"><span class="dot"></span><span data-text="connected">Connected</span></span></div>
+            <div class="node-row central"><span class="node-icon" aria-hidden="true">▤</span><div class="node-name"><strong data-text="central">Central server</strong><code>server-001</code></div><span class="node-tag">MySQL</span></div>
+            <div class="edge-label"><span aria-hidden="true">↳</span><span data-text="edgeNetwork">EDGE NETWORK</span><span class="line"></span><span>02</span></div>
+            <div class="node-row"><span class="node-icon" aria-hidden="true">▥</span><div class="node-name"><strong data-text="edgeOne">Production line A</strong><code>edge-001</code></div><span class="sync-state"><span class="dot"></span><span data-text="syncing">Syncing</span></span></div>
+            <div class="node-row"><span class="node-icon" aria-hidden="true">▥</span><div class="node-name"><strong data-text="edgeTwo">Production line B</strong><code>edge-002</code></div><span class="sync-state"><span class="dot"></span><span data-text="syncing">Syncing</span></span></div>
+            <div class="console-note"><span aria-hidden="true">↔</span><span data-text="direction">Bidirectional rules. Explicit destinations.</span></div>
+          </section>
+          <section id="panel-rules" role="tabpanel" aria-labelledby="tab-rules" tabindex="0" hidden>
+            <div class="panel-heading"><div><p class="console-eyebrow" data-text="ruleWorkspace">RULE WORKSPACE</p><h2 data-text="rulePreviewTitle">Names that make sense.</h2></div><span class="status-chip" data-text="enabled">Enabled</span></div>
+            <div class="rule-preview"><div class="rule-title"><span class="node-icon" aria-hidden="true">↔</span><div><strong data-text="ruleName">Production events</strong><code>production-events</code></div></div><div class="rule-field"><span data-text="source">Source</span><code>factory_edge.events</code></div><div class="rule-field"><span data-text="destination">Destination</span><code>factory_center.events</code></div><div class="rule-field"><span data-text="key">Primary key</span><code>id</code></div><div class="rule-field"><span data-text="mode">Direction</span><span data-text="bidirectional">Bidirectional</span></div></div>
+            <div class="console-note"><span aria-hidden="true">✓</span><span data-text="stableIdentity">A new display name. The same stable identity.</span></div>
+          </section>
+          <section id="panel-recovery" role="tabpanel" aria-labelledby="tab-recovery" tabindex="0" hidden>
+            <div class="panel-heading"><div><p class="console-eyebrow" data-text="recoveryWorkspace">CONNECTION RECOVERY</p><h2 data-text="recoveryPreviewTitle">Ready to pick up again.</h2></div></div>
+            <ol class="recovery-list"><li><span class="step-symbol">01</span><div><strong data-text="disconnect">Connection interrupted</strong><p data-text="disconnectBody">Keep unacknowledged messages available for retry.</p></div></li><li><span class="step-symbol">02</span><div><strong data-text="reconnect">Rebuild the connection</strong><p data-text="reconnectBody">Replace the failed channel and publisher.</p></div></li><li><span class="step-symbol success">✓</span><div><strong data-text="resume">Resume synchronization</strong><p data-text="resumeBody">Retry with event idempotency after connectivity returns.</p></div></li></ol>
+            <div class="console-note"><span aria-hidden="true">↻</span><span data-text="noRestart">No manual Agent restart for this recovery path.</span></div>
+          </section>
+        </div>
+        <div class="console-footer"><span><span class="dot"></span>SyncAgent</span><span data-text="demoFooter">Sample configuration · not live data</span></div>
+      </div>
+      <div class="visual-footnote"><span>01 — 03</span><span data-text="tryTabs">Explore the tabs above ↑</span></div>
+    </div>
+  </section>
+  <section class="stack-strip wrap" aria-label="Technology"><p data-text="builtWith">Built on a familiar foundation</p><div><span>MySQL</span><span>Canal CDC</span><span>RabbitMQ</span><span>Go</span><span>Wails</span></div></section>
+  <section class="features wrap">
+    <div class="section-heading"><div><p class="eyebrow" data-text="sectionLabel">DESIGNED FOR THE EDGE</p><h2><span data-text="featureTitle">Complex networks.</span><br><span class="muted-title" data-text="featureAccent">A clearer way to manage them.</span></h2></div><p data-text="featureIntro">Practical tools for the moments that matter: configuring a rule, losing a connection, rolling out an update.</p></div>
+    <div class="feature-grid">
+      <article class="feature-card"><div class="feature-top"><span class="feature-icon" aria-hidden="true">↻</span><span>01 / RESILIENCE</span></div><h3 data-text="recovery">Reconnect. Resume.</h3><p data-text="recoveryBody">Failed RabbitMQ connections are rebuilt automatically, so the Agent can resume synchronization when connectivity returns.</p><div class="feature-bottom"><span class="dot"></span><span data-text="recoveryTag">Automatic reconnection</span></div></article>
+      <article class="feature-card"><div class="feature-top"><span class="feature-icon" aria-hidden="true">≡</span><span>02 / CLARITY</span></div><h3 data-text="rules">Less scrolling. More context.</h3><p data-text="rulesBody">Compact rule editing and prominent display names keep configuration readable, without replacing IDs or existing alignment records.</p><div class="feature-bottom"><span class="dot"></span><span data-text="rulesTag">Human-readable rule names</span></div></article>
+      <article class="feature-card"><div class="feature-top"><span class="feature-icon" aria-hidden="true">↗</span><span>03 / CONTINUITY</span></div><h3 data-text="upgrade">Move forward, together.</h3><p data-text="upgradeBody">The installer updates configured NodeBridge system databases. If a migration fails, installation completion is blocked.</p><div class="feature-bottom"><span class="dot"></span><span data-text="upgradeTag">Built-in system migrations</span></div></article>
+    </div>
+  </section>
+  <section class="deploy wrap" id="deploy">
+    <div class="deploy-intro"><p class="eyebrow" data-text="deployLabel">FROM DOWNLOAD TO DEPLOYMENT</p><h2 data-text="start">Your network.<br>Your next step.</h2><p data-text="deployIntro">Start with the guide. Keep the configuration explicit. Validate in your own environment.</p><a class="text-link" href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7"><span data-text="releaseNotes">Read release notes</span><span aria-hidden="true">↗</span></a></div>
+    <ol class="deploy-steps"><li><span>01</span><div><h3 data-text="prepareTitle">Prepare your environment</h3><p data-text="prepareBody">Install MySQL separately, assign unique node IDs, and back up configuration, rules and databases.</p></div></li><li><span>02</span><div><h3 data-text="installTitle">Install and configure</h3><p data-text="installBody">Run the Windows installer as administrator. Define your source and target databases, tables and columns.</p></div></li><li><span>03</span><div><h3 data-text="validateTitle">Validate your deployment</h3><p data-text="validateBody">Check alignment, CRUD and recovery in your environment. This beta has isolated three-Agent coverage, not a production SLA.</p></div></li></ol>
+  </section>
+  <section class="download-banner wrap"><div><p class="eyebrow">NODEBRIDGE / v0.48.7 BETA</p><h2 data-text="closingTitle">Bring your data together.</h2><p data-text="closingBody">Open source. Windows native. Ready for your next test.</p></div><a class="button light" href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7"><span data-text="download">Download for Windows</span><span aria-hidden="true">↗</span></a></section>
+</main>
+<footer class="footer wrap"><a class="brand" href="./"><img src="mark.svg" width="26" height="26" alt="">NodeBridge</a><p data-text="footer">Made for connected operations. Open source under MIT.</p><a href="https://github.com/YufeiSun5/NodeBridge">GitHub ↗</a></footer>
+<script src="app.js"></script>
+</body>
+</html>
