@@ -31,7 +31,7 @@
 
 ## Active Board
 
-2026-09-15 backend-ai：NB-PUBLISH ready，跨 frontend-ai 完成三语 README 和独立欢迎页（浏览器语言匹配、英语回退、手动选择记忆），跨 test-ai 全测/vet/lint/合同及三语390/1366宽度浏览器检查通过。发布既有0.48.7验收包和SHA256，Pages仅发布site。无新增Wails API；owner backend-ai。现场复验等NB-RECONNECT边界仍open。
+2026-09-15 backend-ai：NB-PUBLISH closed，跨 frontend-ai 完成三语 README 和独立欢迎页（浏览器语言匹配、英语回退、手动选择记忆），跨 test-ai 全测/vet/lint/合同及三语390/1366宽度浏览器检查通过。GitHub v0.48.7已发布（tag a9d1aaa），340906969字节与SHA256 5A1FDF8F…一致，Pages部署34923121980成功，线上三语390/1366验证通过，仅发布site。无新增Wails API；owner backend-ai。现场复验等NB-RECONNECT边界仍open。
 
 
 2026-09-15 backend-ai：NB-RECONNECT源码及补丁验收closed，0.48.7修复运行期RabbitMQ连接/通道/Publisher失效后无限重试旧对象，Session失败销毁并有界重连，原ACK/幂等/Canal位点边界保留。独占真实确认中断/通道关闭重投通过；三节点异名中心源及共享同名边缘源两轮批量16，服务停止恢复/通信暂停20秒均不重启Agent自动恢复，实测1.058–1.465秒（夹具重试1秒），CRUD/ready队列清空/收据稳定通过；全量test/vet/lint、Wails/CLI、6安装模式17回归、两角色重复系统库升级、62文件20迁移5资产解包哈希通过。现场配置规则哈希未变，测试资源清理；owner backend-ai跨test-ai仅隔离验证/发布，consecutive_errors合同更新，无UI方法变化。包build/NodeBridge-beta-v0.48.7-20260915.exe（5A1FDF8F…），docs/v0.48.7-reconnect-handoff-20260915.md。现场复验、首次断线诱因、整机Windows重启/实际网络SLA及其他历史项仍待验，不把进程running视为同步健康。

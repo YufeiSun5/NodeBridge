@@ -88,7 +88,7 @@ Last updated: 2026-09-15 Asia/Singapore
 
 ## 改动记录
 
-- 2026-09-15 11:00 | Codex | backend-ai跨frontend/test：三语README与欢迎页，自动语言/英语回退，三语390/1366浏览器和全test/vet/lint通过；准备GitHub v0.48.7与Pages发布，现场验收边界保留。
+- 2026-09-15 11:00 | Codex | backend-ai跨frontend/test：三语README与欢迎页，自动语言/英语回退，三语390/1366浏览器和全test/vet/lint通过；GitHub v0.48.7与Pages已发布，远端安装包哈希一致，现场验收边界保留。
 
 - 2026-09-15 10:16 | Codex / backend-ai | 修复RabbitMQ运行期自动重连，完成两轮三节点断线回归及0.48.7补丁包。
 
