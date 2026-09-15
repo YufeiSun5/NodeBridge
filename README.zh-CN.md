@@ -1,71 +1,84 @@
-# NodeBridge
+<p align="center">
+  <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a>
+</p>
 
-[English](README.md) · **简体中文** · [日本語](README.ja.md) · [欢迎页](https://yufeisun5.github.io/NodeBridge/)
+![NodeBridge — 让数据流动，让协作更近。](docs/assets/banner-zh.svg)
 
-NodeBridge 是面向 Windows 内网环境的 MySQL 数据同步程序。它在一个中心节点和多个边缘节点之间，通过 Canal CDC、RabbitMQ 和 `SyncAgent` 同步业务数据，并提供 Wails 管理界面、失败重试、诊断和基于 SSH stdio 的 MCP 管理入口。
+<p align="center">
+  <strong>连接中心服务器与边缘节点，让 MySQL 数据同步、本地管理和断线恢复 进入同一个工作流。</strong>
+</p>
 
-```text
-边缘 MySQL -> Canal -> 边缘 RabbitMQ -> 中心 RabbitMQ -> 中心 MySQL
-中心 MySQL -> Canal -> 中心 RabbitMQ -> 指定边缘 MySQL
-```
+<p align="center">
+  <a href="https://github.com/YufeiSun5/NodeBridge/releases/download/v0.48.7/NodeBridge-beta-v0.48.7-20260915.exe"><strong>⬇ 下载 Windows 安装包</strong></a>
+  &nbsp; · &nbsp; <a href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7">发行说明</a>
+  &nbsp; · &nbsp; <a href="docs/lan-deployment-guide.md">部署指南</a>
+</p>
 
-## 当前发行版
+---
 
-当前 Beta：**0.48.7**（2026-09-15）。修复断线重连、批处理漏转发和双向目标库选择；包含紧凑规则编辑、突出显示名称和安装时系统库升级。[下载安装包](https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7)，[验证报告](docs/v0.48.7-reconnect-handoff-20260915.md)。升级前请备份配置、规则和数据库。
+## 为连接中的每一个环节而设计
 
-Windows x64 安装包包含 NodeBridge、SyncAgent、Erlang/OTP、RabbitMQ、Java Runtime、Canal 和 WinSW。MySQL 不包含在安装包中，需要在中心服务器和各边缘节点独立准备。
+<table>
+<tr>
+<td width="50%"><h3>↻ &nbsp; 断线自动接续</h3><p>重建失效的 RabbitMQ 连接，网络恢复后自动接续同步。</p></td>
+<td width="50%"><h3>↔ &nbsp; 明确数据去向</h3><p>配置数据库、表与列的映射，支持双向同步。</p></td>
+</tr>
+<tr>
+<td width="50%"><h3>≡ &nbsp; 规则更好读</h3><p>显示名称清晰醒目，保留稳定 ID 和已有对齐记录。</p></td>
+<td width="50%"><h3>↑ &nbsp; 系统库随软件升级</h3><p>安装时更新已配置的 NodeBridge 系统库，迁移失败时阻止完成。</p></td>
+</tr>
+<tr>
+<td width="50%"><h3>✓ &nbsp; 提交之后再确认</h3><p>通过事务、事件幂等和明确的消息确认边界处理同步。</p></td>
+<td width="50%"><h3>⌘ &nbsp; 在自己的环境中管理</h3><p>使用本地 Wails 界面或 SSH stdio MCP 配置与诊断。</p></td>
+</tr>
+</table>
 
-安装目录和数据目录：
+## 规则清晰，细节一目了然
 
-```text
-C:\Program Files\NodeBridge\app
-C:\ProgramData\NodeBridge
-```
+![NodeBridge rules workspace](docs/assets/rules-workspace.png)
 
-安装时请使用计划运行 NodeBridge 的 Windows 账户，并以管理员身份启动安装包。管理界面关闭后会驻留系统托盘；退出需要配置中的退出密码。
+<sub>NodeBridge 实际前端界面，使用隔离测试数据。突出规则名称，支持搜索导航与紧凑编辑。</sub>
 
-## 部署入口
+## 开始使用
 
-- [中心服务器、N 个边缘节点和调试电脑部署手册](docs/lan-deployment-guide.md)
-- [MCP 工具和字段说明](docs/mcp-service.md)
-- [同步方向和分发策略](docs/sync-routing-policy.md)
+1. **准备环境。** 单独安装 MySQL，为每个节点设置唯一 ID，并备份配置、规则和数据库。
+2. **安装软件。** 使用计划运行的 Windows 账户，以管理员身份启动 x64 安装包。内含 NodeBridge、SyncAgent、Erlang/OTP、RabbitMQ、Java、Canal 和 WinSW。
+3. **配置并验证。** 设置数据映射，核对首次对齐，在自己的环境中验证新增、更新、删除与断线恢复。
+
+> 升级提示：这些修复无需为业务表新增字段。修改显示名称时保留规则 ID 与对齐记录；已配置系统库迁移失败时，会阻止安装完成。
+
+程序目录：`C:\Program Files\NodeBridge\app` · 数据目录：`C:\ProgramData\NodeBridge`。关闭窗口后驻留托盘；真正退出需要配置中的退出密码。
+
+## 版本与验证
+
+**v0.48.7 Beta** 修复自动重连、批处理已提交前缀漏转发与双向目标库选择。Go 全测/vet/lint、安装器检查及两轮隔离三 Agent 重连验证通过。这不代表三台物理电脑性能或生产 SLA。安装包未签名。
+
+[查看完整验证报告](docs/v0.48.7-reconnect-handoff-20260915.md) · [SHA256](https://github.com/YufeiSun5/NodeBridge/releases/download/v0.48.7/SHA256SUMS.txt)
+
+## 继续了解
+
+- [内网部署手册](docs/lan-deployment-guide.md)
+- [首次对齐](docs/initial-alignment.md)
+- [路由策略](docs/sync-routing-policy.md)
 - [受管组件边界](docs/managed-components.md)
-- [现场试运行手册](docs/trial-runbook.md)
+- [现场试运行](docs/trial-runbook.md)
+- [MCP 参考](docs/mcp-service.md)
 
-## 节点角色
-
-| 角色 | 数量 | 主要职责 |
-| --- | ---: | --- |
-| 中心服务器 | 1 | 中心 MySQL、中心 RabbitMQ、汇总 Apply、节点注册和下发 |
-| 边缘节点 | N | 本地 MySQL、Canal CDC、本地断网缓冲、中心上传和下发 Apply |
-| 调试电脑 | 1-N | 通过 SSH 公钥启动远程 MCP stdio，不部署同步运行时 |
-
-每台 NodeBridge 电脑必须使用唯一 `node.id`。推荐中心使用 `server-001`，边缘依次使用 `edge-001`、`edge-002`。
-
-## MCP 管理
-
-MCP 不监听 HTTP 端口。调试电脑通过 SSH 登录目标 Windows，再启动目标机上的：
-
-```text
-SyncAgent.exe mcp-stdio
-```
-
-每位调试人员、每台调试电脑应使用独立 SSH 密钥。Windows 与 Mac 的授权、Codex 注册和撤权步骤见[部署手册](docs/lan-deployment-guide.md#mcp-与调试电脑授权)。
-
-## 开发验证
+<details>
+<summary><strong>构建与验证</strong></summary>
 
 ```powershell
 go test ./...
 go vet ./...
 golangci-lint run ./...
-```
-
-前端验证：
-
-```powershell
 cd frontend
-npm run test
+npm ci
+npm test
 npm run build
 ```
 
-许可证：[MIT](LICENSE)。
+</details>
+
+---
+
+基于 [MIT 许可证](LICENSE) 开源。GitHub 默认展示英文 README，可从顶部切换语言。

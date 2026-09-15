@@ -1,33 +1,71 @@
-# NodeBridge
+<p align="center">
+  <a href="README.md">English</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a>
+</p>
 
-**English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [Welcome](https://yufeisun5.github.io/NodeBridge/)
+![NodeBridge — Your data. Closer together.](docs/assets/banner-en.svg)
 
-MySQL synchronization for Windows edge networks. Connect a central server and multiple edge nodes through Canal CDC, RabbitMQ and SyncAgent, with a local Wails management application.
+<p align="center">
+  <strong>Connect your central server and edge nodes with MySQL synchronization, local control and automatic reconnection.</strong>
+</p>
 
-## Download and upgrade
+<p align="center">
+  <a href="https://github.com/YufeiSun5/NodeBridge/releases/download/v0.48.7/NodeBridge-beta-v0.48.7-20260915.exe"><strong>⬇ Download Windows installer</strong></a>
+  &nbsp; · &nbsp; <a href="https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7">Release notes</a>
+  &nbsp; · &nbsp; <a href="docs/lan-deployment-guide.md">Deployment guide</a>
+</p>
 
-[Windows x64 — v0.48.7 Beta](https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.7)
+---
 
-Fixes RabbitMQ recovery after disconnection, forwarding of partially committed batches, and bidirectional target database selection. Includes a compact rule editor, prominent display names and automatic NodeBridge system database upgrades during installation.
+## Built for connected operations
 
-The installer includes NodeBridge, SyncAgent, Erlang/OTP, RabbitMQ, Java, Canal and WinSW. **Install MySQL separately.** Back up configuration, rules and databases before upgrading. Run the installer as administrator using the intended Windows account. Migration failure blocks installation completion. These fixes require no new business table columns; rename display names without replacing rule IDs or deleting alignment records.
+<table>
+<tr>
+<td width="50%"><h3>↻ &nbsp; Reconnect automatically</h3><p>Rebuild failed RabbitMQ connections and resume synchronization when connectivity returns.</p></td>
+<td width="50%"><h3>↔ &nbsp; Map your data explicitly</h3><p>Configure database, table and column mappings, including bidirectional synchronization.</p></td>
+</tr>
+<tr>
+<td width="50%"><h3>≡ &nbsp; Keep rules readable</h3><p>Use clear display names while preserving stable IDs and existing alignment records.</p></td>
+<td width="50%"><h3>↑ &nbsp; Upgrade the system database</h3><p>Update configured NodeBridge system databases during installation, with failure checks.</p></td>
+</tr>
+<tr>
+<td width="50%"><h3>✓ &nbsp; Commit before ACK</h3><p>Keep transactional writes, event idempotency and message acknowledgment boundaries explicit.</p></td>
+<td width="50%"><h3>⌘ &nbsp; Manage from your environment</h3><p>Use the local Wails UI or SSH stdio MCP for configuration and diagnostics.</p></td>
+</tr>
+</table>
 
-Application files: `C:\Program Files\NodeBridge\app`. Configuration and runtime data: `C:\ProgramData\NodeBridge`. Closing the window keeps the app in the tray; explicit exit requires the configured password.
+## A workspace that keeps the details in view
 
-This is a beta. Isolated tests covered three Windows Agent processes, CRUD convergence, RabbitMQ service interruption and communication pauses. They do not establish performance on three physical computers or a production SLA. [Verification report (Chinese)](docs/v0.48.7-reconnect-handoff-20260915.md).
+![NodeBridge rules workspace](docs/assets/rules-workspace.png)
 
-## Operation
+<sub>Actual NodeBridge frontend, shown with isolated test data. Prominent rule names, searchable navigation and compact editing.</sub>
 
-Assign each node a unique `node.id`, such as `server-001` or `edge-001`. Configure source/target database, table and column mappings explicitly. Messages are acknowledged after committed writes; uncertain delivery is retried with event idempotency.
+## Get started
 
-- [LAN deployment guide (Chinese)](docs/lan-deployment-guide.md)
+1. **Prepare.** Install MySQL separately. Give every node a unique ID and back up configuration, rules and databases.
+2. **Install.** Run the Windows x64 installer as administrator using the intended Windows account. It bundles NodeBridge, SyncAgent, Erlang/OTP, RabbitMQ, Java, Canal and WinSW.
+3. **Configure and verify.** Define your mappings, check initial alignment and validate inserts, updates, deletes and recovery in your own environment.
+
+> Upgrading? These fixes require no extra business columns. Change display names without replacing rule IDs or deleting alignment records. Configured system database migration failures block installation completion.
+
+Application: `C:\Program Files\NodeBridge\app` · Data: `C:\ProgramData\NodeBridge`. Closing the window keeps the app in the tray; explicit exit requires the configured password.
+
+## Release confidence
+
+**v0.48.7 Beta** fixes reconnection, partially committed batch forwarding and bidirectional target database selection. Go test/vet/lint, installer checks and two isolated three-Agent reconnect runs passed. This is not a benchmark on three physical computers or a production SLA. The installer is unsigned.
+
+[Read the verification report (Chinese)](docs/v0.48.7-reconnect-handoff-20260915.md) · [SHA256](https://github.com/YufeiSun5/NodeBridge/releases/download/v0.48.7/SHA256SUMS.txt)
+
+## Explore the project
+
+- [LAN deployment](docs/lan-deployment-guide.md)
 - [Initial alignment](docs/initial-alignment.md)
 - [Routing policies](docs/sync-routing-policy.md)
 - [Managed components](docs/managed-components.md)
 - [Trial runbook](docs/trial-runbook.md)
-- [MCP management](docs/mcp-service.md): SSH stdio using `SyncAgent.exe mcp-stdio`; no HTTP listener.
+- [MCP reference](docs/mcp-service.md)
 
-## Development
+<details>
+<summary><strong>Build and validate</strong></summary>
 
 ```powershell
 go test ./...
@@ -39,6 +77,8 @@ npm test
 npm run build
 ```
 
-The welcome page detects browser language (Chinese, Japanese, otherwise English) and remembers manual selection. GitHub README language is selected through the links above.
+</details>
 
-License: [MIT](LICENSE).
+---
+
+Open source under the [MIT license](LICENSE). English is the default README; select another language above.
