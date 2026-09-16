@@ -5,7 +5,7 @@
 ![NodeBridge — データをつなぐ。現場が近づく。](docs/assets/banner-ja.svg)
 
 <p align="center">
-  <strong>中央サーバーとエッジを接続。MySQL 同期、ローカル管理、自動再接続 をひとつの運用へ。</strong>
+  <strong>Canal と RabbitMQ を基盤とする MySQL 同期ツール。列マッピング、双方向同期、MCP による AI 支援の監視・運用に対応。</strong>
 </p>
 
 <p align="center">
@@ -15,6 +15,23 @@
 </p>
 
 ---
+
+## アーキテクチャ
+
+```mermaid
+flowchart LR
+  source[(ソース MySQL)] --> canal[Canal CDC]
+  canal --> event[SyncAgent: SyncEvent]
+  event --> mq[RabbitMQ]
+  mq --> apply[SyncAgent: Apply]
+  apply --> target[(宛先 MySQL)]
+```
+
+図は片方向です。双方向ルールは逆方向も処理し、ルーティングとリプレイ検出で配信とループを制御します。MCP は管理用インターフェースです。
+
+**クイックスタート：**[Windows リリース](https://github.com/YufeiSun5/NodeBridge/releases/latest)をインストールし、[導入ガイド](docs/lan-deployment-guide.md)で MySQL/binlog を準備します。接続とテーブルルールを設定し、独立したテストデータで追加・更新・削除を確認してください。
+
+Docker デモは未公開です。[今後の計画](docs/distribution-and-validation-plan.md)に記載しています。
 
 ## MCP · AI アシスタントを同期運用につなぐ
 

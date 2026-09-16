@@ -5,7 +5,7 @@
 ![NodeBridge — Your data. Closer together.](docs/assets/banner-en.svg)
 
 <p align="center">
-  <strong>Connect your central server and edge nodes with MySQL synchronization, local control and automatic reconnection.</strong>
+  <strong>MySQL synchronization built on Canal and RabbitMQ, with column mapping, bidirectional sync and MCP tools for AI-assisted monitoring and operations.</strong>
 </p>
 
 <p align="center">
@@ -15,6 +15,23 @@
 </p>
 
 ---
+
+## Architecture
+
+```mermaid
+flowchart LR
+  source[(Source MySQL)] --> canal[Canal CDC]
+  canal --> event[SyncAgent: SyncEvent]
+  event --> mq[RabbitMQ]
+  mq --> apply[SyncAgent: Apply]
+  apply --> target[(Target MySQL)]
+```
+
+One direction is shown. Bidirectional rules also process the reverse flow, with routing and replay detection. MCP is a management interface, not a required hop in the data path.
+
+**Quick start:** install the [Windows release](https://github.com/YufeiSun5/NodeBridge/releases/latest), prepare MySQL/binlog using the [deployment guide](docs/lan-deployment-guide.md), then configure connections and a table rule. Verify insert, update and delete operations with separate test data first.
+
+A ready-to-run Docker demo is not yet released. See the [future plan](docs/distribution-and-validation-plan.md).
 
 ## MCP · Bring your AI assistant into sync operations
 

@@ -31,6 +31,8 @@
 
 ## Active Board
 
+- 2026-09-16 review-ai：NB-README-POSITIONING closed；三语产品说明、Mermaid架构、Windows快速开始与未来分发/验证计划；文档范围，历史现场项不变。
+
 - 2026-09-15 frontend-ai：NB-SEARCH-DISCOVERY closed；补10个Topics、三语静态地址与SEO/sitemap；f2e7b19及Pages 34934608949发布成功，线上三语两宽度/语言跳转与sitemap HTTP200通过；跨test-ai仅页面验证，owner frontend-ai，历史现场项不变。站长平台验证/提交待用户账户支持。
 
 2026-09-15 frontend-ai：NB-MCP-SHOWCASE closed，README/Pages突出已实现MCP场景，官网对齐软件灰白/蓝/绿及深色主题；owner frontend-ai跨test-ai仅静态/浏览器发布检查，无同步核心/API变更；bdbd145已推送，Pages 34933331443成功，线上36产品+72MCP组合通过，历史现场项不变。

@@ -5,7 +5,7 @@
 ![NodeBridge — 让数据流动，让协作更近。](docs/assets/banner-zh.svg)
 
 <p align="center">
-  <strong>连接中心服务器与边缘节点，让 MySQL 数据同步、本地管理和断线恢复 进入同一个工作流。</strong>
+  <strong>基于 Canal 与 RabbitMQ 的 MySQL 同步工具，支持列映射（Column Mapping）、双向同步，以及通过 MCP 进行 AI 辅助监控与运维。</strong>
 </p>
 
 <p align="center">
@@ -15,6 +15,23 @@
 </p>
 
 ---
+
+## 架构概览
+
+```mermaid
+flowchart LR
+  source[(源 MySQL)] --> canal[Canal CDC]
+  canal --> event[SyncAgent: SyncEvent]
+  event --> mq[RabbitMQ]
+  mq --> apply[SyncAgent: Apply]
+  apply --> target[(目标 MySQL)]
+```
+
+图中展示单向链路。双向规则还会处理反向链路，通过路由与回放识别控制分发和回环。MCP 是管理接口，不是数据同步的必经环节。
+
+**快速开始：**安装 [Windows 发行版](https://github.com/YufeiSun5/NodeBridge/releases/latest)，按[部署指南](docs/lan-deployment-guide.md)准备 MySQL/binlog，配置节点连接和一条表规则。先用独立测试数据验证新增、更新、删除，再接入业务表。
+
+一键 Docker Demo 尚未发布，已列入[后续计划](docs/distribution-and-validation-plan.md)。实测前不承诺三分钟完成部署。
 
 ## MCP · 让 AI 助手接入同步运维
 
