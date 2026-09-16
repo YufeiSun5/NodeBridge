@@ -1233,3 +1233,5 @@ Last updated: 2026-09-09 08:46 Asia/Singapore
 
 
 - 2026-09-15 11:00 | Codex | backend-ai跨frontend/test：三语README与欢迎页，自动语言/英语回退，三语390/1366浏览器和全test/vet/lint通过；GitHub v0.48.7与Pages已发布，远端安装包哈希一致，现场验收边界保留。
+
+- 2026-09-15 11:17 | Codex | frontend-ai重做site欢迎页：浅色品牌视觉、深绿三标签交互预览、三语响应式，36组浏览器检查与Go全测/vet/lint通过；仅官网发布，安装包不变。

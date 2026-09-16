@@ -18,6 +18,39 @@
 
 ## Architecture
 
+### Multi-node topology
+
+```mermaid
+flowchart TB
+  a["Edge A: MySQL / Canal / SyncAgent"]
+  b["Edge B: MySQL / Canal / SyncAgent"]
+  n["Edge N: MySQL / Canal / SyncAgent"]
+  hub["Central server: RabbitMQ / SyncAgent / MySQL / Canal"]
+  a -->|Uplink| hub
+  b -->|Uplink| hub
+  n -->|Uplink| hub
+  hub -->|Downlink| a
+  hub -->|Downlink| b
+  hub -->|Downlink| n
+```
+
+Star topology: each Edge has its own MySQL, Canal and SyncAgent. RabbitMQ carries uplink/downlink messages; arrows describe logical routes, not a requirement for one shared broker. Edges do not synchronize directly with each other.
+
+**Apply to central MySQL, then route.**
+
+### Multi-node behavior
+
+- **Edge → Server only**：Set dispatch_target: NONE. Each Edge uploads; the Server applies to its mapped database/table without forwarding.
+- **Server → selected Edges**：Set SELECTED_EDGES with dispatch_node_ids. Server-local changes are captured by its Canal and sent only to selected targets.
+- **Edge → Server → other Edges**：Use BIDIRECTIONAL with ACTIVE_EDGES, or explicitly enable forwarding. A change from A is applied at the Server, then forwarded to eligible B…N; A is skipped by default.
+- **Mappings and identity**：Give each node a unique ID. Use source_node_ids to distinguish identical source table names across nodes; map database/table/columns explicitly. ACTIVE_EDGES refers to registered ACTIVE nodes, not simply machines that are currently online.
+
+Example: A changes a row → Server commits it → B and N apply it. With NONE, the same change stops at Server. With SELECTED_EDGES = [B], N receives no downlink. MCP connects to each node separately for management.
+
+[Routing reference](docs/sync-routing-policy.md)
+
+### Single-direction processing
+
 ```mermaid
 flowchart LR
   source[(Source MySQL)] --> canal[Canal CDC]

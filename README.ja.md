@@ -18,6 +18,39 @@
 
 ## アーキテクチャ
 
+### 複数ノードの構成
+
+```mermaid
+flowchart TB
+  a["エッジ A: MySQL / Canal / SyncAgent"]
+  b["エッジ B: MySQL / Canal / SyncAgent"]
+  n["エッジ N: MySQL / Canal / SyncAgent"]
+  hub["中央サーバー: RabbitMQ / SyncAgent / MySQL / Canal"]
+  a -->|上り| hub
+  b -->|上り| hub
+  n -->|上り| hub
+  hub -->|下り| a
+  hub -->|下り| b
+  hub -->|下り| n
+```
+
+スター型構成です。各エッジは MySQL、Canal、SyncAgent を持ちます。RabbitMQ が上下方向のメッセージを運びます。矢印は論理経路で、単一ブローカーの共有を必須としません。エッジ間の直接同期は行いません。
+
+**中央 MySQL に適用後、ルーティング.**
+
+### 複数ノードの動作
+
+- **中央への集約のみ**：dispatch_target: NONE。各エッジから受信し、中央のマッピング先へ適用します。他のエッジへ転送しません。
+- **中央から指定エッジへ**：SELECTED_EDGES と dispatch_node_ids を指定。中央の Canal がローカル変更を取得し、選択した宛先へ配信します。
+- **中央を経由したエッジ間同期**：BIDIRECTIONAL と ACTIVE_EDGES、または明示的な転送設定を使用。A の変更は中央へ適用後、対象 B…N に配信し、送信元 A は通常除外します。
+- **マッピングと識別**：ノードごとに一意な ID を設定。同名テーブルは source_node_ids で区別し、DB・テーブル・列を明示的にマッピングします。ACTIVE_EDGES は登録状態が ACTIVE のノードで、現在オンラインの端末だけを意味しません。
+
+例：A が行を変更 → 中央でコミット → B と N に適用。NONE なら中央で終了し、SELECTED_EDGES = [B] なら N へ配信しません。MCP はノードごとに接続します。
+
+[Routing reference](docs/sync-routing-policy.md)
+
+### 片方向の内部処理
+
 ```mermaid
 flowchart LR
   source[(ソース MySQL)] --> canal[Canal CDC]

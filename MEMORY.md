@@ -88,6 +88,8 @@ Last updated: 2026-09-15 Asia/Singapore
 
 ## 改动记录
 
+- 2026-09-16 11:48 | Codex | review-ai：三语README增加多节点拓扑和路由示例；NONE/ACTIVE_EDGES/SELECTED_EDGES及节点映射说明，Go门禁通过。
+
 - 2026-09-16 11:42 | Codex | review-ai：三语README突出列映射/双向/MCP，增加架构与真实Windows入门；CI/Demo/软件源/签名列为待实施计划。
 
 - 2026-09-15 13:53 | Codex | frontend-ai跨test-ai：补10个仓库Topics、三语静态SEO地址/语言关联/sitemap，自动生成CI与静态及浏览器验证通过；Go test/vet/lint通过，站长平台验证与提交待账户支持。
@@ -95,5 +97,3 @@ Last updated: 2026-09-15 Asia/Singapore
 - 2026-09-15 13:34 | Codex | frontend-ai跨test-ai：三语README/Pages重点介绍MCP实际工具、连接和操作边界；官网对齐软件灰白蓝绿与深色主题，36产品状态+72MCP组合、JSON/键盘/持久化及Go全测/vet/lint通过。
 
 - 2026-09-15 13:23 | Codex | frontend-ai按用户纠正将展示重心移到GitHub README：三语SVG品牌横幅、直接下载、功能表、真实前端测试截图、折叠开发说明；链接与全测/vet/lint通过。
-
-- 2026-09-15 11:17 | Codex | frontend-ai重做site欢迎页：浅色品牌视觉、深绿三标签交互预览、三语响应式，36组浏览器检查与Go全测/vet/lint通过；仅官网发布，安装包不变。

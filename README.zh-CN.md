@@ -18,6 +18,39 @@
 
 ## 架构概览
 
+### 多节点拓扑
+
+```mermaid
+flowchart TB
+  a["从站 A: MySQL / Canal / SyncAgent"]
+  b["从站 B: MySQL / Canal / SyncAgent"]
+  n["从站 N: MySQL / Canal / SyncAgent"]
+  hub["中心主站: RabbitMQ / SyncAgent / MySQL / Canal"]
+  a -->|上行| hub
+  b -->|上行| hub
+  n -->|上行| hub
+  hub -->|下行| a
+  hub -->|下行| b
+  hub -->|下行| n
+```
+
+采用星型拓扑：每个从站有自己的 MySQL、Canal 和 SyncAgent。RabbitMQ 承载上行与下行消息；箭头表示逻辑路由，不要求所有节点共用一个 RabbitMQ。各从站不直接互相同步。
+
+**先写中心 MySQL，再按规则分发.**
+
+### 多节点怎么同步
+
+- **只汇总到主站**：设置 dispatch_target: NONE。各从站上传，主站写入映射后的库表，不转发到其他从站。
+- **主站下发指定从站**：设置 SELECTED_EDGES 和 dispatch_node_ids。主站本地变更由自己的 Canal 捕获，只下发给指定目标。
+- **从站经主站同步到其他从站**：使用 BIDIRECTIONAL 配合 ACTIVE_EDGES，或显式开启转发。A 的变更先落主站，再分发给符合条件的 B…N；默认跳过来源 A。
+- **映射与节点身份**：每个节点使用唯一 ID。同名源表可通过 source_node_ids 区分来源，再分别映射库、表、列。ACTIVE_EDGES 指已登记为 ACTIVE 的节点，并不只是此刻在线的机器。
+
+例如：A 修改一行 → 主站提交 → B、N 分别落库。设置 NONE 时只到主站；设置 SELECTED_EDGES = [B] 时 N 不接收下行。MCP 管理需分别连接各节点。
+
+[Routing reference](docs/sync-routing-policy.md)
+
+### 单方向内部处理
+
 ```mermaid
 flowchart LR
   source[(源 MySQL)] --> canal[Canal CDC]
