@@ -45,6 +45,19 @@ try {
         $expectedCount = @(Get-ChildItem -LiteralPath (Join-Path $root "migrations/$scope") -Filter '*.sql').Count
         if ($actual[0] -ne 'keep-original' -or $actual[1] -ne 'ACTIVE' -or $actual[2] -ne 'original' -or [int]$actual[3] -ne $expectedCount -or [int]$actual[4] -ne 2 -or $actual[5] -ne $report.version) { throw "Upgrade preservation check failed: $scope" }
         $results += @{scope=$scope;repeated=$true;business_and_active_proof_preserved=$true;migrations=$expectedCount;version=$report.version}
+        $freshDatabase = "owned_fresh_$scope"
+        $freshConfig = Join-Path $OutputDirectory "$scope-fresh.yaml"
+        (Get-Content -LiteralPath $config -Raw).Replace("database: $database", "database: $freshDatabase") | Set-Content -LiteralPath $freshConfig -Encoding utf8
+        $missingOutput = & $Agent upgrade-system -config $freshConfig 2>&1
+        if ($LASTEXITCODE -eq 0 -or ($missingOutput -join "`n") -notmatch 'Unknown database') { throw "Missing database was not rejected without explicit initialization: $scope" }
+        foreach ($attempt in 1,2) {
+            $freshOutput = & $Agent upgrade-system -config $freshConfig -create-database
+            if ($LASTEXITCODE -ne 0) { throw "Fresh database initialization failed: $scope/$attempt" }
+            $freshOutput | Set-Content -LiteralPath (Join-Path $OutputDirectory "$scope-fresh-$attempt.json")
+        }
+        $freshActual = @(Invoke-OwnedSQL $freshDatabase "SELECT COUNT(*) FROM sync_schema_migration; SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name NOT LIKE 'sync\\_%'; SELECT COUNT(*) FROM sync_alignment_cutover;")
+        if ([int]$freshActual[0] -ne $expectedCount -or [int]$freshActual[1] -ne 0 -or [int]$freshActual[2] -ne 0) { throw "Fresh database system-only check failed: $scope" }
+        $results += @{scope=$scope;fresh_database=$true;repeated=$true;system_tables_only=$true;migrations=$expectedCount}
     }
     @{passed=$true;owned_container=$container;results=$results} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $OutputDirectory 'evidence.json')
     Write-Output "PASS: edge/server old schemas upgraded twice, original rows and ACTIVE proofs preserved. Evidence: $OutputDirectory"

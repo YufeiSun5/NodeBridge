@@ -31,6 +31,26 @@
 
 ## Active Board
 
+- 2026-09-18 backend-ai：NB-FRESH-SYSTEM-DB closed，v0.48.10已出包。显式初始化系统库/表及脱敏失败诊断；跨frontend/test的三语入口、缺库/重复初始化、旧库数据与ACTIVE证明保留、Go全测/vet/lint、覆盖安装和65文件5资产通过。owner backend-ai；现场升级与同步恢复仍open，无现场数据变更。docs/v0.48.10-fresh-database-handoff-20260918.md。
+
+- 2026-09-18 backend-ai：NB-FRESH-SYSTEM-DB in progress：新机未配置安装跳过迁移，后续缺少系统库初始化入口。增加显式建系统库/升级命令与 Wails 初始化按钮；跨 frontend-ai 仅三语按钮，跨 test-ai 仅隔离数据库测试。owner backend-ai；不自动创建业务表、不自动恢复同步。
+
+- 2026-09-18 backend-ai：NB-ALIGNMENT-PERMISSIONS Windows修复/出包closed，0.48.9显式批处理引用；真实Windows RabbitMQ+包内MCP配置账号及读回权限通过，65文件/5资产/覆盖升级及Go test/vet/lint通过。跨test-ai仅隔离验证；API/UI无变化。现场重试、105/108迁移验收与历史偶发更新超时仍open。交接docs/v0.48.9-windows-rabbitmq-handoff-20260918.md。
+
+- 2026-09-18 backend-ai：修复Windows批处理参数引用并出0.48.9，跨test-ai仅本机隔离验证/封包；API与UI无变化，现场不部署，owner backend-ai，in progress。
+
+- 2026-09-18 review-ai：NB-ALIGNMENT-PERMISSIONS reopened，owner backend-ai：Windows真实默认runner+无害bat复现现场完全相同path specified/exit255，普通.*成功、正则管道参数失败；显式引用夹具成功。先前Docker测试未覆盖Windows批处理路径，不能整体closed。产品未改、现场未连接；核查closed，修复/Windows实链验收open。迁移不合并108独有行的报告属实，105权威源选择已有；详见docs/v0.48.8-windows-rabbitmq-review-20260918.md。
+
+- 2026-09-17 backend-ai：NB-ALIGNMENT-PERMISSIONS / NB-REBASELINE-IMPLEMENTATION closed：0.48.8 补权限、旧计划早期诊断与双向计划受控变更，MCP 44工具、011迁移；包内两端 E2E 连续两轮通过，test/vet/lint、系统库/覆盖安装、65文件22迁移5资产核验通过。owner backend-ai，跨test-ai仅独占验证封包。NB-MIGRATION-105-108现场部署/验收仍open；一次中间update-1超时未复现但根因未定，继续跟踪。无新增GUI向导，走MCP；旧保存保护保留。交接 docs/v0.48.8-rebaseline-handoff-20260917.md；下列“未实现/in progress”为早期状态，由本条覆盖。
+
+- 2026-09-17 backend-ai：用户要求完成修复并出包，补充双向计划可修改。实施受控整组重建基线（首版一Edge一Server、Edge权威源）：plan/prepare MCP 接口允许提供新规则；旧系统库完整保留，新系统库承载新一代历史，目标表事务备份后清空，随后复用首次对齐建立新证明。恢复日志/CAS/维护锁、代际握手与旧epoch留档共同保护。跨test-ai仅隔离测试/封包，暂不部署现场；owner backend-ai，in progress。UI可暂经MCP执行，禁止把普通保存变成自动覆盖。
+
+- 2026-09-17 backend-ai：NB-ALIGNMENT-PERMISSIONS/DIAGNOSTICS源码修正及单测、独占RabbitMQ受限账号控制/快照队列实测、全量Go test/vet/lint通过；测试容器已清理。NB-MIGRATION-105-108仍open：用户确认105为权威源，安全重建基线执行协议尚未实现/部署，不能宣称已恢复或出完整修复包。只读MCP确认105有行版本历史、108有PENDING拓扑，两端Agent stopped；现场未写。新错误alignment_existing_plan_rule_changed在写拓扑前拦截旧映射，既有DTO不变；contract已记，无新增可执行UI入口。owner backend-ai；交接docs/alignment-migration-progress-20260917.md。
+
+- 2026-09-17 review-ai：NB-MIGRATION-105-108根因只读确认；两端33条规则完全一致，但105旧sys_projects作业TARGET_CONFIRMED/证明ACTIVE绑定旧目标库，108两对齐表为空；session复用本机/对端旧计划后RuleHash校验拒绝新库。迁移能力仍blocked（owner backend-ai），未写远端或重试；报告output/alignment-rule-changed-20260917.md。
+
+- 2026-09-17 backend-ai：用户明确要求清空105/108全部规则，已备份并通过MCP CAS保存0条、复读确认Agent stopped；105旧pairs移到备份目录，系统对齐账本/业务数据/队列未改。NB-CLEAR-RULES closed；NB-MIGRATION-105-108仍blocked，新规则与旧对齐历史衔接及108队列error待处理。105完整原规则备份clear-rules-20260917085613243，108为clear-rules-20260917085631275（各端ProgramData/NodeBridge/backups）；证据output/cleared-*.json。
+
 - 2026-09-16 review-ai：NB-MULTINODE-DOC closed；三语README补星型多节点拓扑、汇总/下发/转发、来源跳过与节点映射；Go test/vet/lint通过，历史现场项不变。
 
 - 2026-09-16 review-ai：NB-README-POSITIONING closed；三语产品说明、Mermaid架构、Windows快速开始与未来分发/验证计划；文档范围，历史现场项不变。

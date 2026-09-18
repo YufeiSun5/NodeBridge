@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strings"
 
@@ -43,7 +42,13 @@ func (a Admin) EnsureServerEdgeUser(ctx context.Context, nodeID string) error {
 	if err != nil {
 		return err
 	}
-	return a.ensureUser(ctx, identity.ServerVHost, identity.ServerUser, "^$", `server\.ingress\..*`, regexpLiteral(nodeID)+`\.downlink\..*`)
+	// Alignment declares and consumes control/snapshot queues and publishes via
+	// the default exchange (RabbitMQ checks its permission as amq.default).
+	const alignmentQueues = `nb\.alignment\.(session\.[0-9a-f]{32}|offer\.[0-9a-f]{64}|[0-9a-f]{64}\.(frames|replies))`
+	return a.ensureUser(ctx, identity.ServerVHost, identity.ServerUser,
+		`^`+alignmentQueues+`$`,
+		`^(server\.ingress\..*|amq\.default)$`,
+		`^(`+regexpLiteral(nodeID)+`\.downlink\..*|`+alignmentQueues+`)$`)
 }
 
 func (a Admin) ensureUser(ctx context.Context, vhost, username, configure, write, read string) error {
@@ -112,10 +117,10 @@ func (a Admin) commandPath() (string, error) {
 }
 
 func runCommand(ctx context.Context, name string, args ...string) (string, error) {
-	if runtime.GOOS != "windows" {
-		return "", fmt.Errorf("managed RabbitMQ user changes require Windows")
+	cmd, err := adminCommand(ctx, name, args...)
+	if err != nil {
+		return "", err
 	}
-	cmd := exec.CommandContext(ctx, name, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("%s: %w", strings.TrimSpace(string(output)), err)

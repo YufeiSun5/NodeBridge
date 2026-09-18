@@ -23,7 +23,14 @@ func loadRuntimeCutover(ctx context.Context, db *sql.DB, node string, endpoints 
 	if err != nil {
 		return nil, err
 	}
-	return alignment.NewCutoverFilter(node, db, proofs)
+	filter, err := alignment.NewCutoverFilter(node, db, proofs)
+	if err != nil {
+		return nil, err
+	}
+	if err := alignment.LoadGenerationFilter(ctx, filter); err != nil {
+		return nil, err
+	}
+	return filter, nil
 }
 
 func runtimeTableScopes(endpoint rulecheck.EndpointRules) []alignment.TableScope {

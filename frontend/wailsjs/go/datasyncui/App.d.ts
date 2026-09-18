@@ -47,6 +47,8 @@ export function GetQueueStatus():Promise<uiapi.QueueStatusResponse>;
 
 export function GetSyncRules():Promise<uiapi.SyncRulesDTO>;
 
+export function InitializeSystemDatabase():Promise<uiapi.OperationResult>;
+
 export function InterruptInitialAlignment():Promise<uiapi.InitialAlignmentStatus>;
 
 export function LoadConfig(arg1:string):Promise<appconfig.Config>;

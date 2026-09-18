@@ -16,6 +16,7 @@ import (
 
 	"github.com/YufeiSun5/NodeBridge/internal/agentlog"
 	"github.com/YufeiSun5/NodeBridge/internal/agentstate"
+	"github.com/YufeiSun5/NodeBridge/internal/alignment"
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
 	"github.com/YufeiSun5/NodeBridge/internal/autostart"
 	"github.com/YufeiSun5/NodeBridge/internal/eventstatus"
@@ -80,6 +81,16 @@ func NewMCPService(configPath, rulesPath, logPath string, lab bool) (*MCPService
 		bindTool("nodebridge_mysql_schema", "Inspect table columns and primary keys in the saved MySQL database; optional table filter.", false, s.mysqlSchema),
 	}
 	s.extra = append(s.extra,
+		bindContextTool("nodebridge_plan_rebaseline", "Preview an offline edge-authoritative replacement of all rules, including changed bidirectional mappings. Requires migration_id, edge_node_id, server_node_id; optional rules replaces the complete rule set. Both Agents and target business writers must stop before preparing. Retains old metadata; target tables will be backed up and emptied. One edge/server pair only; target triggers and foreign keys are rejected.", false, func(ctx context.Context, req alignment.RebaselineRequest) (alignment.RebaselinePlan, error) {
+			ctx, cancel := context.WithTimeout(ctx, time.Minute)
+			defer cancel()
+			return alignment.PlanRebaseline(ctx, app.effectiveConfigPath(), app.effectiveRulesPath(), req)
+		}),
+		bindContextTool("nodebridge_prepare_rebaseline", "Prepare the exact preview plan with confirm=true and target_writers_stopped=true on BOTH nodes using the same migration_id/rules. Backs up and empties the listed server tables transactionally; retains the old system database and files. Never starts Agents. Retry the identical plan after disconnect. Afterwards run initial alignment for EVERY rule on both nodes before enabling sync. Requires database CREATE privileges.", true, func(ctx context.Context, req alignment.RebaselineApply) (alignment.RebaselineResult, error) {
+			ctx, cancel := context.WithTimeout(ctx, 15*time.Minute)
+			defer cancel()
+			return alignment.PrepareRebaseline(ctx, app.effectiveConfigPath(), app.effectiveRulesPath(), req)
+		}),
 		bindTool("nodebridge_start_initial_alignment", "Start or retry manual initial alignment asynchronously. Requires rule_id, peer_node_id and confirm=true. On the server, peer_node_id is a comma-separated list of ALL participating edges; on an edge it is its server ID. Every member must explicitly run this tool with its saved local mapping and stopped Agent. Retry reconciles committed copies without copying again. Keep this stdio session open and poll nodebridge_initial_alignment_status; running is not completion. Raw snapshot limit 256 MiB, wire limit 512 MiB, copy timeout 15 minutes. Does not automatically start Agents.", true, app.StartInitialAlignment),
 		noArgs("nodebridge_initial_alignment_status", "Read the current initial-alignment task and its durable last status. completed means group readiness, not running synchronization. unknown requires retry to inspect persisted database outcomes; never assume rollback after disconnect.", false, func() (any, error) { return app.GetInitialAlignmentStatus(), nil }),
 		noArgs("nodebridge_interrupt_initial_alignment", "Interrupt the initial-alignment task owned by this stdio session. Does not roll back committed data, delete job evidence, or unlock an incomplete group. Poll status, then retry start on every member to reconcile.", true, func() (any, error) { return app.InterruptInitialAlignment() }),

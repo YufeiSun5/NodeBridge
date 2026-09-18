@@ -47,9 +47,13 @@ try {
   JSON.parse(resource.contents[0].text);
   const catalog = (await call('tools/list')).tools;
   report.tools = catalog.length;
-  const [major, minor] = version.split('.').map(Number);
+  const [major, minor, patch] = version.split('.').map(Number);
   const multiAligned = major > 0 || minor >= 48;
-  assert.equal(report.tools, multiAligned ? 42 : 39);
+  const rebaseline = major > 0 || minor > 48 || minor === 48 && patch >= 8;
+  assert.equal(report.tools, rebaseline ? 44 : multiAligned ? 42 : 39);
+  if (rebaseline) {
+    for (const name of ['plan_rebaseline', 'prepare_rebaseline']) assert(catalog.some(tool => tool.name === `nodebridge_${name}`), name);
+  }
   if (multiAligned) {
     for (const name of ['start_initial_alignment', 'initial_alignment_status', 'interrupt_initial_alignment']) assert(catalog.some(tool => tool.name === `nodebridge_${name}`), name);
   }

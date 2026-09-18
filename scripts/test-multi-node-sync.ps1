@@ -5,6 +5,7 @@ param(
     [switch]$InterCopyWrites,
 	[switch]$Reconnect,
     [switch]$SharedRule,
+	[switch]$Rebaseline,
     [switch]$InterruptAfterFirstCopy,
     [ValidateRange(0,25200)][int]$SoakSeconds = 0,
     [ValidateRange(1,16)][int]$BatchSize = 16
@@ -107,6 +108,7 @@ canal.instance.filter.black.regex=mysql\\.slave_.*
 canal.mq.topic=example
 canal.mq.partition=0
 "@
+		if ($Rebaseline) { $instance = $instance -replace '(?m)^canal.instance.filter.regex=.*$', 'canal.instance.filter.regex=.*\\.(edge_rows|central_rows|sync_capture_fence)' }
         $path = Join-Path $root "instance-$i.properties"
         $instance | Set-Content -LiteralPath $path -Encoding ascii
         $canal = Docker-ID @('run','-d','--rm','--network',$network,'--name',"nb-multi-canal-$i-$run",'--cpus','1','--memory',$canalMemory,'-p','127.0.0.1::11111','-e',$canalJava,'--mount',"type=bind,source=$path,target=/home/admin/canal-server/conf/example/instance.properties,readonly",'canal/canal-server:latest')
@@ -148,9 +150,16 @@ canal.mq.partition=0
 			if ($LASTEXITCODE -ne 0) { throw 'Session recovery integration failed' }
 		} finally { $env:NODEBRIDGE_RABBITMQ_URL = $reconnectPreviousURL }
 	}
-    & go test ./cmd/sync-agent -run '^TestOwnedMultiNodePipeline$' -count=1 "-timeout=$testTimeout" -v 2>&1 | Tee-Object -FilePath (Join-Path $root 'test-output.txt')
+	$testName = if ($Rebaseline) { '^TestOwnedRebaselinePipeline$' } else { '^TestOwnedMultiNodePipeline$' }
+	if ($Rebaseline) {
+		& go test ./internal/alignment -run '^TestOwnedRebaselineTransactionRollback$' -count=1 -timeout=90s -v 2>&1 | Tee-Object -FilePath (Join-Path $root 'rebaseline-transaction-test.txt')
+		if ($LASTEXITCODE -ne 0) { throw 'Rebaseline transaction rollback integration failed' }
+	}
+    & go test ./cmd/sync-agent -run $testName -count=1 "-timeout=$testTimeout" -v 2>&1 | Tee-Object -FilePath (Join-Path $root 'test-output.txt')
     if ($LASTEXITCODE -ne 0) { throw "Multi-node fixture failed: $root" }
-    [ordered]@{passed=$true;source=$Source;large_snapshot=[bool]$LargeSnapshot;inter_copy_writes=[bool]$InterCopyWrites;shared_rule=[bool]$SharedRule;partial_retry=[bool]$InterruptAfterFirstCopy;mysql_instances=3;canal_readers=3;agents=3;candidate_sha256=(Get-FileHash (Join-Path $root 'SyncAgent.exe')).Hash;scope='owned loopback containers and candidate MCP/CLI; no business deployment'} | ConvertTo-Json | Set-Content (Join-Path $root 'evidence.json') -Encoding utf8
+    $testedNodes = if ($Rebaseline) { 2 } else { 3 }
+    $testedSource = if ($Rebaseline) { 'edge' } else { $Source }
+    [ordered]@{passed=$true;source=$testedSource;rebaseline=[bool]$Rebaseline;large_snapshot=[bool]$LargeSnapshot;inter_copy_writes=[bool]$InterCopyWrites;shared_rule=[bool]$SharedRule;partial_retry=[bool]$InterruptAfterFirstCopy;allocated_mysql_instances=3;allocated_canal_readers=3;mysql_instances=$testedNodes;canal_readers=$testedNodes;agents=$testedNodes;candidate_sha256=(Get-FileHash (Join-Path $root 'SyncAgent.exe')).Hash;scope='owned loopback containers and candidate MCP/CLI on one Windows host; no business deployment'} | ConvertTo-Json | Set-Content (Join-Path $root 'evidence.json') -Encoding utf8
     Write-Host "Evidence: $root"
 } finally {
     foreach ($id in $canals) {

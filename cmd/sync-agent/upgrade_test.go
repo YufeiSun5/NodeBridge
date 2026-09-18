@@ -33,4 +33,7 @@ func TestUpgradeSystemUnconfiguredAndRunning(t *testing.T) {
 	if err := runUpgradeSystem([]string{"-config", path}, &output, &output); err == nil || !strings.Contains(err.Error(), "stop synchronization") {
 		t.Fatal(err)
 	}
+	if !strings.Contains(output.String(), "system database upgrade failed: stop synchronization") {
+		t.Fatal("upgrade failure is missing from CLI diagnostics", output.String())
+	}
 }

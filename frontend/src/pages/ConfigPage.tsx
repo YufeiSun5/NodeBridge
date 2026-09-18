@@ -10,6 +10,7 @@ import {
   getConfig,
   saveConfig,
   testMySQL,
+  initializeSystemDatabase,
   testRabbitMQ,
   type CDCConfig,
   type ConfigDTO,
@@ -246,6 +247,26 @@ export function ConfigPage() {
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : t('configError'));
+    }
+  }
+
+  const [initializingDatabase, setInitializingDatabase] = useState(false);
+
+  async function initializeDatabase() {
+    if (initializingDatabase || !(await ensureUnlocked())) return;
+    setInitializingDatabase(true);
+    setResult(null);
+    setError('');
+    try {
+      const saved = await saveConfig(config);
+      setConfig(saved);
+      setSavedConfig(saved);
+      const response = await initializeSystemDatabase();
+      setResult({ ...response, message: response.ok ? t('systemDatabaseReady') : response.message });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('configError'));
+    } finally {
+      setInitializingDatabase(false);
     }
   }
 
@@ -570,6 +591,9 @@ export function ConfigPage() {
             </button>
             <button className="button-tool" type="button" onClick={() => void runTest('mysql')}>
               {t('testMysql')}
+            </button>
+            <button className="button-tool" type="button" disabled={initializingDatabase} title={t('initSystemDatabaseHint')} onClick={() => void initializeDatabase()}>
+              {t(initializingDatabase ? 'initializingSystemDatabase' : 'initSystemDatabase')}
             </button>
             <button className="button-tool" type="button" onClick={() => void runTest('rabbitmq')}>
               {t('testRabbitmq')}

@@ -19,6 +19,7 @@ import (
 
 	"github.com/YufeiSun5/NodeBridge/internal/agentlog"
 	"github.com/YufeiSun5/NodeBridge/internal/agentstate"
+	"github.com/YufeiSun5/NodeBridge/internal/alignment"
 	"github.com/YufeiSun5/NodeBridge/internal/appconfig"
 	"github.com/YufeiSun5/NodeBridge/internal/apply"
 	"github.com/YufeiSun5/NodeBridge/internal/cdc"
@@ -149,11 +150,6 @@ func runAgent(args []string, stdout, stderr io.Writer) (runErr error) {
 		return err
 	}
 
-	cfg, err := appconfig.LoadFile(*configPath)
-	if err != nil {
-		fmt.Fprintf(stderr, "load config failed: %v\n", err)
-		return err
-	}
 	if *stopFile == "" {
 		*stopFile = filepath.Join(filepath.Dir(*configPath), "run", "sync-agent.stop")
 	}
@@ -163,6 +159,13 @@ func runAgent(args []string, stdout, stderr io.Writer) (runErr error) {
 		return err
 	}
 	defer releaseAgent()
+	if err := alignment.CheckRebaselinePreparation(*configPath); err != nil {
+		return err
+	}
+	cfg, err := appconfig.LoadFile(*configPath)
+	if err != nil {
+		return err
+	}
 	redact := runtimeRedactor(cfg)
 	logger, logCloser, err := newRuntimeLogger(*configPath, cfg, stderr, redact)
 	stderr = agentlog.RedactingWriter(stderr, redact)

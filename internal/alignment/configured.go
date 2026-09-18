@@ -47,6 +47,9 @@ func RunConfigured(ctx context.Context, configPath, rulesPath string, request Co
 		return proof, fmt.Errorf("alignment_requires_stopped_agent: %w", err)
 	}
 	defer lock.Close()
+	if err := CheckRebaselinePreparation(configPath); err != nil {
+		return proof, err
+	}
 	configBytes, err := os.ReadFile(configPath)
 	if err != nil {
 		return proof, err

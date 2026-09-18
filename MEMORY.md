@@ -1,8 +1,12 @@
 # MEMORY
 
-Last updated: 2026-09-15 Asia/Singapore
+Last updated: 2026-09-18 Asia/Singapore
 
 ## 当前阶段
+- 2026-09-18 backend-ai：0.48.10补新机系统库初始化入口与upgrade-system -create-database，显式建库/系统表，升级失败输出脱敏原因。两角色缺库及旧库重复升级、Go全测/vet/lint、Wails三语交互通过；65文件5资产及覆盖安装核验通过，已出包，现场未部署。docs/v0.48.10-fresh-database-handoff-20260918.md。
+- 2026-09-18 backend-ai：0.48.9修复Windows批处理正则传参exit255并出包；原版Windows RabbitMQ实链、包内MCP配置账号/权限读回、44工具、65文件5资产/覆盖升级、Go全测/vet/lint通过。源码/包内修复closed，现场重试与迁移验收仍open；docs/v0.48.9-windows-rabbitmq-handoff-20260918.md。
+- 2026-09-18 review-ai：Windows批处理权限正则传参缺陷已复现，同现场exit255；NB-ALIGNMENT-PERMISSIONS reopened，先前Docker权限测试不覆盖bat。产品未改、现场未连接；修复与Windows实际链路验收待backend-ai。详见docs/v0.48.8-windows-rabbitmq-review-20260918.md。
+- 2026-09-17 backend-ai：0.48.8已出包，补对齐RabbitMQ权限、旧计划诊断、双向计划MCP预览/受控重建，105权威源；旧系统库保留、目标事务备份清空、新代际重对齐、旧epoch审计。Go全测/vet/lint、包内双端E2E连续两轮、系统库升级/覆盖安装、44工具及65文件22迁移5资产通过。一次中间update-1超时原因未定，现场未部署未恢复，NB-MIGRATION-105-108仍open；详见docs/v0.48.8-rebaseline-handoff-20260917.md。
 
 - 0.48.7自动重连补丁交付：NB-RECONNECT固定旧RabbitMQ对象无限重试已修，Session失效重建且保留原ACK/确认/Canal位点边界；两轮三节点批量16服务停止恢复与通信暂停20秒自动补齐，1.058–1.465秒（测试重试1秒），确认未知/旧ACK隔离通过。全测/vet/lint、Wails/CLI、安装/系统库升级及62文件20迁移5资产哈希通过。包build/NodeBridge-beta-v0.48.7-20260915.exe（5A1FDF8F…），报告docs/v0.48.7-reconnect-handoff-20260915.md。backend-ai跨test-ai，仅独占测试，资源清理，业务配置规则未变；现场复验/初次断线诱因/整机重启与其他历史项待验。
 
@@ -87,13 +91,10 @@ Last updated: 2026-09-15 Asia/Singapore
 - 历史MEMORY及阶段流水归档.ai/docs/changelog.md；稳定合同.ai/docs/frontend-backend-contract.md，活跃问题只写AI_BOARD.md。
 
 ## 改动记录
+- 2026-09-18 | Codex | backend-ai：新机缺库初始化及错误输出修复，跨frontend/test完成入口与隔离回归。
+- 2026-09-18 | Codex | backend-ai：0.48.9 Windows批处理权限修复，原生实链与包内MCP验证通过并封包。
+- 2026-09-18 | Codex | review-ai：本地复现权限配置Windows批处理失败，重开缺陷并明确目标备份不等于活动库合并。
 
+- 2026-09-17 | Codex | backend-ai：完成0.48.8双向计划迁移补丁和隔离验证出包，保留现场验收及偶发更新超时跟踪。
 - 2026-09-16 11:48 | Codex | review-ai：三语README增加多节点拓扑和路由示例；NONE/ACTIVE_EDGES/SELECTED_EDGES及节点映射说明，Go门禁通过。
-
 - 2026-09-16 11:42 | Codex | review-ai：三语README突出列映射/双向/MCP，增加架构与真实Windows入门；CI/Demo/软件源/签名列为待实施计划。
-
-- 2026-09-15 13:53 | Codex | frontend-ai跨test-ai：补10个仓库Topics、三语静态SEO地址/语言关联/sitemap，自动生成CI与静态及浏览器验证通过；Go test/vet/lint通过，站长平台验证与提交待账户支持。
-
-- 2026-09-15 13:34 | Codex | frontend-ai跨test-ai：三语README/Pages重点介绍MCP实际工具、连接和操作边界；官网对齐软件灰白蓝绿与深色主题，36产品状态+72MCP组合、JSON/键盘/持久化及Go全测/vet/lint通过。
-
-- 2026-09-15 13:23 | Codex | frontend-ai按用户纠正将展示重心移到GitHub README：三语SVG品牌横幅、直接下载、功能表、真实前端测试截图、折叠开发说明；链接与全测/vet/lint通过。

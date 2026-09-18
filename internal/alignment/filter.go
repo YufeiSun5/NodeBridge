@@ -19,9 +19,10 @@ const EpochHeader = "alignment_epoch"
 const SourceUUIDHeader = "source_mysql_uuid"
 
 type CutoverFilter struct {
-	NodeID string
-	DB     *sql.DB
-	Proofs []CutoverProof
+	NodeID  string
+	DB      *sql.DB
+	Proofs  []CutoverProof
+	Retired []CutoverProof
 }
 
 func NewCutoverFilter(node string, db *sql.DB, proofs []CutoverProof) (*CutoverFilter, error) {
@@ -116,6 +117,9 @@ func (f *CutoverFilter) Stamp(evt event.SyncEvent) (event.SyncEvent, error) {
 // Missing epochs are legacy inputs captured before the coordinated first copy;
 // unknown nonempty epochs fail instead of guessing whether they are older.
 func (f *CutoverFilter) Superseded(evt event.SyncEvent) (*CutoverProof, bool, error) {
+	if proof, retired, err := f.retiredEvent(evt); retired || err != nil {
+		return proof, retired, err
+	}
 	proof, boundary := f.find(evt.OriginNodeID, evt.DatabaseName, evt.TableName)
 	if proof == nil {
 		return nil, false, nil

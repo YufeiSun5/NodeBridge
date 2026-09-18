@@ -103,6 +103,17 @@ func RunPairSession(ctx context.Context, options PairSessionOptions) (proof Cuto
 	if peerState.Observation.NodeID != options.PeerID {
 		return proof, errors.New("alignment_peer_observation_mismatch")
 	}
+	// Reject stale history before BeforePlan persists a new topology intent.
+	if err := exchangeGeneration(ctx, options.DB, control, rule, options.NodeID, options.PeerID); err != nil {
+		return proof, err
+	}
+	generation, err := readGeneration(ctx, options.DB)
+	if err != nil {
+		return proof, err
+	}
+	if err := checkExistingPairPlans(rule, localState.Job, peerState.Job); err != nil {
+		return proof, err
+	}
 	if options.BeforePlan != nil {
 		if err := options.BeforePlan(ctx, control, localState.Observation, peerState.Observation); err != nil {
 			return proof, err
@@ -132,6 +143,9 @@ func RunPairSession(ctx context.Context, options PairSessionOptions) (proof Cuto
 		edgeState, serverState = peerState, localState
 	}
 	var plan Plan
+	if generation != nil && localState.Job == nil && peerState.Job == nil && serverState.Observation.HasRows {
+		return proof, errors.New("rebaseline_target_not_empty: stop target writers before alignment")
+	}
 	if existing != nil {
 		plan = existing.Plan
 	} else if peerState.Job != nil {

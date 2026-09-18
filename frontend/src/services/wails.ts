@@ -252,6 +252,7 @@ type BackendApp = {
   GetConfig?: () => Promise<ConfigDTO>;
   SaveConfig?: (req: { config: ConfigDTO }) => Promise<ConfigDTO>;
   TestMySQL?: (req: MySQLConfig) => Promise<TestResult>;
+  InitializeSystemDatabase?: () => Promise<OperationResult>;
   TestRabbitMQ?: (req: RabbitMQConfig) => Promise<TestResult>;
   GetSyncRules?: () => Promise<SyncRulesSnapshot>;
   SaveSyncRules?: (req: { rules: SyncRule[]; expected_revision: string }) => Promise<SyncRulesSnapshot>;
@@ -428,6 +429,10 @@ export async function saveConfig(config: ConfigDTO): Promise<ConfigDTO> {
 
 export async function testMySQL(mysql: MySQLConfig): Promise<TestResult> {
   return (await app()?.TestMySQL?.(mysql)) || unavailable('Wails TestMySQL binding is not available');
+}
+
+export async function initializeSystemDatabase(): Promise<OperationResult> {
+  return (await app()?.InitializeSystemDatabase?.()) || unavailable('Wails InitializeSystemDatabase binding is not available');
 }
 
 export async function testRabbitMQ(rabbitmq: RabbitMQConfig): Promise<TestResult> {

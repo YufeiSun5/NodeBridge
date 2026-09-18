@@ -1,5 +1,5 @@
 param(
-    [string]$Version = "0.48.7",
+    [string]$Version = "0.48.10",
     [string]$DateStamp = "",
     [string]$MakensisPath = "",
     [switch]$NoBuild,
@@ -134,7 +134,8 @@ foreach ($doc in @(
     "docs/lan-deployment-guide.md",
     "docs/mcp-service.md",
     "docs/mcp-business-ai-handoff.md",
-    "docs/initial-alignment.md"
+    "docs/initial-alignment.md",
+    "docs/rebaseline-migration.md"
 )) {
     $source = Join-Path $root $doc
     if (Test-Path -LiteralPath $source) {

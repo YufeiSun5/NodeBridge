@@ -143,7 +143,7 @@ func TestMCPLabToolCatalog(t *testing.T) {
 		t.Fatal(err)
 	}
 	tools := s.Tools()
-	if len(tools) < 42 {
+	if len(tools) < 44 {
 		t.Fatalf("expected legacy tools plus capabilities and remediation tools, got %d", len(tools))
 	}
 	seen := map[string]bool{}
@@ -168,6 +168,7 @@ func TestMCPLabToolCatalog(t *testing.T) {
 		"nodebridge_apply_managed_install", "nodebridge_ensure_server_edge_user",
 		"nodebridge_capabilities",
 		"nodebridge_start_initial_alignment", "nodebridge_initial_alignment_status", "nodebridge_interrupt_initial_alignment",
+		"nodebridge_plan_rebaseline", "nodebridge_prepare_rebaseline",
 		"nodebridge_rule_preflight", "nodebridge_event_status",
 		"nodebridge_queue_event_plan", "nodebridge_queue_event_apply", "nodebridge_queue_event_audit",
 	} {

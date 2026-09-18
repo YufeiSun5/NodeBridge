@@ -1,5 +1,11 @@
 # Frontend Backend Contract
 
+2026-09-18：Wails 新增 `InitializeSystemDatabase() -> OperationResult`，需要解锁；使用已保存配置运行 `upgrade-system -create-database`，Agent 运行时拒绝。同步配置页显式初始化按钮先保存表单，创建配置指定系统库并执行已有系统迁移，成功不代表业务数据恢复或同步启动。普通 MySQL 测试保持只读；不新增 MCP 工具。
+
+2026-09-17 0.48.8：新增 MCP `nodebridge_plan_rebaseline`（migration_id/edge_node_id/server_node_id/rules?）与 `nodebridge_prepare_rebaseline`（plan/confirm/target_writers_stopped），普通 stdio 为 44 工具。单 Edge/Server、Edge 权威源，允许整体替换规则 ID/库表/列映射；旧系统库保留、新系统库承载新证明，目标表事务备份后清空，需逐条双端完成首次对齐。准备阶段 pending 日志阻止启动；prepared 不等于同步完成。详见 docs/rebaseline-migration.md。暂为 MCP 入口，无 Wails DTO 新增；普通 SaveSyncRules 保持保护，不自动执行破坏性重建。新增系统库迁移011，两端必须升级。多边缘、在线迁移、目标触发器/FK拒绝；旧计划错误在持久拓扑写入前诊断，RabbitMQ权限模板补齐受限对齐通道。
+
+2026-09-17（源码补丁，未发布）：首次对齐在写入新拓扑意图前检查两端持久旧计划。旧计划与当前规则语义不符时，status.message 返回 `alignment_existing_plan_rule_changed`，包含 rule_id/node_id/job_id/plan_id/phase、旧映射和请求映射。仅显示名称变化不触发此错误；未完成撤销的对端仍阻断。接口和 DTO 不变，不增加迁移执行入口，也不代表旧历史已退役。UI/MCP应保留完整诊断，不建议删除账本或反复重建规则。
+
 2026-09-15 NB-RECONNECT：运行状态WorkerStatus新增consecutive_errors，连续失败递增、成功处理或空闲探测成功归零；last_processed_at仍只记录实际处理成功，不以进程running/重连成功替代。RabbitMQ失败日志区分transport reset/reconnect failed及worker recovered，复用现有错误诊断与队列指标，不新增Wails方法或业务规则字段。
 
 2026-09-14 0.48.5：SyncRule新增可选name（显示名称）；UI列表/详情优先名称，未填回退id，已保存id只读。名称随YAML及现有DTO保存，CAS仍覆盖完整文件；名称不参与对齐规则语义/计划哈希或Agent运行语义版本，因此修改名称不要求重启。旧无name规则和既有对齐证明兼容，不开放改ID/删证明。安装器两种组件模式均调用upgrade-system，使用现有配置角色与MySQL系统库；记录sync_schema_migration校验值和sync_schema_version，失败不恢复UI/报告成功，初次未配置明确跳过。不新增业务表列。

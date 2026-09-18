@@ -82,6 +82,10 @@ export function GetSyncRules() {
   return window['go']['datasyncui']['App']['GetSyncRules']();
 }
 
+export function InitializeSystemDatabase() {
+  return window['go']['datasyncui']['App']['InitializeSystemDatabase']();
+}
+
 export function InterruptInitialAlignment() {
   return window['go']['datasyncui']['App']['InterruptInitialAlignment']();
 }
