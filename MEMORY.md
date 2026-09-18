@@ -3,6 +3,7 @@
 Last updated: 2026-09-18 Asia/Singapore
 
 ## 当前阶段
+- 2026-09-18 backend-ai：v0.48.10 Beta Release已发布，tag b9c213c，安装包/校验文件服务端验证通过；用户反馈现场测试无问题，按用户验收反馈记录，历史偶发超时保留跟踪。
 - 2026-09-18 backend-ai：0.48.10补新机系统库初始化入口与upgrade-system -create-database，显式建库/系统表，升级失败输出脱敏原因。两角色缺库及旧库重复升级、Go全测/vet/lint、Wails三语交互通过；65文件5资产及覆盖安装核验通过，已出包，现场未部署。docs/v0.48.10-fresh-database-handoff-20260918.md。
 - 2026-09-18 backend-ai：0.48.9修复Windows批处理正则传参exit255并出包；原版Windows RabbitMQ实链、包内MCP配置账号/权限读回、44工具、65文件5资产/覆盖升级、Go全测/vet/lint通过。源码/包内修复closed，现场重试与迁移验收仍open；docs/v0.48.9-windows-rabbitmq-handoff-20260918.md。
 - 2026-09-18 review-ai：Windows批处理权限正则传参缺陷已复现，同现场exit255；NB-ALIGNMENT-PERMISSIONS reopened，先前Docker权限测试不覆盖bat。产品未改、现场未连接；修复与Windows实际链路验收待backend-ai。详见docs/v0.48.8-windows-rabbitmq-review-20260918.md。
@@ -94,7 +95,6 @@ Last updated: 2026-09-18 Asia/Singapore
 - 2026-09-18 | Codex | backend-ai：新机缺库初始化及错误输出修复，跨frontend/test完成入口与隔离回归。
 - 2026-09-18 | Codex | backend-ai：0.48.9 Windows批处理权限修复，原生实链与包内MCP验证通过并封包。
 - 2026-09-18 | Codex | review-ai：本地复现权限配置Windows批处理失败，重开缺陷并明确目标备份不等于活动库合并。
-
 - 2026-09-17 | Codex | backend-ai：完成0.48.8双向计划迁移补丁和隔离验证出包，保留现场验收及偶发更新超时跟踪。
 - 2026-09-16 11:48 | Codex | review-ai：三语README增加多节点拓扑和路由示例；NONE/ACTIVE_EDGES/SELECTED_EDGES及节点映射说明，Go门禁通过。
 - 2026-09-16 11:42 | Codex | review-ai：三语README突出列映射/双向/MCP，增加架构与真实Windows入门；CI/Demo/软件源/签名列为待实施计划。

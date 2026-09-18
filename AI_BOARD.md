@@ -31,6 +31,8 @@
 
 ## Active Board
 
+- 2026-09-18 backend-ai：NB-RELEASE-04810 closed，GitHub v0.48.10 Beta 已公开，tag b9c213c；安装包与 SHA256 两资产上传，服务端摘要/大小一致。用户反馈现场测试没有问题，记录为用户验收反馈，非本轮独立现场或压力复测；历史偶发超时继续跟踪。Release：https://github.com/YufeiSun5/NodeBridge/releases/tag/v0.48.10。
+
 - 2026-09-18 backend-ai：NB-FRESH-SYSTEM-DB closed，v0.48.10已出包。显式初始化系统库/表及脱敏失败诊断；跨frontend/test的三语入口、缺库/重复初始化、旧库数据与ACTIVE证明保留、Go全测/vet/lint、覆盖安装和65文件5资产通过。owner backend-ai；现场升级与同步恢复仍open，无现场数据变更。docs/v0.48.10-fresh-database-handoff-20260918.md。
 
 - 2026-09-18 backend-ai：NB-FRESH-SYSTEM-DB in progress：新机未配置安装跳过迁移，后续缺少系统库初始化入口。增加显式建系统库/升级命令与 Wails 初始化按钮；跨 frontend-ai 仅三语按钮，跨 test-ai 仅隔离数据库测试。owner backend-ai；不自动创建业务表、不自动恢复同步。
